@@ -1,0 +1,13 @@
+.git
+.env
+.env.*
+!.env.example
+!.env.compose.example
+.history
+data
+.local-dev
+/cert
+pem.txt
+*.log
+stacknest
+stacknest.exe

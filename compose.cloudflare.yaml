@@ -1,0 +1,12 @@
+# 与 compose.yaml 合用；Cloudflare Full (strict) 的源站 TLS 入口。
+services:
+  nginx:
+    environment:
+      STACKNEST_ADMIN_DOMAIN: ${STACKNEST_ADMIN_DOMAIN:?STACKNEST_ADMIN_DOMAIN is required}
+      STACKNEST_BASE_DOMAIN: ${STACKNEST_BASE_DOMAIN:?STACKNEST_BASE_DOMAIN is required}
+      NGINX_ENVSUBST_FILTER: "STACKNEST_ADMIN_DOMAIN|STACKNEST_BASE_DOMAIN"
+    ports:
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/cloudflare.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ${STACKNEST_ORIGIN_CERT_DIR:?STACKNEST_ORIGIN_CERT_DIR is required}:/etc/nginx/certs:ro

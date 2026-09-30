@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: stacknest
+      POSTGRES_USER: stacknest
+      POSTGRES_PASSWORD: stacknest
+    ports:
+      - "127.0.0.1:15432:5432"
+    volumes:
+      - stacknest-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stacknest -d stacknest"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  stacknest-postgres:

@@ -1,0 +1,607 @@
+openapi: 3.1.0
+info:
+  title: StackNest API
+  version: 0.4.1
+  description: |
+    StackNest 静态项目控制中心后端接口。
+    支持邮件验证码登录、邮箱白名单管理，以及静态项目 ZIP / RAR 上传、更新、回退、查询和删除。
+servers:
+  - url: http://localhost:8080
+    description: 本地开发环境
+
+security:
+  - SessionCookie: []
+
+tags:
+  - name: System
+  - name: Projects
+  - name: Auth
+  - name: Users
+
+paths:
+  /api/storage:
+    get:
+      tags: [System]
+      summary: 查询上传限制；磁盘详情仅管理员可见
+      operationId: getStorage
+      responses:
+        '200':
+          description: 数据卷可用空间与本次可否上传
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageStatus'
+        '503':
+          description: 无法检查磁盘，暂停上传
+  /api/system:
+    get:
+      tags: [System]
+      summary: 管理员查询服务器 CPU、内存和数据卷状态
+      operationId: getSystem
+      responses:
+        '200':
+          description: 服务器状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemStatus'
+        '403':
+          description: 仅管理员可访问
+        '503':
+          description: 暂时无法读取服务器状态
+  /api/activity:
+    get:
+      tags: [System]
+      summary: 最近一百条上传、更新、回退与删除日志
+      operationId: getActivity
+      responses:
+        '200':
+          description: 操作日志，按新到旧排序
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ActivityEvent'
+
+  /api/auth/request-code:
+    post:
+      security: []
+      tags: [Auth]
+      summary: 请求一次性登录验证码
+      operationId: requestLoginCode
+      description: 对未知邮箱也返回相同结果；每个邮箱每 60 秒最多发一次。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailRequest'
+      responses:
+        '202':
+          description: 如果邮箱已获准登录且未触发限流，验证码将发送至该邮箱
+        '400':
+          description: 邮箱格式无效
+        '429':
+          description: 请求过于频繁
+
+  /api/auth/verify:
+    post:
+      security: []
+      tags: [Auth]
+      summary: 用邮件验证码登录
+      operationId: verifyLoginCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyCodeRequest'
+      responses:
+        '200':
+          description: 登录成功，设置 HttpOnly 会话 Cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUser'
+        '400':
+          description: 验证码错误或过期
+
+  /api/auth/session:
+    get:
+      tags: [Auth]
+      summary: 查询当前登录用户
+      operationId: getAuthSession
+      responses:
+        '200':
+          description: 当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUser'
+        '401':
+          description: 未登录或会话过期
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: 注销当前会话
+      operationId: logout
+      responses:
+        '204':
+          description: 已注销
+
+  /api/users:
+    get:
+      tags: [Users]
+      summary: 管理员查询允许登录的邮箱
+      operationId: listUsers
+      responses:
+        '200':
+          description: 邮箱列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+        '403':
+          description: 仅管理员可访问
+    post:
+      tags: [Users]
+      summary: 管理员添加普通用户邮箱
+      operationId: addUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailRequest'
+      responses:
+        '201':
+          description: 添加成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUser'
+        '403':
+          description: 仅管理员可访问
+        '409':
+          description: 邮箱已存在
+
+  /api/users/{id}:
+    delete:
+      tags: [Users]
+      summary: 管理员删除普通用户邮箱并撤销其会话
+      operationId: deleteUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 删除成功
+        '403':
+          description: 仅管理员可访问或目标是管理员
+        '404':
+          description: 用户不存在
+
+  /api/health:
+    get:
+      security: []
+      tags: [System]
+      summary: API 与数据库连接就绪检查
+      operationId: getHealth
+      description: 最多用 2 秒探测数据库连接；无需登录，响应禁止缓存且不包含连接详情。不检查数据库迁移、SMTP 或每个站点。
+      responses:
+        '200':
+          description: API 正常响应且数据库连接可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: 数据库连接不可用、探测超时或尚未配置探测
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /openapi.yaml:
+    get:
+      security: []
+      tags: [System]
+      summary: 获取 OpenAPI 接口契约
+      operationId: getOpenAPISpec
+      responses:
+        '200':
+          description: OpenAPI 3.1 YAML
+          content:
+            application/yaml:
+              schema:
+                type: string
+
+  /api/projects:
+    get:
+      tags: [Projects]
+      summary: 获取项目列表
+      operationId: listProjects
+      responses:
+        '200':
+          description: 项目列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectListResponse'
+
+    post:
+      tags: [Projects]
+      summary: 创建并部署静态项目
+      operationId: createProject
+      description: |
+        上传 ZIP 或 RAR 静态站点。压缩包根目录或唯一一级目录必须包含 index.html。
+
+        当前限制：
+        - 压缩包最大 90 MiB（94371840 字节）
+        - 解压后最大 200 MiB（209715200 字节），按实际读取字节限制
+        - 磁盘已使用或加上 412 MiB 处理预算后达到 90% 时拒绝上传
+        - 最多 5000 个文件或目录条目
+        - 不允许软链接、硬链接及特殊文件
+        - 不允许路径穿越
+        - RAR 仅支持未加密的单卷文件，解码字典最大 64 MiB
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [name, file]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  description: UTF-8 编码最多 256 字节
+                slug:
+                  type: string
+                  pattern: '^[a-z0-9](?:[a-z0-9-]{0,50}[a-z0-9])?$'
+                  maxLength: 52
+                  description: 为空时由项目名称自动生成；手填时必须满足 DNS 标签规则
+                description:
+                  type: string
+                  description: UTF-8 编码最多 4096 字节
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          description: 参数或压缩包不合法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: slug 已存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: 上传归档或请求体超过限制
+        '429':
+          description: 另一个上传正在处理
+        '503':
+          description: 无法确认磁盘空间，暂时拒绝上传
+        '507':
+          description: 磁盘达到 90% 或不足以容纳上传和解压暂存
+        '500':
+          description: 内部发布错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/projects/{slug}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectSlug'
+    get:
+      tags: [Projects]
+      summary: 获取项目详情
+      operationId: getProject
+      responses:
+        '200':
+          description: 项目详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '404':
+          description: 项目不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [Projects]
+      summary: 删除项目
+      operationId: deleteProject
+      responses:
+        '204':
+          description: 删除成功
+        '404':
+          description: 项目不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 删除失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/projects/{slug}/deployments:
+    parameters:
+      - $ref: '#/components/parameters/ProjectSlug'
+      - $ref: '#/components/parameters/DeploymentVersion'
+    post:
+      tags: [Projects]
+      summary: 更新已有项目，保留原网址及上一版
+      operationId: updateProject
+      description: |
+        仅管理员和项目所有者可以更新。沿用创建项目的 ZIP/RAR、磁盘和解压限制。
+        新包完成验证后切换，保留当前版和上一版；更早文件和部署记录被清理，操作日志仍保留。
+        If-Match 必须是页面上当前部署的带双引号 ID，过期请求返回 409。
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+      responses:
+        '200':
+          description: 更新后的项目
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Project'}
+        '400': {description: 请求或归档无效}
+        '401': {description: 未登录}
+        '404': {description: 项目不存在或无权操作}
+        '409': {description: 当前版本变化或有待恢复的文件事务}
+        '413': {description: 上传超过限制}
+        '429': {description: 另一个发布正在处理}
+        '503': {description: 无法检查磁盘空间}
+        '507': {description: 磁盘空间不足或达到限制}
+        '500': {description: 发布失败或提交结果需要恢复确认}
+
+  /api/projects/{slug}/rollback:
+    parameters:
+      - $ref: '#/components/parameters/ProjectSlug'
+      - $ref: '#/components/parameters/DeploymentVersion'
+    post:
+      tags: [Projects]
+      summary: 回退至上一版，原当前版成为新的上一版
+      operationId: rollbackProject
+      description: 不重复解压和复制文件。归属检查和 If-Match 与更新接口相同。
+      responses:
+        '200':
+          description: 回退后的项目
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Project'}
+        '400': {description: 缺少有效的 If-Match}
+        '401': {description: 未登录}
+        '404': {description: 项目不存在或无权操作}
+        '409': {description: 无上一版、当前版本变化或有待恢复的文件事务}
+        '429': {description: 另一个发布正在处理}
+        '500': {description: 回退失败或提交结果需要恢复确认}
+
+components:
+  securitySchemes:
+    SessionCookie:
+      type: apiKey
+      in: cookie
+      name: stacknest_session
+      description: 邮件验证码登录后由服务端设置的 HttpOnly Cookie。
+
+  parameters:
+    DeploymentVersion:
+      name: If-Match
+      in: header
+      required: true
+      schema:
+        type: string
+      description: 当前部署 ID，必须带双引号，例如 "dep-00000000-0000-0000-0000-000000000000"
+    ProjectSlug:
+      name: slug
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[a-z0-9](?:[a-z0-9-]{0,50}[a-z0-9])?$'
+        maxLength: 52
+
+  schemas:
+    StorageStatus:
+      type: object
+      required: [uploadAllowed, reason, maxUploadBytes, maxExpandedBytes, maxFiles]
+      properties:
+        totalBytes: {type: integer, format: int64}
+        freeBytes: {type: integer, format: int64}
+        usedPercent: {type: number, format: double}
+        maxUsedPercent: {type: integer}
+        uploadAllowed: {type: boolean}
+        reason: {type: string}
+        maxUploadBytes: {type: integer, format: int64}
+        maxExpandedBytes: {type: integer, format: int64}
+        maxFiles: {type: integer}
+        reservedUploadBytes: {type: integer, format: int64}
+    SystemStatus:
+      type: object
+      required: [cpuPercent, cpuCores, memoryTotalBytes, memoryAvailableBytes, memoryUsedPercent, uptimeSeconds, diskTotalBytes, diskFreeBytes, diskUsedPercent]
+      properties:
+        cpuPercent: {type: number, format: double}
+        cpuCores: {type: integer}
+        memoryTotalBytes: {type: integer, format: int64}
+        memoryAvailableBytes: {type: integer, format: int64}
+        memoryUsedPercent: {type: number, format: double}
+        uptimeSeconds: {type: integer, format: int64}
+        diskTotalBytes: {type: integer, format: int64}
+        diskFreeBytes: {type: integer, format: int64}
+        diskUsedPercent: {type: number, format: double}
+    ActivityEvent:
+      type: object
+      required: [id, createdAt, action, actor, archiveBytes, expandedBytes, fileCount, status, message, durationMs]
+      properties:
+        id: {type: string}
+        createdAt: {type: string, format: date-time}
+        action: {type: string, enum: [upload, update, rollback, delete]}
+        actor: {type: string}
+        actorId: {type: string}
+        projectOwnerId: {type: string}
+        slug: {type: string}
+        fileName: {type: string}
+        archiveBytes: {type: integer, format: int64}
+        expandedBytes: {type: integer, format: int64}
+        fileCount: {type: integer}
+        status: {type: string, enum: [succeeded, failed]}
+        message: {type: string}
+        durationMs: {type: integer, format: int64}
+
+    EmailRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    VerifyCodeRequest:
+      type: object
+      required: [email, code]
+      properties:
+        email:
+          type: string
+          format: email
+        code:
+          type: string
+          pattern: '^[0-9]{8}$'
+
+    AuthUser:
+      type: object
+      required: [id, email, role, createdAt]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [admin, user]
+        createdAt:
+          type: string
+          format: date-time
+
+    UserListResponse:
+      type: object
+      required: [users]
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthUser'
+
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, unavailable]
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    Deployment:
+      type: object
+      required: [id, status, fileName, createdAt]
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [succeeded, failed]
+        fileName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+        error:
+          type: string
+
+    Project:
+      type: object
+      required: [id, ownerId, ownerEmail, name, slug, status, siteUrl, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        ownerId:
+          type: string
+        ownerEmail:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+          pattern: '^[a-z0-9](?:[a-z0-9-]{0,50}[a-z0-9])?$'
+          maxLength: 52
+        description:
+          type: string
+        status:
+          type: string
+          enum: [online]
+        siteUrl:
+          type: string
+          format: uri
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deployments:
+          type: array
+          maxItems: 2
+          description: 当前版在前，上一版在后；回退也会生成新的当前部署编号。
+          items:
+            $ref: '#/components/schemas/Deployment'
+
+    ProjectListResponse:
+      type: object
+      required: [projects]
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'

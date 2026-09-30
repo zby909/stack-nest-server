@@ -1,0 +1,57 @@
+map $host $stacknest_project_slug {
+    "~^stack-nest-(?<stacknest_slug>[a-z0-9](?:[a-z0-9-]{0,50}[a-z0-9])?)\." $stacknest_slug;
+    default "__invalid__";
+}
+
+map $http_x_forwarded_proto $stacknest_forwarded_proto {
+    default $http_x_forwarded_proto;
+    "" $scheme;
+}
+
+server {
+    listen 80 default_server;
+    server_name _;
+    return 404;
+}
+
+server {
+    listen 80;
+    server_name ${STACKNEST_ADMIN_DOMAIN};
+
+    client_max_body_size 91m;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location ~ ^/(api/|openapi\.yaml$) {
+        proxy_pass http://stacknest:8080;
+        proxy_http_version 1.1;
+        proxy_request_buffering off;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto $stacknest_forwarded_proto;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location ^~ /sites/ { return 404; }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+
+server {
+    listen 80;
+    server_name *.${STACKNEST_BASE_DOMAIN};
+
+    root /data/sites/$stacknest_project_slug;
+    add_header Cache-Control "no-store" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    index index.html;
+
+    location ~ /\. { return 404; }
+
+    location / {
+        try_files $uri $uri/ /index.html =404;
+    }
+}

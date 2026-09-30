@@ -1,0 +1,102 @@
+# Cloudflare 官方网段快照 2026-09-29；更新时核对 https://www.cloudflare.com/ips/
+set_real_ip_from 173.245.48.0/20;
+set_real_ip_from 103.21.244.0/22;
+set_real_ip_from 103.22.200.0/22;
+set_real_ip_from 103.31.4.0/22;
+set_real_ip_from 141.101.64.0/18;
+set_real_ip_from 108.162.192.0/18;
+set_real_ip_from 190.93.240.0/20;
+set_real_ip_from 188.114.96.0/20;
+set_real_ip_from 197.234.240.0/22;
+set_real_ip_from 198.41.128.0/17;
+set_real_ip_from 162.158.0.0/15;
+set_real_ip_from 104.16.0.0/13;
+set_real_ip_from 104.24.0.0/14;
+set_real_ip_from 172.64.0.0/13;
+set_real_ip_from 131.0.72.0/22;
+set_real_ip_from 2400:cb00::/32;
+set_real_ip_from 2606:4700::/32;
+set_real_ip_from 2803:f800::/32;
+set_real_ip_from 2405:b500::/32;
+set_real_ip_from 2405:8100::/32;
+set_real_ip_from 2a06:98c0::/29;
+set_real_ip_from 2c0f:f248::/32;
+real_ip_header CF-Connecting-IP;
+
+map $host $stacknest_project_slug {
+    "~^stack-nest-(?<stacknest_slug>[a-z0-9](?:[a-z0-9-]{0,50}[a-z0-9])?)\." $stacknest_slug;
+    default "__invalid__";
+}
+
+server {
+    listen 80 default_server;
+    server_name _;
+    return 404;
+}
+
+server {
+    listen 80;
+    server_name ${STACKNEST_ADMIN_DOMAIN} *.${STACKNEST_BASE_DOMAIN};
+    return 308 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl default_server;
+    ssl_reject_handshake on;
+}
+
+server {
+    listen 443 ssl;
+    server_name ${STACKNEST_ADMIN_DOMAIN};
+    http2 on;
+
+    ssl_certificate /etc/nginx/certs/certificate.pem;
+    ssl_certificate_key /etc/nginx/certs/private.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    client_max_body_size 91m;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location ~ ^/(api/|openapi\.yaml$) {
+        proxy_pass http://stacknest:8080;
+        proxy_http_version 1.1;
+        proxy_request_buffering off;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+
+    location ^~ /sites/ { return 404; }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name *.${STACKNEST_BASE_DOMAIN};
+    http2 on;
+
+    ssl_certificate /etc/nginx/certs/certificate.pem;
+    ssl_certificate_key /etc/nginx/certs/private.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    root /data/sites/$stacknest_project_slug;
+    add_header Cache-Control "no-store" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    index index.html;
+
+    location ~ /\. {
+        return 404;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html =404;
+    }
+}

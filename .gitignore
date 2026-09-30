@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+!.env.compose.example
+data/
+.local-dev/
+/stacknest
+/stacknest.exe
+*.key
+pem.txt
+*.log
+/cert

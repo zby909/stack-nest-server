@@ -1,0 +1,93 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: stacknest
+      POSTGRES_USER: stacknest
+      POSTGRES_PASSWORD: ${STACKNEST_POSTGRES_PASSWORD:?STACKNEST_POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stacknest -d stacknest"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *default-logging
+
+  migrate:
+    build:
+      context: .
+      dockerfile: deploy/migrate/Dockerfile
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - migrate
+      - apply
+      - --dir
+      - file:///migrations
+      - --url
+      - ${STACKNEST_DATABASE_URL:?STACKNEST_DATABASE_URL is required}
+    logging: *default-logging
+
+  stacknest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      STACKNEST_ADDR: :8080
+      STACKNEST_DATABASE_URL: ${STACKNEST_DATABASE_URL:?STACKNEST_DATABASE_URL is required}
+      STACKNEST_DATA_DIR: /data
+      STACKNEST_BASE_DOMAIN: ${STACKNEST_BASE_DOMAIN:?STACKNEST_BASE_DOMAIN is required}
+      STACKNEST_AUTH_ADMIN_EMAIL: ${STACKNEST_AUTH_ADMIN_EMAIL:?STACKNEST_AUTH_ADMIN_EMAIL is required}
+      STACKNEST_AUTH_INITIAL_USER_EMAIL: ${STACKNEST_AUTH_INITIAL_USER_EMAIL:-}
+      STACKNEST_AUTH_SECRET: ${STACKNEST_AUTH_SECRET:?STACKNEST_AUTH_SECRET is required}
+      STACKNEST_SMTP_HOST: ${STACKNEST_SMTP_HOST:-smtp.qq.com}
+      STACKNEST_SMTP_PORT: ${STACKNEST_SMTP_PORT:-465}
+      STACKNEST_SMTP_USER: ${STACKNEST_SMTP_USER:?STACKNEST_SMTP_USER is required}
+      STACKNEST_SMTP_PASSWORD: ${STACKNEST_SMTP_PASSWORD:?STACKNEST_SMTP_PASSWORD is required}
+    volumes:
+      - stacknest-data:/data
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    logging: *default-logging
+
+  nginx:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      stacknest:
+        condition: service_healthy
+    environment:
+      STACKNEST_ADMIN_DOMAIN: ${STACKNEST_ADMIN_DOMAIN:?STACKNEST_ADMIN_DOMAIN is required}
+      STACKNEST_BASE_DOMAIN: ${STACKNEST_BASE_DOMAIN:?STACKNEST_BASE_DOMAIN is required}
+      NGINX_ENVSUBST_FILTER: "STACKNEST_ADMIN_DOMAIN|STACKNEST_BASE_DOMAIN"
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - stacknest-data:/data:ro
+    logging: *default-logging
+
+volumes:
+  postgres-data:
+  stacknest-data:

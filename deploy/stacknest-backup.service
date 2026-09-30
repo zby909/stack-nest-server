@@ -1,0 +1,11 @@
+[Unit]
+Description=Back up StackNest database and files
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/stacknest-backup.conf
+ExecStart=/bin/bash /opt/stacknest/current/server/deploy/backup.sh ${STACKNEST_BACKUP_COMPOSE} ${STACKNEST_BACKUP_ROOT}
+UMask=0077
+TimeoutStartSec=30min
