@@ -52,6 +52,8 @@
 
 本地 Go / vet / 构建、真实 PostgreSQL 集成、完整 92 项桌面及手机回归已通过。冻结失败重试、链接边界及备份恢复控制流已验证。服务器版本 20261009-164300-review 已上线。约 5.5 MiB 的 scratch HTTP 镜像通过真实部署、普通用户权限与归属转交、容器 CPU / 内存 / PID / 挂载 / 网络检查、日志脱敏、Cookie 隔离、编码路径、SSE / WebSocket、启停、更新失败恢复、数据保留及永久删除验收。独立 Compose 实例迁移恢复重建应用容器并保留数据、配置、静态站点，演练实例已清理。运行器重建后代理可继续使用；真实备份验证已停止应用保持停止，结束时等待后台健康。
 
+2026-10-10 更新：可选 HTTP 健康检查和当前 CPU / 内存 / 进程数已发布到新服务器，版本 `20261010-213653-health`。真实临时应用验证 HTTP 2xx 就绪、端口开放但 HTTP 404 拒绝候选并恢复原有容器和配置、停止 / 启动、普通用户归属、统计与现有硬配额。临时对象已清理，原有业务数据保持一致。完整 104 项 Web 回归、真实 PostgreSQL 集成及两仓库 GitHub CI 通过；详细记录见 [第一版检查记录](V1_REVIEW.md)。
+
 ## 开发检查
 
 应用队列表使用手写 PostgreSQL 事务，`atlas.hcl` 的 `migration.exclude` 防止 Ent 差异生成误删 `container_apps`。新增 SQL 后使用 `atlas migrate hash --dir file://migrations`。

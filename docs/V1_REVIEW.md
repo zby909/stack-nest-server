@@ -317,3 +317,19 @@
 - HTTP、源站 HTTPS 和 Cloudflare Tunnel 三份模板使用当前 Nginx 1.29.8 镜像在独立临时容器验证：ETag/Last-Modified 条件请求返回 304，Range 返回 206；同大小但修改时间不同的更新返回新内容，回退、暂停、恢复和删除行为符合预期。夹具、临时配置与容器已清理。
 - 新服务器的两份现存模板已原地更新、通过 `nginx -t` 后热加载，没有重建容器或修改数据库。源站 HTTPS 与 Tunnel 实测 CSS 的两种条件请求均返回 304；原有四个静态文件摘要一致，版本预览、SSH 入口和业务服务正常。回退配置保留在 `/data/stacknest/runtime/cache-before-20261010T121940Z`。
 - 公网 HTTPS 验证 HTML 的 Last-Modified 与 CSS 的 ETag/Last-Modified 请求均返回无正文的 304，所有原有静态文件摘要一致；匿名 API、Docker 演示应用与错误页继续禁止缓存。初次验收发现 Cloudflare 将 CSS 缓存头覆盖为 `max-age=14400`；用户随后将 Browser Cache TTL 改为“遵循现有标头”。最终复验通过：testhtml 的 HTML、CSS 与 chengdu 的 HTML 均返回 `no-cache`，当前条件请求返回无正文的 304；用户重新上传后的 CSS 使用旧 ETag 或旧 Last-Modified 请求时返回 200 与当前内容。登录接口、Docker 演示应用和错误页仍为 `no-store`，公网缓存头验收已完成。
+
+## 静态资源 404、Docker 健康检查与 GitHub 同步（2026-10-10）
+
+本轮完成静态资源缺失处理、可选 HTTP 健康路径、容器当前资源用量，以及两个仓库的完整版本同步。Docker 成功版本回退暂不增加：恢复镜像和配置不能恢复数据库结构或持久化数据。
+
+- 本地 Go 静态预览、版本预览及各 Nginx 入口中，缺失的常见资源（CSS、JS、图片、字体、JSON 等）返回 404，避免用 SPA 首页冒充资源；无扩展名及非资源后缀的前端路由继续打开首页。正式站点错误响应保持 `no-store`。
+- Docker 表单增加可选健康路径，例如 `/health`。填写后在候选容器的私有地址执行 HTTP GET，60 秒内须返回 2xx；不跟随重定向，不接受外部 URL。留空继续检查端口，兼容现有应用。页面分别显示运行状态与检查结果，不自动重启 HTTP 异常的应用。
+- 页面增加当前 CPU、内存与进程 / 线程数，普通用户只能查看自己的应用。停止时不采样，无法获取时显示未知；不返回环境变量或宿主信息，不存历史指标。默认 CPU、内存、PID、可写层及数据目录硬配额继续有效。
+- 本地 Go vet、构建、独立 PostgreSQL 17 上完整集成测试，以及部署工具 13 项检查通过（Windows 中 Linux shell 专项按预期跳过）。Web 类型、Lint、构建及全部 **104 项**桌面和手机浏览器回归通过；浏览器测试使用模拟 API。
+- 两个私人 GitHub 仓库已同步本机全部受版本控制的源码。发布对应后端提交 `39a87ad`、前端提交 `1370859`；上传前扫描确认本地密码、Tunnel Token、证书私钥和运行文件均未进入提交。前后端 GitHub Actions 均通过，后端包含真实 PostgreSQL 迁移与 `go test -race`。
+- 已发布到新服务器，标记 `20261010-213653-health`。先在独立 Nginx 容器验证配置和路由，再切换 Runner、API 和两套 Nginx；数据库容器、结构及已有应用容器未重建。旧平台镜像和运行配置保留在私有目录供部署失败时恢复。
+- 真实小镜像验证普通用户部署、HTTP 正常、资源采样及越权拒绝；故意把检查路径改为不存在路径，端口仍可连接但 HTTP 404，任务判定失败并恢复原有容器及配置。停止后不显示用量，重新启动后恢复健康采样。该验收不代表数据库或应用数据可回退。
+- 公网 HTTPS 验证后台、静态首页与 SPA 路由为 200，缺失资源及未知站点为 404；HTML、CSS 的当前条件请求为 304，缓存头仍为 `no-cache`，错误响应为 `no-store`。没有更改 DNS、Cloudflare 配置或公网端口。
+- 临时应用、网络、用户及会话已清理。原有 **3 个用户、3 个静态项目、5 条部署记录、1 个 Docker 应用**的数量保持一致，应用容器编号、代次及配置密文摘要、7 个保留版本文件的 SHA256 均一致。SSH、Tailscale、cloudflared、Docker、备份定时器及 XFS project quota 均正常。
+
+验证运行：[后端 CI](https://github.com/zby909/stack-nest-server/actions/runs/38056723151)、[前端 CI](https://github.com/zby909/stack-nest-web/actions/runs/38056729210)。真实 SMTP 到信与实际手机 Safari 人工操作未在本轮验证。
