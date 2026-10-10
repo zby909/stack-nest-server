@@ -24,6 +24,8 @@ const (
 	FieldFinishedAt = "finished_at"
 	// FieldError holds the string denoting the error field in the database.
 	FieldError = "error"
+	// FieldNotes holds the string denoting the notes field in the database.
+	FieldNotes = "notes"
 	// EdgeProject holds the string denoting the project edge name in mutations.
 	EdgeProject = "project"
 	// Table holds the table name of the deployment in the database.
@@ -46,6 +48,7 @@ var Columns = []string{
 	FieldCreatedAt,
 	FieldFinishedAt,
 	FieldError,
+	FieldNotes,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -67,6 +70,8 @@ var (
 	FileNameValidator func(string) error
 	// DefaultError holds the default value on creation for the "error" field.
 	DefaultError string
+	// DefaultNotes holds the default value on creation for the "notes" field.
+	DefaultNotes string
 	// IDValidator is a validator for the "id" field. It is called by the builders before save.
 	IDValidator func(string) error
 )
@@ -107,6 +112,11 @@ func ByFinishedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByError orders the results by the error field.
 func ByError(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldError, opts...).ToFunc()
+}
+
+// ByNotes orders the results by the notes field.
+func ByNotes(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldNotes, opts...).ToFunc()
 }
 
 // ByProjectField orders the results by project field.

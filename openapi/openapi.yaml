@@ -1,24 +1,271 @@
 openapi: 3.1.0
 info:
   title: StackNest API
-  version: 0.4.1
+  version: 0.10.0
   description: |
-    StackNest 静态项目控制中心后端接口。
-    支持邮件验证码登录、邮箱白名单管理，以及静态项目 ZIP / RAR 上传、更新、回退、查询和删除。
+    StackNest 项目控制中心后端接口（静态站点与单容器 HTTP 应用）。
+    支持邮件验证码登录、邮箱白名单管理、静态项目上传/更新/回退/编辑/导出，以及管理员备份状态。
 servers:
   - url: http://localhost:8080
     description: 本地开发环境
-
 security:
+  - SecureSessionCookie: []
   - SessionCookie: []
-
 tags:
+  - name: Apps
   - name: System
   - name: Projects
   - name: Auth
   - name: Users
-
 paths:
+  /api/apps:
+    get:
+      tags: [Apps]
+      operationId: listApps
+      summary: 查看自己的 Docker 应用，管理员查看全部
+      responses:
+        '200':
+          description: 应用及资源限额
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AppList'}
+        '401': {description: 未登录}
+    post:
+      tags: [Apps]
+      operationId: createApp
+      summary: 排队拉取镜像并部署单个 HTTP 服务
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AppInput'}
+      responses:
+        '202':
+          description: 已持久化部署任务
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AppView'}
+        '400': {description: 配置无效}
+        '409': {description: 数量、内存配额或标识冲突}
+        '503': {description: 运行器不可用或磁盘不足}
+  /api/apps/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Apps]
+      operationId: getApp
+      summary: 查询应用配置与实时容器状态
+      responses:
+        '200':
+          description: 应用详情，环境变量与密码不回显
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AppView'}
+        '404': {description: 不存在或无权访问}
+    put:
+      tags: [Apps]
+      operationId: updateApp
+      summary: 以 generation 防止并发覆盖，拉取后切换版本
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AppInput'}
+      responses:
+        '202':
+          description: 已排队更新
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AppView'}
+        '404': {description: 不存在或无权访问}
+        '409': {description: 正在操作或版本冲突}
+  /api/apps/{id}/actions:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [Apps]
+      operationId: operateApp
+      summary: 排队启动、停止、重启或永久删除应用及数据
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, generation]
+              properties:
+                action: {type: string, enum: [start, stop, restart, delete]}
+                generation: {type: integer, format: int64}
+      responses:
+        '202':
+          description: 已排队
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AppView'}
+        '404': {description: 不存在或无权访问}
+        '409': {description: 正在操作或版本冲突}
+  /api/apps/{id}/logs:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Apps]
+      operationId: getAppLogs
+      summary: 最近 200 行日志，最大 256 KiB，遮盖保存的环境变量值
+      responses:
+        '200':
+          description: 纯文本日志
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [text]
+                properties:
+                  text: {type: string}
+        '404': {description: 不存在或无权访问}
+  /api/projects/{slug}/changes:
+    parameters:
+      - {$ref: '#/components/parameters/ProjectSlug'}
+    get:
+      tags: [Projects]
+      operationId: listProjectChanges
+      summary: 比较保留版本之间的文件增删改，内容按 SHA-256 判断
+      parameters:
+        - {name: deploymentId, in: query, required: true, schema: {type: string}}
+        - {name: baseId, in: query, schema: {type: string}, description: 基线版本，首次发布时省略}
+      responses:
+        '200':
+          description: 文件变化
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [changes]
+                properties:
+                  changes: {type: array, items: {$ref: '#/components/schemas/FileChange'}}
+        '404': {description: 项目不存在或无权访问}
+        '409': {description: 版本已清理或文件状态异常}
+  /api/projects/{slug}/draft/publish:
+    parameters:
+      - {$ref: '#/components/parameters/ProjectSlug'}
+    post:
+      tags: [Projects]
+      operationId: publishDraft
+      summary: 发布指定待发布版本，保留当前正式版供回退
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [draftId, expectedId]
+              properties:
+                draftId: {type: string}
+                expectedId: {type: string, description: 当前正式版编号，首次发布使用空字符串}
+      responses:
+        '200': {description: 已发布, content: {application/json: {schema: {$ref: '#/components/schemas/Project'}}}}
+        '404': {description: 项目不存在或无权访问}
+        '409': {description: 正式版或草稿已变化}
+  /api/projects/{slug}/draft:
+    parameters:
+      - {$ref: '#/components/parameters/ProjectSlug'}
+    delete:
+      tags: [Projects]
+      operationId: discardDraft
+      summary: 丢弃指定待发布版本，正式站点保持原样
+      parameters:
+        - {name: draftId, in: query, required: true, schema: {type: string}}
+      responses:
+        '200': {description: 已丢弃, content: {application/json: {schema: {$ref: '#/components/schemas/Project'}}}}
+        '404': {description: 项目不存在或无权访问}
+        '409': {description: 草稿已变化}
+  /api/uploads:
+    post:
+      tags: [Projects]
+      summary: 创建或恢复属于当前用户的上传会话
+      operationId: createUpload
+      description: 分片 4 MiB；90 MiB 归档上限；固定 24 小时过期；每人最多两项、全局八项未完成上传。此接口不是 tus 协议接口。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UploadRequest'}
+      responses:
+        '201': {description: 已创建或恢复, content: {application/json: {schema: {$ref: '#/components/schemas/UploadStatus'}}}}
+        '400': {description: 参数无效}
+        '409': {description: 参数或项目版本冲突}
+        '429': {description: 上传记录数量达到上限}
+        '507': {description: 磁盘空间不足}
+  /api/uploads/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Projects]
+      summary: 查询服务器已提交的上传进度
+      operationId: getUpload
+      responses:
+        '200': {description: 已接收偏移, content: {application/json: {schema: {$ref: '#/components/schemas/UploadStatus'}}}}
+        '404': {description: 不属于当前用户、已过期或不存在}
+    patch:
+      tags: [Projects]
+      summary: 追加一个完整分片
+      operationId: appendUpload
+      parameters:
+        - {name: Upload-Offset, in: header, required: true, schema: {type: integer, format: int64, minimum: 0}}
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        '200': {description: 分片已持久化, content: {application/json: {schema: {$ref: '#/components/schemas/UploadStatus'}}}}
+        '400': {description: 分片长度无效或接收中断}
+        '404': {description: 记录不存在或不属于当前用户}
+        '409': {description: 偏移冲突，应重新查询进度}
+        '429': {description: 其他分片正在传输，可稍后重试}
+        '507': {description: 磁盘空间不足}
+    delete:
+      tags: [Projects]
+      summary: 放弃临时上传，不删除已发布项目
+      operationId: deleteUpload
+      responses:
+        '204': {description: 已删除或原记录不存在}
+  /api/uploads/{id}/complete:
+    post:
+      tags: [Projects]
+      summary: 验证完整文件摘要并幂等发布
+      operationId: completeUpload
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: 已发布，重复请求不会再次切换版本, content: {application/json: {schema: {$ref: '#/components/schemas/Project'}}}}
+        '400': {description: 归档无效}
+        '404': {description: 上传或项目不存在}
+        '409': {description: 文件未传完或项目版本变化}
+        '422': {description: SHA-256 校验失败}
+        '429': {description: 另一个发布正在处理}
+  /api/projects/{slug}/files:
+    get:
+      tags: [Projects]
+      summary: 查看当前版或上一版的文件相对路径与大小
+      operationId: listProjectFiles
+      parameters:
+        - {$ref: '#/components/parameters/ProjectSlug'}
+        - {name: deploymentId, in: query, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: 完整文件清单，不读取文件内容
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [files]
+                properties:
+                  files:
+                    type: array
+                    items: {$ref: '#/components/schemas/PublishedFile'}
+        '404': {description: 无权访问或项目不存在}
+        '409': {description: 版本变化或文件异常}
   /api/storage:
     get:
       tags: [System]
@@ -49,25 +296,53 @@ paths:
           description: 仅管理员可访问
         '503':
           description: 暂时无法读取服务器状态
+  /api/backups/status:
+    get:
+      tags: [System]
+      summary: 管理员查询最近备份结果与体积
+      operationId: getBackupStatus
+      description: 只读取安全摘要；运行超过 45 分钟视为可能中断，成功备份超过 48 小时提示检查任务。
+      responses:
+        '200':
+          description: 备份状态，未配置或无记录也会明确返回
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/BackupStatus'}
+        '401': {description: 未登录}
+        '403': {description: 仅管理员可访问}
+        '503': {description: 状态文件损坏或暂时不可读取}
   /api/activity:
     get:
       tags: [System]
-      summary: 最近一百条上传、更新、回退与删除日志
+      summary: 在保留的操作日志中筛选和分页，先校验可见范围
       operationId: getActivity
+      parameters:
+        - {name: page, in: query, schema: {type: integer, minimum: 1, maximum: 100000, default: 1}}
+        - {name: pageSize, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+        - {name: slug, in: query, schema: {type: string, maxLength: 52}}
+        - {name: action, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string}}
+        - {name: actor, in: query, schema: {type: string, maxLength: 254}}
+        - {name: q, in: query, schema: {type: string, maxLength: 256}}
+        - {name: from, in: query, description: 包含此时间, schema: {type: string, format: date-time}}
+        - {name: to, in: query, description: 不包含此时间, schema: {type: string, format: date-time}}
       responses:
+        '400': {description: 筛选参数或时间范围无效}
         '200':
           description: 操作日志，按新到旧排序
           content:
             application/json:
               schema:
                 type: object
-                required: [events]
+                required: [events, total, page, pageSize]
                 properties:
+                  total: {type: integer}
+                  page: {type: integer}
+                  pageSize: {type: integer}
                   events:
                     type: array
                     items:
                       $ref: '#/components/schemas/ActivityEvent'
-
   /api/auth/request-code:
     post:
       security: []
@@ -88,7 +363,6 @@ paths:
           description: 邮箱格式无效
         '429':
           description: 请求过于频繁
-
   /api/auth/verify:
     post:
       security: []
@@ -110,7 +384,6 @@ paths:
                 $ref: '#/components/schemas/AuthUser'
         '400':
           description: 验证码错误或过期
-
   /api/auth/session:
     get:
       tags: [Auth]
@@ -125,7 +398,6 @@ paths:
                 $ref: '#/components/schemas/AuthUser'
         '401':
           description: 未登录或会话过期
-
   /api/auth/logout:
     post:
       tags: [Auth]
@@ -134,7 +406,6 @@ paths:
       responses:
         '204':
           description: 已注销
-
   /api/users:
     get:
       tags: [Users]
@@ -153,24 +424,28 @@ paths:
       tags: [Users]
       summary: 管理员添加普通用户邮箱
       operationId: addUser
+      description: 默认只添加邮箱；sendInvitation 为 true 时在添加成功后尝试发送邀请。发信失败仍返回 201 并保留邮箱，invitation 表示发送结果。
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EmailRequest'
+              $ref: '#/components/schemas/AddUserRequest'
       responses:
         '201':
-          description: 添加成功
+          description: 邮箱添加成功；邀请未请求、已被 SMTP 接受或发送未能确认
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthUser'
+                $ref: '#/components/schemas/AddUserResponse'
+        '400':
+          description: 邮箱或请求格式无效
         '403':
           description: 仅管理员可访问
         '409':
           description: 邮箱已存在
-
+        '503':
+          description: 请求发邀请但未配置可用的 HTTPS 登录地址；不会添加邮箱
   /api/users/{id}:
     delete:
       tags: [Users]
@@ -189,7 +464,6 @@ paths:
           description: 仅管理员可访问或目标是管理员
         '404':
           description: 用户不存在
-
   /api/health:
     get:
       security: []
@@ -210,7 +484,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
-
   /openapi.yaml:
     get:
       security: []
@@ -224,7 +497,6 @@ paths:
             application/yaml:
               schema:
                 type: string
-
   /api/projects:
     get:
       tags: [Projects]
@@ -237,14 +509,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProjectListResponse'
-
     post:
       tags: [Projects]
       summary: 创建并部署静态项目
       operationId: createProject
       description: |
         上传 ZIP 或 RAR 静态站点。压缩包根目录或唯一一级目录必须包含 index.html。
-
         当前限制：
         - 压缩包最大 90 MiB（94371840 字节）
         - 解压后最大 200 MiB（209715200 字节），按实际读取字节限制
@@ -309,10 +579,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-
   /api/projects/{slug}:
     parameters:
       - $ref: '#/components/parameters/ProjectSlug'
+    patch:
+      tags: [Projects]
+      summary: 编辑项目名称和说明
+      operationId: editProject
+      description: 仅项目所有者及管理员可编辑。slug、归属、网址和部署文件保持不变；旧页面返回 409，需刷新列表后重试。
+      parameters:
+        - $ref: '#/components/parameters/MetadataVersion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EditProjectRequest'}
+      responses:
+        '200':
+          description: 编辑后的项目
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Project'}
+        '400': {description: 字段或更新时间无效}
+        '401': {description: 未登录}
+        '404': {description: 项目不存在或无权操作}
+        '409': {description: 项目信息已变化}
+        '415': {description: 请求不是 JSON}
     get:
       tags: [Projects]
       summary: 获取项目详情
@@ -349,7 +641,67 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-
+  /api/projects/{slug}/access:
+    parameters:
+      - $ref: '#/components/parameters/ProjectSlug'
+      - $ref: '#/components/parameters/MetadataVersion'
+    put:
+      tags: [Projects]
+      summary: 暂停或恢复站点访问，保留文件、版本和地址
+      operationId: setProjectAccess
+      description: 所有者和管理员可操作。暂停时页面和资源返回 503；更新、回退不会恢复访问。缓存过的内容无法撤回。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [paused]
+              properties:
+                paused: {type: boolean}
+      responses:
+        '200':
+          description: 当前项目及访问状态
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Project'}
+        '400': {description: 参数或版本无效}
+        '401': {description: 未登录}
+        '404': {description: 项目不存在或无权操作}
+        '409': {description: 项目已变化，请刷新后重试}
+        '500': {description: 状态未能同步，刷新重试或重启恢复}
+  /api/projects/{slug}/export:
+    parameters:
+      - $ref: '#/components/parameters/ProjectSlug'
+    get:
+      tags: [Projects]
+      summary: 将当前版或上一版部署文件导出为 ZIP
+      operationId: exportProject
+      description: |
+        仅项目所有者及管理员可导出。只包含解压后的部署文件，不是原始上传包或源代码仓库。
+        deploymentId 必须是仍保留的部署编号，失效返回 409。生成快照时与发布串行，传输阶段允许继续更新。
+        单次最多 200 MiB 部署文件、5000 个文件，ZIP 临时文件最多额外预留 16 MiB；磁盘 90% 阈值仍生效。
+        同实例仅允许一个导出请求，传输最多 10 分钟；连接结束清理快照，进程重启清理残留。
+      parameters:
+        - name: deploymentId
+          in: query
+          required: true
+          schema: {type: string, minLength: 1}
+      responses:
+        '200':
+          description: 部署文件 ZIP，Content-Disposition 为附件
+          content:
+            application/zip:
+              schema: {type: string, format: binary}
+        '206': {description: ZIP 部分内容}
+        '400': {description: 参数无效}
+        '401': {description: 未登录}
+        '404': {description: 项目不存在或无权操作}
+        '409': {description: 部署版本不再保留或文件异常}
+        '429': {description: 另一个导出正在处理}
+        '503': {description: 无法检查磁盘}
+        '507': {description: 剩余空间不足以生成 ZIP}
   /api/projects/{slug}/deployments:
     parameters:
       - $ref: '#/components/parameters/ProjectSlug'
@@ -386,7 +738,6 @@ paths:
         '503': {description: 无法检查磁盘空间}
         '507': {description: 磁盘空间不足或达到限制}
         '500': {description: 发布失败或提交结果需要恢复确认}
-
   /api/projects/{slug}/rollback:
     parameters:
       - $ref: '#/components/parameters/ProjectSlug'
@@ -408,16 +759,25 @@ paths:
         '409': {description: 无上一版、当前版本变化或有待恢复的文件事务}
         '429': {description: 另一个发布正在处理}
         '500': {description: 回退失败或提交结果需要恢复确认}
-
 components:
   securitySchemes:
+    SecureSessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-stacknest_session
+      description: HTTPS 登录设置的 Secure、HttpOnly、SameSite=Strict 主机会话 Cookie，Path=/ 且不设置 Domain；HTTPS 不接受旧名称。
     SessionCookie:
       type: apiKey
       in: cookie
       name: stacknest_session
-      description: 邮件验证码登录后由服务端设置的 HttpOnly Cookie。
-
+      description: 仅用于本地 HTTP 开发或 SSH 入口的 HttpOnly 会话 Cookie；公网使用 HTTPS 和 SecureSessionCookie。
   parameters:
+    MetadataVersion:
+      name: If-Match
+      in: header
+      required: true
+      schema: {type: string}
+      description: 项目响应 updatedAt，必须加双引号，例如 "2026-09-30T08:00:00.123456Z"
     DeploymentVersion:
       name: If-Match
       in: header
@@ -433,8 +793,176 @@ components:
         type: string
         pattern: '^[a-z0-9](?:[a-z0-9-]{0,50}[a-z0-9])?$'
         maxLength: 52
-
   schemas:
+    AppInput:
+      type: object
+      additionalProperties: false
+      required: [name, image, port, memoryMiB, cpus]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100}
+        slug: {type: string, maxLength: 32, description: 创建时必填；之后不可修改}
+        image: {type: string, maxLength: 256, description: Linux amd64 仓库镜像地址，可使用标签或摘要}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        memoryMiB: {type: integer, minimum: 64, maximum: 512}
+        cpus: {type: number, minimum: 0.1, maximum: 1}
+        dataPath: {type: string, description: 可选的单个容器内持久化目录}
+        healthPath: {type: string, maxLength: 256, description: 可选 HTTP 路径，例如 /health；60 秒内返回 2xx 才就绪，留空仅检查端口}
+        env: {type: object, additionalProperties: {type: string}, description: 最多 64 个变量，总体积 16 KiB}
+        replaceEnv: {type: boolean, default: false, description: 编辑时默认保留；设为 true 后整体替换}
+        registry:
+          type: object
+          required: [username, password]
+          properties:
+            username: {type: string}
+            password: {type: string, writeOnly: true}
+        clearRegistry: {type: boolean, default: false}
+        generation: {type: integer, format: int64, description: 更新时必填，采用上次查询的代次}
+    ContainerApp:
+      type: object
+      required: [id, ownerId, ownerEmail, name, slug, image, port, memoryMiB, cpus, dataPath, envKeys, hasRegistry, generation, status, createdAt, updatedAt, url]
+      properties:
+        id: {type: string}
+        ownerId: {type: string}
+        ownerEmail: {type: string}
+        name: {type: string}
+        slug: {type: string}
+        image: {type: string}
+        port: {type: integer}
+        memoryMiB: {type: integer}
+        cpus: {type: number}
+        dataPath: {type: string}
+        healthPath: {type: string}
+        envKeys: {type: array, items: {type: string}}
+        hasRegistry: {type: boolean}
+        generation: {type: integer, format: int64}
+        status: {type: string, enum: [pending, deploying, ready, stopped, error]}
+        action: {type: string}
+        error: {type: string}
+        imageId: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        url: {type: string}
+    AppRuntime:
+      type: object
+      required: [state, containerId, imageId, oomKilled, exitCode]
+      properties:
+        state: {type: string}
+        containerId: {type: string}
+        imageId: {type: string}
+        oomKilled: {type: boolean}
+        exitCode: {type: integer}
+        health: {type: string, enum: [healthy, unhealthy, stopped], description: 查询时探测，不自动重启应用}
+        healthCheck: {type: string, enum: [tcp, http]}
+        usage: {$ref: '#/components/schemas/AppUsage'}
+    AppUsage:
+      type: object
+      required: [memoryBytes, memoryLimitBytes, pids, sampledAt]
+      properties:
+        cpuPercent: {type: number, minimum: 0, description: 100% 表示一个 CPU 核心；采样不足时省略}
+        memoryBytes: {type: integer, format: int64, minimum: 0, description: Linux 内存用量，扣除非活跃文件缓存}
+        memoryLimitBytes: {type: integer, format: int64, minimum: 0}
+        pids: {type: integer, format: int64, minimum: 0, description: 进程和线程总数}
+        sampledAt: {type: string, format: date-time}
+    AppView:
+      type: object
+      required: [app]
+      properties:
+        app: {$ref: '#/components/schemas/ContainerApp'}
+        runtime: {$ref: '#/components/schemas/AppRuntime'}
+    AppList:
+      type: object
+      required: [apps, available, limits]
+      properties:
+        apps: {type: array, items: {$ref: '#/components/schemas/AppView'}}
+        available: {type: boolean}
+        limits:
+          type: object
+          required: [maxApps, totalMemoryMiB, maxMemoryMiB]
+          properties:
+            maxApps: {type: integer}
+            totalMemoryMiB: {type: integer}
+            maxMemoryMiB: {type: integer}
+    UploadRequest:
+      type: object
+      additionalProperties: false
+      required: [id, kind, fileName, size, sha256]
+      properties:
+        id: {type: string, description: 客户端 UUID 幂等键，重试必须保持不变}
+        kind: {type: string, enum: [create, update]}
+        preview: {type: boolean, default: false, description: 为 true 时只创建待发布版，不改变正式站点；旧客户端默认直接发布}
+        notes: {type: string, maxLength: 4096, description: 更新说明，UTF-8 最多 4096 字节}
+        name: {type: string, maxLength: 256}
+        description: {type: string, maxLength: 4096}
+        slug: {type: string, maxLength: 52}
+        expectedId: {type: string, description: 更新必须携带页面当前部署编号}
+        fileName: {type: string, maxLength: 255}
+        size: {type: integer, format: int64, minimum: 1, maximum: 94371840}
+        sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+    FileChange:
+      type: object
+      required: [path, kind, beforeBytes, afterBytes]
+      properties:
+        path: {type: string}
+        kind: {type: string, enum: [added, modified, deleted]}
+        beforeBytes: {type: integer, format: int64}
+        afterBytes: {type: integer, format: int64}
+    UploadStatus:
+      type: object
+      required: [id, offset, size, chunkSize, expiresAt, completed]
+      properties:
+        id: {type: string}
+        offset: {type: integer, format: int64}
+        size: {type: integer, format: int64}
+        chunkSize: {type: integer, format: int64}
+        expiresAt: {type: string, format: date-time}
+        completed: {type: boolean}
+    PublishedFile:
+      type: object
+      required: [path, bytes]
+      properties:
+        path: {type: string, description: 部署内相对路径，无服务器绝对路径}
+        bytes: {type: integer, format: int64}
+    EditProjectRequest:
+      type: object
+      additionalProperties: false
+      required: [name, description]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: 去除两端空白后不能为空，UTF-8 最多 256 字节
+        description:
+          type: string
+          description: UTF-8 最多 4096 字节；空字符串清除说明
+    BackupAttempt:
+      type: object
+      required: [startedAt, stage]
+      properties:
+        startedAt: {type: string, format: date-time}
+        finishedAt: {type: string, format: date-time}
+        stage:
+          type: string
+          enum: [initialize, stop, apps-freeze, apps-restore, database, files, verify, publish, prune, restart, completed]
+    BackupSuccess:
+      type: object
+      required: [createdAt, databaseBytes, filesBytes, totalBytes]
+      properties:
+        createdAt: {type: string, format: date-time}
+        databaseBytes: {type: integer, format: int64, minimum: 1}
+        filesBytes: {type: integer, format: int64, minimum: 1}
+        totalBytes: {type: integer, format: int64, minimum: 1}
+    BackupStatus:
+      type: object
+      required: [state, retainedCount, retainedBytes, overdue]
+      properties:
+        state:
+          type: string
+          enum: [not_configured, never, running, succeeded, failed, interrupted]
+        lastAttempt: {$ref: '#/components/schemas/BackupAttempt'}
+        lastSuccess: {$ref: '#/components/schemas/BackupSuccess'}
+        retainedCount: {type: integer, minimum: 0}
+        retainedBytes: {type: integer, format: int64, minimum: 0}
+        overdue: {type: boolean}
     StorageStatus:
       type: object
       required: [uploadAllowed, reason, maxUploadBytes, maxExpandedBytes, maxFiles]
@@ -468,7 +996,7 @@ components:
       properties:
         id: {type: string}
         createdAt: {type: string, format: date-time}
-        action: {type: string, enum: [upload, update, rollback, delete]}
+        action: {type: string, enum: [upload, update, rollback, delete, edit, export, pause, resume, draft, publish, discard]}
         actor: {type: string}
         actorId: {type: string}
         projectOwnerId: {type: string}
@@ -480,7 +1008,6 @@ components:
         status: {type: string, enum: [succeeded, failed]}
         message: {type: string}
         durationMs: {type: integer, format: int64}
-
     EmailRequest:
       type: object
       required: [email]
@@ -488,7 +1015,29 @@ components:
         email:
           type: string
           format: email
-
+    AddUserRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+        sendInvitation:
+          type: boolean
+          default: false
+          description: 只有明确为 true 时才发送邀请邮件
+    InvitationStatus:
+      type: string
+      enum: [not_requested, sent, failed]
+      description: sent 仅表示 SMTP 已接受，不保证进入收件箱；failed 时邮箱仍已添加，发送结果未能确认
+    AddUserResponse:
+      allOf:
+        - $ref: '#/components/schemas/AuthUser'
+        - type: object
+          required: [invitation]
+          properties:
+            invitation:
+              $ref: '#/components/schemas/InvitationStatus'
     VerifyCodeRequest:
       type: object
       required: [email, code]
@@ -499,7 +1048,6 @@ components:
         code:
           type: string
           pattern: '^[0-9]{8}$'
-
     AuthUser:
       type: object
       required: [id, email, role, createdAt]
@@ -515,16 +1063,18 @@ components:
         createdAt:
           type: string
           format: date-time
-
     UserListResponse:
       type: object
       required: [users]
       properties:
+        invitationLoginUrl:
+          type: string
+          format: uri
+          description: 已配置的固定 HTTPS 登录地址；未配置或无效时不返回，前端禁用发送邀请
         users:
           type: array
           items:
             $ref: '#/components/schemas/AuthUser'
-
     HealthResponse:
       type: object
       required: [status]
@@ -532,23 +1082,39 @@ components:
         status:
           type: string
           enum: [ok, unavailable]
-
     ErrorResponse:
       type: object
       required: [error]
       properties:
         error:
           type: string
-
+    PublishedFiles:
+      type: object
+      description: 已发布普通文件的逻辑大小和文件数；不含目录、原始压缩包、数据库、日志或临时文件。
+      required: [bytes, count]
+      properties:
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        count:
+          type: integer
+          minimum: 0
     Deployment:
       type: object
       required: [id, status, fileName, createdAt]
       properties:
+        notes: {type: string}
+        previewUrl: {type: string, format: uri, description: 保留期间有效的独立版本地址；持有链接即可访问，项目暂停时关闭}
+        files:
+          description: 实时读取此版本的文件统计；缺失表示暂不可用，不能按零计算。普通用户仅能获取自己项目的数据。
+          allOf:
+            - $ref: '#/components/schemas/PublishedFiles'
         id:
           type: string
         status:
           type: string
-          enum: [succeeded, failed]
+          enum: [succeeded, failed, draft]
         fileName:
           type: string
         createdAt:
@@ -559,7 +1125,6 @@ components:
           format: date-time
         error:
           type: string
-
     Project:
       type: object
       required: [id, ownerId, ownerEmail, name, slug, status, siteUrl, createdAt, updatedAt]
@@ -580,7 +1145,7 @@ components:
           type: string
         status:
           type: string
-          enum: [online]
+          enum: [online, paused, draft]
         siteUrl:
           type: string
           format: uri
@@ -590,13 +1155,13 @@ components:
         updatedAt:
           type: string
           format: date-time
+        draft: {$ref: "#/components/schemas/Deployment"}
         deployments:
           type: array
           maxItems: 2
-          description: 当前版在前，上一版在后；回退也会生成新的当前部署编号。
+          description: 当前版在前，上一版在后；回退互换两版并保留各自编号和更新说明。
           items:
             $ref: '#/components/schemas/Deployment'
-
     ProjectListResponse:
       type: object
       required: [projects]

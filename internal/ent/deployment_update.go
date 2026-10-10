@@ -90,6 +90,20 @@ func (_u *DeploymentUpdate) SetNillableError(v *string) *DeploymentUpdate {
 	return _u
 }
 
+// SetNotes sets the "notes" field.
+func (_u *DeploymentUpdate) SetNotes(v string) *DeploymentUpdate {
+	_u.mutation.SetNotes(v)
+	return _u
+}
+
+// SetNillableNotes sets the "notes" field if the given value is not nil.
+func (_u *DeploymentUpdate) SetNillableNotes(v *string) *DeploymentUpdate {
+	if v != nil {
+		_u.SetNotes(*v)
+	}
+	return _u
+}
+
 // Mutation returns the DeploymentMutation object of the builder.
 func (_u *DeploymentUpdate) Mutation() *DeploymentMutation {
 	return _u.mutation
@@ -166,6 +180,9 @@ func (_u *DeploymentUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	}
 	if value, ok := _u.mutation.Error(); ok {
 		_spec.SetField(deployment.FieldError, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Notes(); ok {
+		_spec.SetField(deployment.FieldNotes, field.TypeString, value)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -245,6 +262,20 @@ func (_u *DeploymentUpdateOne) SetError(v string) *DeploymentUpdateOne {
 func (_u *DeploymentUpdateOne) SetNillableError(v *string) *DeploymentUpdateOne {
 	if v != nil {
 		_u.SetError(*v)
+	}
+	return _u
+}
+
+// SetNotes sets the "notes" field.
+func (_u *DeploymentUpdateOne) SetNotes(v string) *DeploymentUpdateOne {
+	_u.mutation.SetNotes(v)
+	return _u
+}
+
+// SetNillableNotes sets the "notes" field if the given value is not nil.
+func (_u *DeploymentUpdateOne) SetNillableNotes(v *string) *DeploymentUpdateOne {
+	if v != nil {
+		_u.SetNotes(*v)
 	}
 	return _u
 }
@@ -355,6 +386,9 @@ func (_u *DeploymentUpdateOne) sqlSave(ctx context.Context) (_node *Deployment, 
 	}
 	if value, ok := _u.mutation.Error(); ok {
 		_spec.SetField(deployment.FieldError, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Notes(); ok {
+		_spec.SetField(deployment.FieldNotes, field.TypeString, value)
 	}
 	_node = &Deployment{config: _u.config}
 	_spec.Assign = _node.assignValues

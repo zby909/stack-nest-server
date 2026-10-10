@@ -12,6 +12,7 @@ import (
 )
 
 type revisionJournal struct {
+	DraftID   string `json:"draftId,omitempty"`
 	ProjectID string `json:"projectId"`
 	FromID    string `json:"fromId"`
 	ToID      string `json:"toId"`
@@ -23,12 +24,14 @@ type stagedRevision struct {
 	work     string
 	current  string
 	previous string
+	drafts   string
 	stats    project.PublishedFiles
 }
 
 // revision 定位公开站点、私有上一版与可恢复的事务目录。
 func (d *Deployer) revision(slug string) *stagedRevision {
 	return &stagedRevision{
+		drafts:   filepath.Join(d.config.DataDir, "drafts", slug),
 		work:     filepath.Join(d.config.DataDir, "changes", slug),
 		current:  filepath.Join(d.config.DataDir, "sites", slug),
 		previous: filepath.Join(d.config.DataDir, "previous", slug),
@@ -56,11 +59,16 @@ func (d *Deployer) StageRevision(ctx context.Context, input project.RevisionInpu
 		return nil, err
 	}
 	r := d.revision(input.Slug)
-	if input.ProjectID == "" || input.FromID == "" || input.ToID == "" || input.FromID == input.ToID {
+	if input.ProjectID == "" || (input.FromID == "" && input.DraftID == "") || input.ToID == "" || input.FromID == input.ToID {
 		return nil, project.ErrVersionConflict
 	}
-	if !isRegularFile(filepath.Join(r.current, "index.html")) {
+	if input.FromID != "" && !isRegularFile(filepath.Join(r.current, "index.html")) {
 		return nil, fmt.Errorf("current release files missing")
+	}
+	if input.FromID == "" {
+		if _, err := os.Lstat(r.current); !errors.Is(err, os.ErrNotExist) {
+			return nil, project.ErrVersionConflict
+		}
 	}
 	var root string
 	if input.Rollback {
@@ -68,6 +76,15 @@ func (d *Deployer) StageRevision(ctx context.Context, input project.RevisionInpu
 			return nil, project.ErrNoPrevious
 		}
 		stats, err := measureSite(ctx, r.previous)
+		if err != nil {
+			return nil, err
+		}
+		r.stats = stats
+	} else if input.DraftID != "" {
+		if !validVersionID(input.DraftID) || input.DraftID != input.ToID {
+			return nil, project.ErrVersionConflict
+		}
+		stats, err := d.MeasureAt(ctx, input.Slug, input.DraftID)
 		if err != nil {
 			return nil, err
 		}
@@ -99,13 +116,13 @@ func (d *Deployer) StageRevision(ctx context.Context, input project.RevisionInpu
 		_ = os.Remove(r.work)
 		return nil, err
 	}
-	if !input.Rollback {
+	if !input.Rollback && input.DraftID == "" {
 		if err := moveDirectory(root, filepath.Join(r.work, "next")); err != nil {
 			_ = os.RemoveAll(r.work) // 尚未写入标记，更未触碰线上和上一版。
 			return nil, err
 		}
 	}
-	r.journal = revisionJournal{ProjectID: input.ProjectID, FromID: input.FromID, ToID: input.ToID, Rollback: input.Rollback}
+	r.journal = revisionJournal{DraftID: input.DraftID, ProjectID: input.ProjectID, FromID: input.FromID, ToID: input.ToID, Rollback: input.Rollback}
 	if err := r.writeJournal(); err != nil {
 		_ = os.RemoveAll(r.work)
 		return nil, err
@@ -141,6 +158,14 @@ func (r *stagedRevision) writeJournal() error {
 
 // switchFiles 只执行同卷重命名；短暂的目录切换窗口不包含上传和解压时间。
 func (r *stagedRevision) switchFiles() error {
+	if r.journal.DraftID != "" {
+		if err := moveDirectory(filepath.Join(r.drafts, r.journal.DraftID), filepath.Join(r.work, "next")); err != nil {
+			return err
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(r.current), 0o755); err != nil {
+		return err
+	}
 	if r.journal.Rollback {
 		if err := moveDirectory(r.previous, filepath.Join(r.work, "next")); err != nil {
 			return err
@@ -148,8 +173,10 @@ func (r *stagedRevision) switchFiles() error {
 	} else if err := moveIfExists(r.previous, filepath.Join(r.work, "previous")); err != nil {
 		return err
 	}
-	if err := moveDirectory(r.current, filepath.Join(r.work, "old")); err != nil {
-		return err
+	if r.journal.FromID != "" {
+		if err := moveDirectory(r.current, filepath.Join(r.work, "old")); err != nil {
+			return err
+		}
 	}
 	return moveDirectory(filepath.Join(r.work, "next"), r.current)
 }
@@ -168,7 +195,7 @@ func (r *stagedRevision) Commit() error {
 	if err := moveIfExists(filepath.Join(r.work, "old"), r.previous); err != nil {
 		return err
 	}
-	if !isRegularFile(filepath.Join(r.previous, "index.html")) {
+	if r.journal.FromID != "" && !isRegularFile(filepath.Join(r.previous, "index.html")) {
 		return fmt.Errorf("previous release missing; preserve journal")
 	}
 	if err := os.RemoveAll(filepath.Join(r.work, "previous")); err != nil {
@@ -181,6 +208,11 @@ func (r *stagedRevision) Commit() error {
 func (r *stagedRevision) Rollback() error {
 	old := filepath.Join(r.work, "old")
 	next := filepath.Join(r.work, "next")
+	if r.journal.FromID == "" {
+		if err := moveIfExists(r.current, next); err != nil {
+			return err
+		}
+	}
 	if _, err := os.Lstat(old); err == nil {
 		if err := moveIfExists(r.current, next); err != nil {
 			return err
@@ -191,7 +223,7 @@ func (r *stagedRevision) Rollback() error {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if !isRegularFile(filepath.Join(r.current, "index.html")) {
+	if r.journal.FromID != "" && !isRegularFile(filepath.Join(r.current, "index.html")) {
 		return fmt.Errorf("original release missing; preserve journal")
 	}
 	if r.journal.Rollback {
@@ -202,7 +234,11 @@ func (r *stagedRevision) Rollback() error {
 		if err := moveIfExists(filepath.Join(r.work, "previous"), r.previous); err != nil {
 			return err
 		}
-		if err := os.RemoveAll(next); err != nil {
+		if r.journal.DraftID != "" {
+			if err := moveIfExists(next, filepath.Join(r.drafts, r.journal.DraftID)); err != nil {
+				return err
+			}
+		} else if err := os.RemoveAll(next); err != nil {
 			return err
 		}
 	}

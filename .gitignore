@@ -3,6 +3,8 @@
 !.env.example
 !.env.compose.example
 data/
+backup-status/
+__pycache__/
 .local-dev/
 /stacknest
 /stacknest.exe

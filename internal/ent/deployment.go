@@ -30,6 +30,8 @@ type Deployment struct {
 	FinishedAt *time.Time `json:"finished_at,omitempty"`
 	// Error holds the value of the "error" field.
 	Error string `json:"error,omitempty"`
+	// Notes holds the value of the "notes" field.
+	Notes string `json:"notes,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the DeploymentQuery when eager-loading is set.
 	Edges        DeploymentEdges `json:"edges"`
@@ -61,7 +63,7 @@ func (*Deployment) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case deployment.FieldID, deployment.FieldProjectID, deployment.FieldStatus, deployment.FieldFileName, deployment.FieldError:
+		case deployment.FieldID, deployment.FieldProjectID, deployment.FieldStatus, deployment.FieldFileName, deployment.FieldError, deployment.FieldNotes:
 			values[i] = new(sql.NullString)
 		case deployment.FieldCreatedAt, deployment.FieldFinishedAt:
 			values[i] = new(sql.NullTime)
@@ -123,6 +125,12 @@ func (_m *Deployment) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Error = value.String
 			}
+		case deployment.FieldNotes:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field notes", values[i])
+			} else if value.Valid {
+				_m.Notes = value.String
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -183,6 +191,9 @@ func (_m *Deployment) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("error=")
 	builder.WriteString(_m.Error)
+	builder.WriteString(", ")
+	builder.WriteString("notes=")
+	builder.WriteString(_m.Notes)
 	builder.WriteByte(')')
 	return builder.String()
 }

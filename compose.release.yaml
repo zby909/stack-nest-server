@@ -36,17 +36,50 @@ services:
       - ${STACKNEST_DATABASE_URL:?required}
     logging: *default-logging
 
+  runner:
+    image: stacknest-app:${STACKNEST_RELEASE:?required}
+    command: ["docker-runner"]
+    user: "0:0"
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 96m
+    cpus: 0.5
+    pids_limit: 64
+    environment:
+      STACKNEST_DATA_DIR: /data
+      STACKNEST_RUNNER_SOCKET: /run/stacknest-runner/control.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${STACKNEST_DOCKER_STORAGE_DIR:-/var/lib/docker}:/docker-storage:ro
+      - stacknest-data:/data
+      - runner-control:/run/stacknest-runner
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/stacknest", "runner-health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *default-logging
+
   stacknest:
     image: stacknest-app:${STACKNEST_RELEASE:?required}
     restart: unless-stopped
     depends_on:
       migrate:
         condition: service_completed_successfully
+      runner:
+        condition: service_healthy
     environment:
+      STACKNEST_RUNNER_SOCKET: /run/stacknest-runner/control.sock
       STACKNEST_ADDR: :8080
       STACKNEST_DATABASE_URL: ${STACKNEST_DATABASE_URL:?required}
       STACKNEST_DATA_DIR: /data
+      STACKNEST_BACKUP_STATUS_FILE: /run/stacknest-backup/status.json
       STACKNEST_BASE_DOMAIN: ${STACKNEST_BASE_DOMAIN:?required}
+      STACKNEST_ADMIN_DOMAIN: ${STACKNEST_ADMIN_DOMAIN:?required}
+      STACKNEST_INVITATION_LOGIN_URL: ${STACKNEST_INVITATION_LOGIN_URL:-}
       STACKNEST_AUTH_ADMIN_EMAIL: ${STACKNEST_AUTH_ADMIN_EMAIL:?required}
       STACKNEST_AUTH_INITIAL_USER_EMAIL: ${STACKNEST_AUTH_INITIAL_USER_EMAIL:-}
       STACKNEST_AUTH_SECRET: ${STACKNEST_AUTH_SECRET:?required}
@@ -56,6 +89,8 @@ services:
       STACKNEST_SMTP_PASSWORD: ${STACKNEST_SMTP_PASSWORD:?required}
     volumes:
       - stacknest-data:/data
+      - runner-control:/run/stacknest-runner
+      - ${STACKNEST_BACKUP_STATUS_DIR:-./backup-status}:/run/stacknest-backup:ro
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/api/health"]
       interval: 10s
@@ -97,3 +132,4 @@ services:
 volumes:
   postgres-data:
   stacknest-data:
+  runner-control:

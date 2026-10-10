@@ -125,6 +125,9 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	if _, err := tx.ExecContext(ctx, "UPDATE projects SET owner_user_id=$1 WHERE owner_user_id=$2", adminID, id); err != nil {
 		return fmt.Errorf("transfer user projects: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, "UPDATE container_apps SET owner_user_id=$1 WHERE owner_user_id=$2", adminID, id); err != nil {
+		return fmt.Errorf("transfer user container apps: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx, "DELETE FROM auth_users WHERE id=$1", id); err != nil {
 		return fmt.Errorf("delete auth user: %w", err)
 	}

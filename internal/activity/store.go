@@ -2,6 +2,7 @@ package activity
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -94,8 +95,12 @@ func (s *Store) Append(event Event) error {
 
 // List 读取最近一百条完整记录，跳过进程中断留下的不完整尾行。
 func (s *Store) List() ([]Event, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	result, err := s.Query(context.Background(), Query{IsAdmin: true, Page: 1, PageSize: 100})
+	return result.Events, err
+}
+
+// readEvents 在调用方持锁时读取保留片段，筛选和分页交给 Query 统一处理。
+func (s *Store) readEvents(ctx context.Context) ([]Event, error) {
 	events := make([]Event, 0, 100)
 	for _, suffix := range []string{".2", ".1", ""} {
 		file, err := os.Open(s.path + suffix)
@@ -108,12 +113,13 @@ func (s *Store) List() ([]Event, error) {
 		scanner := bufio.NewScanner(file)
 		scanner.Buffer(make([]byte, 4096), 64<<10)
 		for scanner.Scan() {
+			if err := ctx.Err(); err != nil {
+				file.Close()
+				return nil, err
+			}
 			var event Event
 			if json.Unmarshal(scanner.Bytes(), &event) == nil && event.ID != "" {
 				events = append(events, event)
-				if len(events) > 100 {
-					events = events[1:]
-				}
 			}
 		}
 		scanErr := scanner.Err()

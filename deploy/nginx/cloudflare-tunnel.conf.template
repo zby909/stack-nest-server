@@ -1,0 +1,128 @@
+# 仅由绑定宿主回环地址的 Cloudflare Tunnel 入口使用，保留访问者的 HTTPS 和真实 IP。
+map $http_x_forwarded_proto $stacknest_tunnel_https {
+    default 0;
+    https 1;
+}
+
+map $http_cf_connecting_ip $stacknest_tunnel_client_ip {
+    "" $remote_addr;
+    default $http_cf_connecting_ip;
+}
+
+# 正式静态站点沿用原公网入口的只读目录；版本预览和 Docker 应用交给 Go。
+# 主机名前缀必须占据一个完整标签，拒绝伪造的多级子域名。
+map $host $stacknest_tunnel_host_domain {
+    "~^stack-nest-[a-z0-9-]+\.(?<stacknest_tunnel_domain_suffix>.+)$" $stacknest_tunnel_domain_suffix;
+    default "";
+}
+
+map $host $stacknest_tunnel_dynamic_site {
+    "~^stack-nest--[0-9a-f-]+\." 1;
+    "~^stack-nest--app-[a-z0-9-]+\." 1;
+    default 0;
+}
+
+map $host $stacknest_tunnel_project_slug {
+    "~^stack-nest-(?<stacknest_tunnel_slug>[a-z0-9](?:[a-z0-9-]{0,50}[a-z0-9])?)\." $stacknest_tunnel_slug;
+    default "__invalid__";
+}
+
+# 正式静态响应使用默认协商缓存；错误页和动态应用继续禁止保存。
+map "$stacknest_tunnel_dynamic_site:$status" $stacknest_tunnel_static_cache {
+    default "no-store";
+    "0:200" "no-cache";
+    "0:206" "no-cache";
+    "0:304" "no-cache";
+}
+
+# 页面路由保留 SPA 回退，缺失 CSS、脚本、图片等资源直接返回 404。
+map $uri $stacknest_tunnel_spa_index {
+    default /index.html;
+    "~*\.(html?|css|[cm]?js|map|json|xml|txt|csv|svg|ico|png|jpe?g|gif|webp|avif|bmp|woff2?|ttf|otf|eot|wasm|webmanifest|pdf|zip|rar|gz|mp4|webm|mp3|ogg|wav)/?$" "";
+}
+
+server {
+    listen 81 default_server;
+    server_name _;
+    return 404;
+}
+
+server {
+    listen 81;
+    server_name ${STACKNEST_ADMIN_DOMAIN};
+    if ($stacknest_tunnel_https = 0) { return 308 https://$host$request_uri; }
+
+    client_max_body_size 91m;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location ~ ^/(api/|openapi\.yaml$) {
+        proxy_pass http://stacknest:8080;
+        proxy_http_version 1.1;
+        proxy_request_buffering off;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $stacknest_tunnel_client_ip;
+        proxy_set_header X-Forwarded-For $stacknest_tunnel_client_ip;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+
+    location ^~ /sites/ { return 404; }
+
+    location / {
+        try_files $uri $uri/ $stacknest_tunnel_spa_index =404;
+    }
+}
+
+# 普通静态站点由 Nginx 直接提供；动态主机由 Go 按记录解析。
+server {
+    listen 81;
+    server_name *.${STACKNEST_BASE_DOMAIN};
+    if ($stacknest_tunnel_host_domain != "${STACKNEST_BASE_DOMAIN}") { return 404; }
+    if ($stacknest_tunnel_https = 0) { return 308 https://$host$request_uri; }
+    error_page 418 = @stacknest_tunnel_dynamic;
+    if ($stacknest_tunnel_dynamic_site) { return 418; }
+    client_max_body_size 91m;
+
+    root /data/sites/$stacknest_tunnel_project_slug;
+    if (-e /data/paused/$stacknest_tunnel_project_slug) { return 503; }
+    add_header Cache-Control $stacknest_tunnel_static_cache always;
+    add_header X-Content-Type-Options "nosniff" always;
+    index index.html;
+
+    location ~ /\. { return 404; }
+    location / { try_files $uri $uri/ $stacknest_tunnel_spa_index =404; }
+
+    location @stacknest_tunnel_dynamic {
+        proxy_pass http://stacknest:8080;
+        proxy_http_version 1.1;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $stacknest_connection;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $stacknest_tunnel_client_ip;
+        proxy_set_header X-Forwarded-For $stacknest_tunnel_client_ip;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+}
+
+# 无依赖的测试页，用于确认域名确实经隧道到达本机；不展示服务器信息。
+server {
+    listen 81;
+    server_name demo.${STACKNEST_BASE_DOMAIN};
+    if ($stacknest_tunnel_https = 0) { return 308 https://$host$request_uri; }
+    charset utf-8;
+    add_header Cache-Control "no-store" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    location = / {
+        default_type text/html;
+        return 200 '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>StackNest Tunnel</title><style>body{font:18px/1.7 system-ui;max-width:640px;margin:12vh auto;padding:24px;color:#192334}code{font-size:14px;color:#536276}</style><h1>Cloudflare Tunnel 已连通</h1><p>此页面由 Ubuntu 上的 StackNest HTTP 入口提供。</p><code>stacknest-tunnel-demo-v1-20261010</code></html>';
+    }
+    location / { return 404; }
+}

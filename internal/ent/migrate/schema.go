@@ -87,6 +87,7 @@ var (
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "finished_at", Type: field.TypeTime, Nullable: true},
 		{Name: "error", Type: field.TypeString, Default: ""},
+		{Name: "notes", Type: field.TypeString, Default: ""},
 		{Name: "project_id", Type: field.TypeString},
 	}
 	// DeploymentsTable holds the schema information for the "deployments" table.
@@ -97,7 +98,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "deployments_projects_deployments",
-				Columns:    []*schema.Column{DeploymentsColumns[6]},
+				Columns:    []*schema.Column{DeploymentsColumns[7]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -106,7 +107,7 @@ var (
 			{
 				Name:    "deployment_project_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{DeploymentsColumns[6], DeploymentsColumns[3]},
+				Columns: []*schema.Column{DeploymentsColumns[7], DeploymentsColumns[3]},
 			},
 		},
 	}

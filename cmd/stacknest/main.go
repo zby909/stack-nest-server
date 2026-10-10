@@ -13,6 +13,8 @@ import (
 	"stacknest/server/internal/activity"
 	"stacknest/server/internal/auth"
 	"stacknest/server/internal/config"
+	"stacknest/server/internal/containerapp"
+	"stacknest/server/internal/dockerrunner"
 	"stacknest/server/internal/httpserver"
 	"stacknest/server/internal/postgres"
 	"stacknest/server/internal/project"
@@ -32,6 +34,26 @@ func main() {
 // run 初始化持久化、恢复流程及 HTTP 服务。
 func run() error {
 	cfg := config.Load()
+	if len(os.Args) > 1 {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		if os.Args[1] == "docker-runner" {
+			runner, err := dockerrunner.New(ctx, "/var/run/docker.sock", cfg.DataDir, "/docker-storage")
+			if err != nil {
+				return err
+			}
+			return runner.Serve(ctx, cfg.RunnerSocket)
+		}
+		if os.Args[1] == "runner-health" {
+			return containerapp.NewClient(cfg.RunnerSocket).Health(ctx)
+		}
+		if os.Args[1] == "apps-freeze" || os.Args[1] == "apps-thaw" {
+			task, cancel := context.WithTimeout(ctx, 2*time.Minute)
+			defer cancel()
+			return containerapp.NewClient(cfg.RunnerSocket).Maintenance(task, os.Args[1] == "apps-freeze")
+		}
+		return errors.New("unknown command")
+	}
 
 	connectCtx, cancelConnect := context.WithTimeout(context.Background(), 10*time.Second)
 	store, err := postgres.Open(connectCtx, cfg.DatabaseURL)
@@ -60,11 +82,20 @@ func run() error {
 	if err == nil {
 		err = deployer.RecoverPublications(recoverCtx, store.Get)
 	}
+	if err == nil {
+		err = deployer.RecoverDrafts(recoverCtx, store.Get)
+	}
+	if err == nil {
+		err = deployer.RecoverAccess(recoverCtx, store.List)
+	}
 	cancelRecover()
 	if err != nil {
 		return err
 	}
 	projects := project.NewService(store, deployer)
+	if err := deployer.RecoverExports(); err != nil {
+		return err
+	}
 	mailer, err := auth.NewSMTPMailer(auth.SMTPConfig{
 		Host:     cfg.SMTPHost,
 		Port:     cfg.SMTPPort,
@@ -82,19 +113,30 @@ func run() error {
 		return err
 	}
 
+	apps := containerapp.New(store, containerapp.NewClient(cfg.RunnerSocket), cfg.AuthSecret, guard, activityLog)
 	server := httpserver.New(httpserver.Config{
-		Addr:          cfg.Addr,
-		WebDir:        cfg.WebDir,
-		SitesDir:      cfg.SitesDir(),
-		BaseDomain:    cfg.BaseDomain,
-		MaxUploadSize: cfg.MaxUploadSize,
-		Storage:       guard,
-		CheckDatabase: store.Ping,
-		Activity:      activityLog,
+		Apps:               apps,
+		Addr:               cfg.Addr,
+		WebDir:             cfg.WebDir,
+		SitesDir:           cfg.SitesDir(),
+		BaseDomain:         cfg.BaseDomain,
+		BackupStatusFile:   cfg.BackupStatusFile,
+		InvitationLoginURL: cfg.InvitationLoginURL,
+		MaxUploadSize:      cfg.MaxUploadSize,
+		Storage:            guard,
+		CheckDatabase:      store.Ping,
+		Activity:           activityLog,
 	}, projects, authService)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	workerDone := make(chan struct{})
+	if cfg.RunnerSocket != "" {
+		go func() { defer close(workerDone); apps.Run(ctx) }()
+	} else {
+		close(workerDone)
+	}
+	defer func() { stop(); <-workerDone }()
 
 	errCh := make(chan error, 1)
 	go func() {

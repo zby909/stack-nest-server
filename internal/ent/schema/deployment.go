@@ -32,6 +32,8 @@ func (Deployment) Fields() []ent.Field {
 			Nillable(),
 		field.String("error").
 			Default(""),
+		field.String("notes").
+			Default(""),
 	}
 }
 

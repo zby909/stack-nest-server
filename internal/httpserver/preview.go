@@ -35,6 +35,10 @@ func splitHost(value string) (string, string) {
 // previewBoundary 拒绝管理来源执行上传内容，也拒绝预览来源访问任何管理接口。
 func (s *Server) previewBoundary(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.isVersionHost(r.Host) {
+			s.serveVersion(w, r)
+			return
+		}
 		slug := previewSlug(r.Host)
 		if slug != "" {
 			prefix := "/sites/" + slug + "/"

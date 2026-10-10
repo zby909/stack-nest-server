@@ -5,6 +5,8 @@
 !.env.compose.example
 .history
 data
+backup-status
+__pycache__
 .local-dev
 /cert
 pem.txt

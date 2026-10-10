@@ -1,0 +1,50 @@
+name: Server checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-check-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: stacknest
+          POSTGRES_PASSWORD: stacknest_ci_only
+          POSTGRES_DB: stacknest_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U stacknest -d stacknest_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      STACKNEST_TEST_DATABASE_URL: postgres://stacknest:stacknest_ci_only@127.0.0.1:5432/stacknest_test?sslmode=disable
+      STACKNEST_TEST_AUTH_DATABASE_URL: postgres://stacknest:stacknest_ci_only@127.0.0.1:5432/stacknest_auth_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+      - name: Prepare isolated databases
+        run: |
+          docker exec '${{ job.services.postgres.id }}' psql -U stacknest -d stacknest_test -v ON_ERROR_STOP=1 -c 'CREATE DATABASE stacknest_auth_test;'
+          for url in "$STACKNEST_TEST_DATABASE_URL" "$STACKNEST_TEST_AUTH_DATABASE_URL"; do
+            docker run --rm --network host -v "$PWD/migrations:/migrations:ro" arigaio/atlas:1.3.3 migrate apply --url "$url" --dir file:///migrations
+          done
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+      - run: python3 -m unittest discover -s deploy -p 'test_*.py'
+      - run: go build ./...

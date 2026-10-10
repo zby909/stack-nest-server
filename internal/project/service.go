@@ -53,9 +53,9 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (CreatedProject
 	if input.OwnerID == "" {
 		return CreatedProject{}, ErrMissingOwner
 	}
-	name := strings.TrimSpace(input.Name)
-	if name == "" {
-		return CreatedProject{}, ErrInvalidName
+	name, description, err := normalizeMetadata(input.Name, input.Description)
+	if err != nil {
+		return CreatedProject{}, err
 	}
 
 	slug := input.Slug
@@ -72,13 +72,31 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (CreatedProject
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 
-	if _, err := s.store.Get(ctx, slug); err == nil {
+	if existing, err := s.store.Get(ctx, slug); err == nil {
+		if existing.OwnerID == input.OwnerID && containsDeployment(existing, input.DeploymentID) {
+			return CreatedProject{Project: existing}, nil
+		}
 		return CreatedProject{}, ErrAlreadyExists
 	} else if !errors.Is(err, ErrNotFound) {
 		return CreatedProject{}, fmt.Errorf("check existing project: %w", err)
 	}
 
-	files, err := s.publisher.Publish(ctx, slug, input.FileName, input.Source)
+	if len(input.Notes) > 4096 {
+		return CreatedProject{}, ErrInvalidNotes
+	}
+	id := input.DeploymentID
+	if id == "" {
+		id = newID("dep")
+	}
+	var files PublishedFiles
+	if input.Preview {
+		if err := s.publisher.SetPaused(slug, true); err != nil {
+			return CreatedProject{}, err
+		}
+		files, err = s.publisher.PrepareDraft(ctx, slug, id, input.FileName, input.Source)
+	} else {
+		files, err = s.publisher.Publish(ctx, slug, input.FileName, input.Source)
+	}
 	if err != nil {
 		if errors.Is(err, ErrAlreadyExists) {
 			return CreatedProject{}, ErrAlreadyExists
@@ -86,13 +104,17 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (CreatedProject
 		return CreatedProject{}, fmt.Errorf("publish static site: %w", err)
 	}
 
-	now := s.now()
+	now := s.now().UTC().Truncate(time.Microsecond)
 	deployment := Deployment{
-		ID:         newID("dep"),
+		ID:         id,
+		Notes:      strings.TrimSpace(input.Notes),
 		Status:     "succeeded",
 		FileName:   input.FileName,
 		CreatedAt:  now,
 		FinishedAt: now,
+	}
+	if input.DeploymentID != "" {
+		deployment.ID = input.DeploymentID
 	}
 	value := Project{
 		ID:          newID("prj"),
@@ -100,13 +122,17 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (CreatedProject
 		OwnerEmail:  input.OwnerEmail,
 		Name:        name,
 		Slug:        slug,
-		Description: strings.TrimSpace(input.Description),
+		Description: description,
 		Status:      "online",
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		Deployments: []Deployment{deployment},
 	}
 
+	if input.Preview {
+		deployment.Status = "draft"
+		value.Status, value.Draft, value.Deployments = "draft", &deployment, nil
+	}
 	if err := s.store.Create(ctx, value); err != nil {
 		// 提交报错可能发生在事务已经成功之后，先确认结果再决定是否清理。
 		checkCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
@@ -118,7 +144,13 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (CreatedProject
 			if !errors.Is(lookupErr, ErrNotFound) {
 				return CreatedProject{}, fmt.Errorf("publication outcome unknown; restart recovery required: %w", err)
 			}
-			if cleanupErr := s.publisher.Delete(context.WithoutCancel(ctx), slug); cleanupErr != nil {
+			var cleanupErr error
+			if input.Preview {
+				cleanupErr = s.publisher.RemoveDraft(slug, id)
+			} else {
+				cleanupErr = s.publisher.Delete(context.WithoutCancel(ctx), slug)
+			}
+			if cleanupErr != nil {
 				return CreatedProject{}, fmt.Errorf("persist project failed: %v; cleanup published site: %w", err, cleanupErr)
 			}
 			if cleanupErr := s.publisher.CompletePublication(slug); cleanupErr != nil {

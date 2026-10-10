@@ -14,6 +14,7 @@ type stagedDeletion struct {
 	original string
 	staged   string
 	previous string
+	drafts   string
 }
 
 // StageDelete 将站点移出公开目录，数据库删除失败时仍可原样恢复。
@@ -55,6 +56,11 @@ func (d *stagedDeletion) Commit() error {
 	}
 	if d.previous != "" {
 		if err := os.RemoveAll(d.previous); err != nil {
+			return err
+		}
+	}
+	if d.drafts != "" {
+		if err := os.RemoveAll(d.drafts); err != nil {
 			return err
 		}
 	}
@@ -118,6 +124,7 @@ func (d *Deployer) RecoverDeletions(ctx context.Context, lookup func(context.Con
 // deletion 定位同一数据卷内的公开目录与删除暂存目录。
 func (d *Deployer) deletion(slug string) *stagedDeletion {
 	return &stagedDeletion{
+		drafts:   filepath.Join(d.config.DataDir, "drafts", slug),
 		original: filepath.Join(d.config.DataDir, "sites", slug),
 		staged:   filepath.Join(d.config.DataDir, "trash", slug),
 		previous: filepath.Join(d.config.DataDir, "previous", slug),

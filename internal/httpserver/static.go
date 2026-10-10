@@ -5,11 +5,16 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"stacknest/server/internal/project"
 )
 
+// staticAssetPath 与 Nginx 一致：缺失的常见资源不返回 SPA 页面。
+var staticAssetPath = regexp.MustCompile(`(?i)\.(html?|css|[cm]?js|map|json|xml|txt|csv|svg|ico|png|jpe?g|gif|webp|avif|bmp|woff2?|ttf|otf|eot|wasm|webmanifest|pdf|zip|rar|gz|mp4|webm|mp3|ogg|wav)/?$`)
+
+// serveSite 提供正式站点的本地预览，页面路由允许回退到入口文件。
 func (s *Server) serveSite(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/sites/")
 	parts := strings.SplitN(path, "/", 2)
@@ -18,12 +23,19 @@ func (s *Server) serveSite(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if _, err := s.projects.Get(r.Context(), slug); err != nil {
+	value, err := s.projects.Get(r.Context(), slug)
+	if err != nil {
 		if !errors.Is(err, project.ErrNotFound) {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
 		http.NotFound(w, r)
+		return
+	}
+	_, markerErr := os.Stat(filepath.Join(filepath.Dir(s.config.SitesDir), "paused", slug))
+	if value.Status != "online" || !errors.Is(markerErr, os.ErrNotExist) {
+		w.Header().Set("Cache-Control", "no-store")
+		http.Error(w, "站点已暂停访问", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -47,6 +59,10 @@ func (s *Server) serveSite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if staticAssetPath.MatchString(r.URL.Path) {
+		http.NotFound(w, r)
+		return
+	}
 	http.ServeFile(w, r, filepath.Join(root, "index.html"))
 }
 
@@ -71,6 +87,10 @@ func (s *Server) serveWeb(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if staticAssetPath.MatchString(r.URL.Path) {
+		http.NotFound(w, r)
+		return
+	}
 	index := filepath.Join(s.config.WebDir, "index.html")
 	if _, err := os.Stat(index); err == nil {
 		http.ServeFile(w, r, index)

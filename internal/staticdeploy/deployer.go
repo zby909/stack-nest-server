@@ -89,6 +89,9 @@ func (d *Deployer) Publish(ctx context.Context, slug, fileName string, source io
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return empty, err
 	}
+	if err := d.SetPaused(slug, false); err != nil {
+		return empty, err
+	}
 	if err := os.Rename(stageDir, target); err != nil {
 		return empty, fmt.Errorf("发布失败: %w", err)
 	}

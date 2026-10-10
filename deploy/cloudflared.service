@@ -1,0 +1,34 @@
+[Unit]
+Description=Cloudflare Tunnel for StackNest
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+NotifyAccess=main
+DynamicUser=yes
+LoadCredential=tunnel-token:/etc/cloudflared/tunnel-token
+ExecStart=/usr/bin/cloudflared --no-autoupdate tunnel --metrics 127.0.0.1:20241 --loglevel info run --token-file %d/tunnel-token
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=120s
+TimeoutStopSec=30s
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+MemoryMax=256M
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

@@ -53,9 +53,10 @@ type Store interface {
 	DeleteSession(ctx context.Context, tokenHash string) error
 }
 
-// Mailer 发送一次性登录验证码。
+// Mailer 发送一次性登录验证码和可选的用户邀请。
 type Mailer interface {
 	SendCode(ctx context.Context, email, code string) error
+	SendInvitation(ctx context.Context, email, loginURL string) error
 }
 
 // Service 实现一次性验证码和服务端会话规则。

@@ -86,6 +86,26 @@ func TestStoreIntegration(t *testing.T) {
 		}
 	}
 
+	// 数据库中的编辑使用实际微秒时间，并原子阻止过期版本和归属变化。
+	metadata := got
+	metadata.Name, metadata.Description = "Edited", "Metadata only"
+	metadata.UpdatedAt = got.UpdatedAt.Add(time.Millisecond)
+	wrongOwner := metadata
+	wrongOwner.OwnerID = "another-owner"
+	if err := store.UpdateMetadata(ctx, wrongOwner, got.UpdatedAt); err != project.ErrVersionConflict {
+		t.Fatalf("metadata owner check: %v", err)
+	}
+	if err := store.UpdateMetadata(ctx, metadata, got.UpdatedAt.Add(-time.Second)); err != project.ErrVersionConflict {
+		t.Fatalf("metadata stale check: %v", err)
+	}
+	if err := store.UpdateMetadata(ctx, metadata, got.UpdatedAt); err != nil {
+		t.Fatal(err)
+	}
+	edited, err := store.Get(ctx, slug)
+	if err != nil || edited.Name != metadata.Name || edited.Description != metadata.Description || edited.OwnerID != got.OwnerID || edited.Deployments[0].ID != got.Deployments[0].ID || !edited.UpdatedAt.Equal(metadata.UpdatedAt) {
+		t.Fatalf("metadata persistence: %+v %v", edited, err)
+	}
+
 	if err := store.Delete(ctx, slug, ""); err != nil {
 		t.Fatalf("delete project: %v", err)
 	}

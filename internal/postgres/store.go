@@ -130,7 +130,11 @@ func (s *Store) Create(ctx context.Context, value project.Project) error {
 		return fmt.Errorf("create project: %w", err)
 	}
 
-	for _, deployment := range value.Deployments {
+	versions := append([]project.Deployment{}, value.Deployments...)
+	if value.Draft != nil {
+		versions = append(versions, *value.Draft)
+	}
+	for _, deployment := range versions {
 		var finishedAt *time.Time
 		if !deployment.FinishedAt.IsZero() {
 			finishedAt = &deployment.FinishedAt
@@ -142,6 +146,7 @@ func (s *Store) Create(ctx context.Context, value project.Project) error {
 			SetProjectID(value.ID).
 			SetStatus(deployment.Status).
 			SetFileName(deployment.FileName).
+			SetNotes(deployment.Notes).
 			SetCreatedAt(deployment.CreatedAt).
 			SetNillableFinishedAt(finishedAt).
 			SetError(deployment.Error).
@@ -174,19 +179,26 @@ func (s *Store) Delete(ctx context.Context, slug, ownerID string) error {
 
 func toProject(row *entdb.Project) project.Project {
 	deployments := make([]project.Deployment, 0, len(row.Edges.Deployments))
+	var draft *project.Deployment
 	for _, item := range row.Edges.Deployments {
 		finishedAt := time.Time{}
 		if item.FinishedAt != nil {
 			finishedAt = *item.FinishedAt
 		}
-		deployments = append(deployments, project.Deployment{
+		version := project.Deployment{
+			Notes:      item.Notes,
 			ID:         item.ID,
 			Status:     item.Status,
 			FileName:   item.FileName,
 			CreatedAt:  item.CreatedAt,
 			FinishedAt: finishedAt,
 			Error:      item.Error,
-		})
+		}
+		if version.Status == "draft" {
+			draft = &version
+		} else {
+			deployments = append(deployments, version)
+		}
 	}
 
 	return project.Project{
@@ -199,6 +211,7 @@ func toProject(row *entdb.Project) project.Project {
 		CreatedAt:   row.CreatedAt,
 		UpdatedAt:   row.UpdatedAt,
 		Deployments: deployments,
+		Draft:       draft,
 	}
 }
 

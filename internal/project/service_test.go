@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"stacknest/server/internal/project"
 	"stacknest/server/internal/staticdeploy"
@@ -22,6 +23,22 @@ type testStore struct {
 	beforeDelete func()
 	updateErr    error
 	beforeUpdate func()
+}
+
+// UpdateMetadata 模拟归属与过期版本保护，同时支持存储故障注入。
+func (s *testStore) UpdateMetadata(ctx context.Context, value project.Project, expectedAt time.Time) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if s.updateErr != nil {
+		return s.updateErr
+	}
+	old, ok := s.values[value.Slug]
+	if !ok || old.OwnerID != value.OwnerID || !old.UpdatedAt.Equal(expectedAt) {
+		return project.ErrVersionConflict
+	}
+	s.values[value.Slug] = value
+	return nil
 }
 
 // ReplaceDeployment 模拟事务中的权限、版本检查以及故障注入。
@@ -39,10 +56,20 @@ func (s *testStore) ReplaceDeployment(ctx context.Context, slug, ownerID, expect
 	if !ok || ownerID != "" && value.OwnerID != ownerID {
 		return project.ErrNotFound
 	}
-	if len(value.Deployments) == 0 || value.Deployments[0].ID != expectedID {
+	if project.CurrentID(value) != expectedID {
 		return project.ErrVersionConflict
 	}
-	value.Deployments = []project.Deployment{next, value.Deployments[0]}
+	if len(value.Deployments) > 0 {
+		value.Deployments = []project.Deployment{next, value.Deployments[0]}
+	} else {
+		value.Deployments = []project.Deployment{next}
+	}
+	if value.Draft != nil && value.Draft.ID == next.ID {
+		value.Draft = nil
+	}
+	if value.Status == "draft" {
+		value.Status = "online"
+	}
 	value.UpdatedAt = next.CreatedAt
 	s.values[slug] = value
 	return nil
@@ -308,4 +335,41 @@ func TestCleanupFailureRecoversOnRestart(t *testing.T) {
 	if _, err := service.Create(context.Background(), projectInput(t)); err != nil {
 		t.Fatalf("cleanup did not release slug: %v", err)
 	}
+}
+
+// SaveDraft 模拟待发布版本事务。
+func (s *testStore) SaveDraft(ctx context.Context, slug, ownerID, expectedID string, next project.Deployment) error {
+	value, err := s.Get(ctx, slug)
+	if err != nil {
+		return err
+	}
+	if value.OwnerID != ownerID {
+		return project.ErrNotFound
+	}
+	if project.CurrentID(value) != expectedID {
+		return project.ErrVersionConflict
+	}
+	if value.Draft != nil {
+		return project.ErrDraftExists
+	}
+	value.Draft, value.UpdatedAt = &next, next.CreatedAt
+	s.values[slug] = value
+	return nil
+}
+
+// DeleteDraft 模拟按草稿编号删除，正式版不会被误删。
+func (s *testStore) DeleteDraft(ctx context.Context, slug, ownerID, draftID string) error {
+	value, err := s.Get(ctx, slug)
+	if err != nil {
+		return err
+	}
+	if value.OwnerID != ownerID {
+		return project.ErrNotFound
+	}
+	if value.Draft == nil || value.Draft.ID != draftID {
+		return project.ErrVersionConflict
+	}
+	value.Draft = nil
+	s.values[slug] = value
+	return nil
 }

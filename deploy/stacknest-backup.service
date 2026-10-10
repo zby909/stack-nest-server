@@ -6,6 +6,6 @@ After=docker.service
 [Service]
 Type=oneshot
 EnvironmentFile=/etc/stacknest-backup.conf
-ExecStart=/bin/bash /opt/stacknest/current/server/deploy/backup.sh ${STACKNEST_BACKUP_COMPOSE} ${STACKNEST_BACKUP_ROOT}
+ExecStart=/bin/bash /opt/stacknest/current/server/deploy/backup.sh ${STACKNEST_BACKUP_COMPOSE} ${STACKNEST_BACKUP_ROOT} ${STACKNEST_BACKUP_STATUS_DIR}
 UMask=0077
 TimeoutStartSec=30min

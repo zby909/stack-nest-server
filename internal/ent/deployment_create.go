@@ -73,6 +73,20 @@ func (_c *DeploymentCreate) SetNillableError(v *string) *DeploymentCreate {
 	return _c
 }
 
+// SetNotes sets the "notes" field.
+func (_c *DeploymentCreate) SetNotes(v string) *DeploymentCreate {
+	_c.mutation.SetNotes(v)
+	return _c
+}
+
+// SetNillableNotes sets the "notes" field if the given value is not nil.
+func (_c *DeploymentCreate) SetNillableNotes(v *string) *DeploymentCreate {
+	if v != nil {
+		_c.SetNotes(*v)
+	}
+	return _c
+}
+
 // SetID sets the "id" field.
 func (_c *DeploymentCreate) SetID(v string) *DeploymentCreate {
 	_c.mutation.SetID(v)
@@ -123,6 +137,10 @@ func (_c *DeploymentCreate) defaults() {
 		v := deployment.DefaultError
 		_c.mutation.SetError(v)
 	}
+	if _, ok := _c.mutation.Notes(); !ok {
+		v := deployment.DefaultNotes
+		_c.mutation.SetNotes(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -156,6 +174,9 @@ func (_c *DeploymentCreate) check() error {
 	}
 	if _, ok := _c.mutation.Error(); !ok {
 		return &ValidationError{Name: "error", err: errors.New(`ent: missing required field "Deployment.error"`)}
+	}
+	if _, ok := _c.mutation.Notes(); !ok {
+		return &ValidationError{Name: "notes", err: errors.New(`ent: missing required field "Deployment.notes"`)}
 	}
 	if v, ok := _c.mutation.ID(); ok {
 		if err := deployment.IDValidator(v); err != nil {
@@ -219,6 +240,10 @@ func (_c *DeploymentCreate) createSpec() (*Deployment, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Error(); ok {
 		_spec.SetField(deployment.FieldError, field.TypeString, value)
 		_node.Error = value
+	}
+	if value, ok := _c.mutation.Notes(); ok {
+		_spec.SetField(deployment.FieldNotes, field.TypeString, value)
+		_node.Notes = value
 	}
 	if nodes := _c.mutation.ProjectIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

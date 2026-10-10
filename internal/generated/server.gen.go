@@ -6,310 +6,36 @@
 package generated
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/oapi-codegen/runtime"
-	openapi_types "github.com/oapi-codegen/runtime/types"
 )
-
-// Defines values for ActivityEventAction.
-const (
-	Delete   ActivityEventAction = "delete"
-	Rollback ActivityEventAction = "rollback"
-	Update   ActivityEventAction = "update"
-	Upload   ActivityEventAction = "upload"
-)
-
-// Valid indicates whether the value is a known member of the ActivityEventAction enum.
-func (e ActivityEventAction) Valid() bool {
-	switch e {
-	case Delete:
-		return true
-	case Rollback:
-		return true
-	case Update:
-		return true
-	case Upload:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ActivityEventStatus.
-const (
-	ActivityEventStatusFailed    ActivityEventStatus = "failed"
-	ActivityEventStatusSucceeded ActivityEventStatus = "succeeded"
-)
-
-// Valid indicates whether the value is a known member of the ActivityEventStatus enum.
-func (e ActivityEventStatus) Valid() bool {
-	switch e {
-	case ActivityEventStatusFailed:
-		return true
-	case ActivityEventStatusSucceeded:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for AuthUserRole.
-const (
-	Admin AuthUserRole = "admin"
-	User  AuthUserRole = "user"
-)
-
-// Valid indicates whether the value is a known member of the AuthUserRole enum.
-func (e AuthUserRole) Valid() bool {
-	switch e {
-	case Admin:
-		return true
-	case User:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for DeploymentStatus.
-const (
-	DeploymentStatusFailed    DeploymentStatus = "failed"
-	DeploymentStatusSucceeded DeploymentStatus = "succeeded"
-)
-
-// Valid indicates whether the value is a known member of the DeploymentStatus enum.
-func (e DeploymentStatus) Valid() bool {
-	switch e {
-	case DeploymentStatusFailed:
-		return true
-	case DeploymentStatusSucceeded:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for HealthResponseStatus.
-const (
-	Ok          HealthResponseStatus = "ok"
-	Unavailable HealthResponseStatus = "unavailable"
-)
-
-// Valid indicates whether the value is a known member of the HealthResponseStatus enum.
-func (e HealthResponseStatus) Valid() bool {
-	switch e {
-	case Ok:
-		return true
-	case Unavailable:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ProjectStatus.
-const (
-	Online ProjectStatus = "online"
-)
-
-// Valid indicates whether the value is a known member of the ProjectStatus enum.
-func (e ProjectStatus) Valid() bool {
-	switch e {
-	case Online:
-		return true
-	default:
-		return false
-	}
-}
-
-// ActivityEvent defines model for ActivityEvent.
-type ActivityEvent struct {
-	Action         ActivityEventAction `json:"action"`
-	Actor          string              `json:"actor"`
-	ActorId        *string             `json:"actorId,omitempty"`
-	ArchiveBytes   int64               `json:"archiveBytes"`
-	CreatedAt      time.Time           `json:"createdAt"`
-	DurationMs     int64               `json:"durationMs"`
-	ExpandedBytes  int64               `json:"expandedBytes"`
-	FileCount      int                 `json:"fileCount"`
-	FileName       *string             `json:"fileName,omitempty"`
-	Id             string              `json:"id"`
-	Message        string              `json:"message"`
-	ProjectOwnerId *string             `json:"projectOwnerId,omitempty"`
-	Slug           *string             `json:"slug,omitempty"`
-	Status         ActivityEventStatus `json:"status"`
-}
-
-// ActivityEventAction defines model for ActivityEvent.Action.
-type ActivityEventAction string
-
-// ActivityEventStatus defines model for ActivityEvent.Status.
-type ActivityEventStatus string
-
-// AuthUser defines model for AuthUser.
-type AuthUser struct {
-	CreatedAt time.Time           `json:"createdAt"`
-	Email     openapi_types.Email `json:"email"`
-	Id        string              `json:"id"`
-	Role      AuthUserRole        `json:"role"`
-}
-
-// AuthUserRole defines model for AuthUser.Role.
-type AuthUserRole string
-
-// Deployment defines model for Deployment.
-type Deployment struct {
-	CreatedAt  time.Time        `json:"createdAt"`
-	Error      *string          `json:"error,omitempty"`
-	FileName   string           `json:"fileName"`
-	FinishedAt *time.Time       `json:"finishedAt,omitempty"`
-	Id         string           `json:"id"`
-	Status     DeploymentStatus `json:"status"`
-}
-
-// DeploymentStatus defines model for Deployment.Status.
-type DeploymentStatus string
-
-// EmailRequest defines model for EmailRequest.
-type EmailRequest struct {
-	Email openapi_types.Email `json:"email"`
-}
-
-// ErrorResponse defines model for ErrorResponse.
-type ErrorResponse struct {
-	Error string `json:"error"`
-}
-
-// HealthResponse defines model for HealthResponse.
-type HealthResponse struct {
-	Status HealthResponseStatus `json:"status"`
-}
-
-// HealthResponseStatus defines model for HealthResponse.Status.
-type HealthResponseStatus string
-
-// Project defines model for Project.
-type Project struct {
-	CreatedAt time.Time `json:"createdAt"`
-
-	// Deployments 当前版在前，上一版在后；回退也会生成新的当前部署编号。
-	Deployments *[]Deployment `json:"deployments,omitempty"`
-	Description *string       `json:"description,omitempty"`
-	Id          string        `json:"id"`
-	Name        string        `json:"name"`
-	OwnerEmail  string        `json:"ownerEmail"`
-	OwnerId     string        `json:"ownerId"`
-	SiteUrl     string        `json:"siteUrl"`
-	Slug        string        `json:"slug"`
-	Status      ProjectStatus `json:"status"`
-	UpdatedAt   time.Time     `json:"updatedAt"`
-}
-
-// ProjectStatus defines model for Project.Status.
-type ProjectStatus string
-
-// ProjectListResponse defines model for ProjectListResponse.
-type ProjectListResponse struct {
-	Projects []Project `json:"projects"`
-}
-
-// StorageStatus defines model for StorageStatus.
-type StorageStatus struct {
-	FreeBytes           *int64   `json:"freeBytes,omitempty"`
-	MaxExpandedBytes    int64    `json:"maxExpandedBytes"`
-	MaxFiles            int      `json:"maxFiles"`
-	MaxUploadBytes      int64    `json:"maxUploadBytes"`
-	MaxUsedPercent      *int     `json:"maxUsedPercent,omitempty"`
-	Reason              string   `json:"reason"`
-	ReservedUploadBytes *int64   `json:"reservedUploadBytes,omitempty"`
-	TotalBytes          *int64   `json:"totalBytes,omitempty"`
-	UploadAllowed       bool     `json:"uploadAllowed"`
-	UsedPercent         *float64 `json:"usedPercent,omitempty"`
-}
-
-// SystemStatus defines model for SystemStatus.
-type SystemStatus struct {
-	CpuCores             int     `json:"cpuCores"`
-	CpuPercent           float64 `json:"cpuPercent"`
-	DiskFreeBytes        int64   `json:"diskFreeBytes"`
-	DiskTotalBytes       int64   `json:"diskTotalBytes"`
-	DiskUsedPercent      float64 `json:"diskUsedPercent"`
-	MemoryAvailableBytes int64   `json:"memoryAvailableBytes"`
-	MemoryTotalBytes     int64   `json:"memoryTotalBytes"`
-	MemoryUsedPercent    float64 `json:"memoryUsedPercent"`
-	UptimeSeconds        int64   `json:"uptimeSeconds"`
-}
-
-// UserListResponse defines model for UserListResponse.
-type UserListResponse struct {
-	Users []AuthUser `json:"users"`
-}
-
-// VerifyCodeRequest defines model for VerifyCodeRequest.
-type VerifyCodeRequest struct {
-	Code  string              `json:"code"`
-	Email openapi_types.Email `json:"email"`
-}
-
-// DeploymentVersion defines model for DeploymentVersion.
-type DeploymentVersion = string
-
-// ProjectSlug defines model for ProjectSlug.
-type ProjectSlug = string
-
-// CreateProjectMultipartBody defines parameters for CreateProject.
-type CreateProjectMultipartBody struct {
-	// Description UTF-8 编码最多 4096 字节
-	Description *string            `json:"description,omitempty"`
-	File        openapi_types.File `json:"file"`
-
-	// Name UTF-8 编码最多 256 字节
-	Name string `json:"name"`
-
-	// Slug 为空时由项目名称自动生成；手填时必须满足 DNS 标签规则
-	Slug *string `json:"slug,omitempty"`
-}
-
-// UpdateProjectMultipartBody defines parameters for UpdateProject.
-type UpdateProjectMultipartBody struct {
-	File openapi_types.File `json:"file"`
-}
-
-// UpdateProjectParams defines parameters for UpdateProject.
-type UpdateProjectParams struct {
-	// IfMatch 当前部署 ID，必须带双引号，例如 "dep-00000000-0000-0000-0000-000000000000"
-	IfMatch DeploymentVersion `json:"If-Match"`
-}
-
-// RollbackProjectParams defines parameters for RollbackProject.
-type RollbackProjectParams struct {
-	// IfMatch 当前部署 ID，必须带双引号，例如 "dep-00000000-0000-0000-0000-000000000000"
-	IfMatch DeploymentVersion `json:"If-Match"`
-}
-
-// RequestLoginCodeJSONRequestBody defines body for RequestLoginCode for application/json ContentType.
-type RequestLoginCodeJSONRequestBody = EmailRequest
-
-// VerifyLoginCodeJSONRequestBody defines body for VerifyLoginCode for application/json ContentType.
-type VerifyLoginCodeJSONRequestBody = VerifyCodeRequest
-
-// CreateProjectMultipartRequestBody defines body for CreateProject for multipart/form-data ContentType.
-type CreateProjectMultipartRequestBody CreateProjectMultipartBody
-
-// UpdateProjectMultipartRequestBody defines body for UpdateProject for multipart/form-data ContentType.
-type UpdateProjectMultipartRequestBody UpdateProjectMultipartBody
-
-// AddUserJSONRequestBody defines body for AddUser for application/json ContentType.
-type AddUserJSONRequestBody = EmailRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// GetActivity 最近一百条上传、更新、回退与删除日志
+	// GetActivity 在保留的操作日志中筛选和分页，先校验可见范围
 	// (GET /api/activity)
-	GetActivity(w http.ResponseWriter, r *http.Request)
+	GetActivity(w http.ResponseWriter, r *http.Request, params GetActivityParams)
+	// ListApps 查看自己的 Docker 应用，管理员查看全部
+	// (GET /api/apps)
+	ListApps(w http.ResponseWriter, r *http.Request)
+	// CreateApp 排队拉取镜像并部署单个 HTTP 服务
+	// (POST /api/apps)
+	CreateApp(w http.ResponseWriter, r *http.Request)
+	// GetApp 查询应用配置与实时容器状态
+	// (GET /api/apps/{id})
+	GetApp(w http.ResponseWriter, r *http.Request, id string)
+	// UpdateApp 以 generation 防止并发覆盖，拉取后切换版本
+	// (PUT /api/apps/{id})
+	UpdateApp(w http.ResponseWriter, r *http.Request, id string)
+	// OperateApp 排队启动、停止、重启或永久删除应用及数据
+	// (POST /api/apps/{id}/actions)
+	OperateApp(w http.ResponseWriter, r *http.Request, id string)
+	// GetAppLogs 最近 200 行日志，最大 256 KiB，遮盖保存的环境变量值
+	// (GET /api/apps/{id}/logs)
+	GetAppLogs(w http.ResponseWriter, r *http.Request, id string)
 	// Logout 注销当前会话
 	// (POST /api/auth/logout)
 	Logout(w http.ResponseWriter, r *http.Request)
@@ -322,6 +48,9 @@ type ServerInterface interface {
 	// VerifyLoginCode 用邮件验证码登录
 	// (POST /api/auth/verify)
 	VerifyLoginCode(w http.ResponseWriter, r *http.Request)
+	// GetBackupStatus 管理员查询最近备份结果与体积
+	// (GET /api/backups/status)
+	GetBackupStatus(w http.ResponseWriter, r *http.Request)
 	// GetHealth API 与数据库连接就绪检查
 	// (GET /api/health)
 	GetHealth(w http.ResponseWriter, r *http.Request)
@@ -337,9 +66,30 @@ type ServerInterface interface {
 	// GetProject 获取项目详情
 	// (GET /api/projects/{slug})
 	GetProject(w http.ResponseWriter, r *http.Request, slug ProjectSlug)
+	// EditProject 编辑项目名称和说明
+	// (PATCH /api/projects/{slug})
+	EditProject(w http.ResponseWriter, r *http.Request, slug ProjectSlug, params EditProjectParams)
+	// SetProjectAccess 暂停或恢复站点访问，保留文件、版本和地址
+	// (PUT /api/projects/{slug}/access)
+	SetProjectAccess(w http.ResponseWriter, r *http.Request, slug ProjectSlug, params SetProjectAccessParams)
+	// ListProjectChanges 比较保留版本之间的文件增删改，内容按 SHA-256 判断
+	// (GET /api/projects/{slug}/changes)
+	ListProjectChanges(w http.ResponseWriter, r *http.Request, slug ProjectSlug, params ListProjectChangesParams)
 	// UpdateProject 更新已有项目，保留原网址及上一版
 	// (POST /api/projects/{slug}/deployments)
 	UpdateProject(w http.ResponseWriter, r *http.Request, slug ProjectSlug, params UpdateProjectParams)
+	// DiscardDraft 丢弃指定待发布版本，正式站点保持原样
+	// (DELETE /api/projects/{slug}/draft)
+	DiscardDraft(w http.ResponseWriter, r *http.Request, slug ProjectSlug, params DiscardDraftParams)
+	// PublishDraft 发布指定待发布版本，保留当前正式版供回退
+	// (POST /api/projects/{slug}/draft/publish)
+	PublishDraft(w http.ResponseWriter, r *http.Request, slug ProjectSlug)
+	// ExportProject 将当前版或上一版部署文件导出为 ZIP
+	// (GET /api/projects/{slug}/export)
+	ExportProject(w http.ResponseWriter, r *http.Request, slug ProjectSlug, params ExportProjectParams)
+	// ListProjectFiles 查看当前版或上一版的文件相对路径与大小
+	// (GET /api/projects/{slug}/files)
+	ListProjectFiles(w http.ResponseWriter, r *http.Request, slug ProjectSlug, params ListProjectFilesParams)
 	// RollbackProject 回退至上一版，原当前版成为新的上一版
 	// (POST /api/projects/{slug}/rollback)
 	RollbackProject(w http.ResponseWriter, r *http.Request, slug ProjectSlug, params RollbackProjectParams)
@@ -349,6 +99,21 @@ type ServerInterface interface {
 	// GetSystem 管理员查询服务器 CPU、内存和数据卷状态
 	// (GET /api/system)
 	GetSystem(w http.ResponseWriter, r *http.Request)
+	// CreateUpload 创建或恢复属于当前用户的上传会话
+	// (POST /api/uploads)
+	CreateUpload(w http.ResponseWriter, r *http.Request)
+	// DeleteUpload 放弃临时上传，不删除已发布项目
+	// (DELETE /api/uploads/{id})
+	DeleteUpload(w http.ResponseWriter, r *http.Request, id string)
+	// GetUpload 查询服务器已提交的上传进度
+	// (GET /api/uploads/{id})
+	GetUpload(w http.ResponseWriter, r *http.Request, id string)
+	// AppendUpload 追加一个完整分片
+	// (PATCH /api/uploads/{id})
+	AppendUpload(w http.ResponseWriter, r *http.Request, id string, params AppendUploadParams)
+	// CompleteUpload 验证完整文件摘要并幂等发布
+	// (POST /api/uploads/{id}/complete)
+	CompleteUpload(w http.ResponseWriter, r *http.Request, id string)
 	// ListUsers 管理员查询允许登录的邮箱
 	// (GET /api/users)
 	ListUsers(w http.ResponseWriter, r *http.Request)
@@ -375,8 +140,131 @@ type MiddlewareFunc func(http.Handler) http.Handler
 // GetActivity operation middleware
 func (siw *ServerInterfaceWrapper) GetActivity(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetActivityParams
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "page"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageSize", r.URL.Query(), &params.PageSize, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageSize"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "slug" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "slug", r.URL.Query(), &params.Slug, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "slug"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "action" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "action", r.URL.Query(), &params.Action, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "action"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "action", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "actor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "actor", r.URL.Query(), &params.Actor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "actor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "actor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetActivity(w, r)
+		siw.Handler.GetActivity(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -433,6 +321,20 @@ func (siw *ServerInterfaceWrapper) VerifyLoginCode(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.VerifyLoginCode(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetBackupStatus operation middleware
+func (siw *ServerInterfaceWrapper) GetBackupStatus(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetBackupStatus(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -536,6 +438,114 @@ func (siw *ServerInterfaceWrapper) GetProject(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// EditProject operation middleware
+func (siw *ServerInterfaceWrapper) EditProject(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "slug" -------------
+	var slug ProjectSlug
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", r.PathValue("slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params EditProjectParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch MetadataVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.EditProject(w, r, slug, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetProjectAccess operation middleware
+func (siw *ServerInterfaceWrapper) SetProjectAccess(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "slug" -------------
+	var slug ProjectSlug
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", r.PathValue("slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SetProjectAccessParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch MetadataVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetProjectAccess(w, r, slug, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // UpdateProject operation middleware
 func (siw *ServerInterfaceWrapper) UpdateProject(w http.ResponseWriter, r *http.Request) {
 
@@ -581,6 +591,48 @@ func (siw *ServerInterfaceWrapper) UpdateProject(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateProject(w, r, slug, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ExportProject operation middleware
+func (siw *ServerInterfaceWrapper) ExportProject(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "slug" -------------
+	var slug ProjectSlug
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", r.PathValue("slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ExportProjectParams
+
+	// ------------- Required query parameter "deploymentId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "deploymentId", r.URL.Query(), &params.DeploymentId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "deploymentId"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "deploymentId", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExportProject(w, r, slug, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -860,8 +912,24 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/apps", wrapper.ListApps)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/apps", wrapper.CreateApp)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/apps/{id}", wrapper.GetApp)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/api/apps/{id}", wrapper.UpdateApp)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/apps/{id}/actions", wrapper.OperateApp)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/apps/{id}/logs", wrapper.GetAppLogs)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/projects/{slug}/changes", wrapper.ListProjectChanges)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/projects/{slug}/draft/publish", wrapper.PublishDraft)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/api/projects/{slug}/draft", wrapper.DiscardDraft)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/uploads", wrapper.CreateUpload)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/api/uploads/{id}", wrapper.DeleteUpload)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/uploads/{id}", wrapper.GetUpload)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/api/uploads/{id}", wrapper.AppendUpload)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/uploads/{id}/complete", wrapper.CompleteUpload)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/projects/{slug}/files", wrapper.ListProjectFiles)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/storage", wrapper.GetStorage)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/system", wrapper.GetSystem)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/backups/status", wrapper.GetBackupStatus)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/activity", wrapper.GetActivity)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/auth/request-code", wrapper.RequestLoginCode)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/auth/verify", wrapper.VerifyLoginCode)
@@ -876,6 +944,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/projects", wrapper.CreateProject)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/api/projects/{slug}", wrapper.DeleteProject)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/projects/{slug}", wrapper.GetProject)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/api/projects/{slug}", wrapper.EditProject)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/api/projects/{slug}/access", wrapper.SetProjectAccess)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/projects/{slug}/export", wrapper.ExportProject)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/projects/{slug}/deployments", wrapper.UpdateProject)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/projects/{slug}/rollback", wrapper.RollbackProject)
 

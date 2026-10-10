@@ -138,9 +138,17 @@ func (s *Server) writeProjectError(w http.ResponseWriter, r *http.Request, err e
 	case errors.Is(err, errUploadTooLarge), errors.As(err, &tooLarge):
 		code, message = http.StatusRequestEntityTooLarge, fmt.Sprintf("压缩包不能超过 %d MiB", s.config.MaxUploadSize>>20)
 	case errors.Is(err, context.Canceled):
-		code, message = http.StatusRequestTimeout, "上传已取消"
+		code, message = http.StatusRequestTimeout, "请求已取消"
+	case errors.Is(err, context.DeadlineExceeded):
+		code, message = http.StatusRequestTimeout, "请求处理超时，请稍后重试"
 	case errors.Is(err, project.ErrInvalidName):
-		code, message = http.StatusBadRequest, "项目名称不能为空"
+		code, message = http.StatusBadRequest, "项目名称不能为空，UTF-8 编码不能超过 256 字节"
+	case errors.Is(err, project.ErrInvalidDescription):
+		code, message = http.StatusBadRequest, "项目说明的 UTF-8 编码不能超过 4096 字节"
+	case errors.Is(err, project.ErrExportUnavailable):
+		code, message = http.StatusConflict, "部署文件缺失、异常或超过导出限制，请联系管理员检查"
+	case errors.Is(err, project.ErrUsageUnavailable):
+		code, message = http.StatusConflict, "部署文件缺失或异常，请刷新项目或联系管理员检查"
 	case errors.Is(err, project.ErrInvalidSlug):
 		code, message = http.StatusBadRequest, "Slug 只能包含小写字母、数字和连字符，长度 1-52，且不能以连字符开头或结尾"
 	case errors.Is(err, project.ErrInvalidArchive):
@@ -149,6 +157,10 @@ func (s *Server) writeProjectError(w http.ResponseWriter, r *http.Request, err e
 		if errors.As(err, &invalid) {
 			message = invalid.Reason
 		}
+	case errors.Is(err, project.ErrDraftExists):
+		code, message = http.StatusConflict, "已有待发布版本，请先发布或丢弃后再上传"
+	case errors.Is(err, project.ErrInvalidNotes):
+		code, message = http.StatusBadRequest, "更新说明的 UTF-8 编码不能超过 4096 字节"
 	case errors.Is(err, project.ErrAlreadyExists):
 		code, message = http.StatusConflict, "项目 slug 已存在或有尚未恢复的发布，请换一个 slug 或稍后重试"
 	case errors.Is(err, project.ErrNotFound):
@@ -169,13 +181,23 @@ func (s *Server) writeProjectError(w http.ResponseWriter, r *http.Request, err e
 
 // toProjectResponse 转换项目元数据与访问地址。
 func (s *Server) toProjectResponse(r *http.Request, value project.Project) generated.Project {
+	user := s.requestUser(r)
+	usage, err := s.projects.FileUsageAs(r.Context(), value, project.Actor{ID: user.ID, IsAdmin: user.Role == auth.RoleAdmin})
+	if err != nil && !errors.Is(err, context.Canceled) {
+		slog.WarnContext(r.Context(), "project file usage unavailable", "request_id", requestID(r), "slug", value.Slug, "error", err)
+	}
 	var description *string
 	if value.Description != "" {
 		description = &value.Description
 	}
 
 	deployments := make([]generated.Deployment, 0, len(value.Deployments))
-	for _, item := range value.Deployments {
+	versions := append([]project.Deployment{}, value.Deployments...)
+	if value.Draft != nil {
+		versions = append(versions, *value.Draft)
+	}
+	var draft *generated.Deployment
+	for _, item := range versions {
 		var finishedAt *time.Time
 		if !item.FinishedAt.IsZero() {
 			finished := item.FinishedAt
@@ -188,14 +210,27 @@ func (s *Server) toProjectResponse(r *http.Request, value project.Project) gener
 			deploymentError = &message
 		}
 
-		deployments = append(deployments, generated.Deployment{
+		var files *generated.PublishedFiles
+		if measured, ok := usage[item.ID]; ok {
+			files = &generated.PublishedFiles{Bytes: measured.Bytes, Count: measured.Count}
+		}
+		previewURL := s.versionURL(r, item.ID)
+		notes := item.Notes
+		version := generated.Deployment{
+			PreviewUrl: &previewURL, Notes: &notes,
+			Files:      files,
 			Id:         item.ID,
 			Status:     generated.DeploymentStatus(item.Status),
 			FileName:   item.FileName,
 			CreatedAt:  item.CreatedAt,
 			FinishedAt: finishedAt,
 			Error:      deploymentError,
-		})
+		}
+		if item.Status == "draft" {
+			draft = &version
+		} else {
+			deployments = append(deployments, version)
+		}
 	}
 
 	var deploymentPointer *[]generated.Deployment
@@ -204,6 +239,7 @@ func (s *Server) toProjectResponse(r *http.Request, value project.Project) gener
 	}
 
 	return generated.Project{
+		Draft:       draft,
 		Id:          value.ID,
 		OwnerId:     value.OwnerID,
 		OwnerEmail:  value.OwnerEmail,

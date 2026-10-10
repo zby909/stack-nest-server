@@ -49,17 +49,20 @@ func (d *Deployer) RecoverRevisions(ctx context.Context, lookup func(context.Con
 		if err != nil {
 			return err
 		}
-		if err := json.Unmarshal(content, &r.journal); err != nil || r.journal.ProjectID == "" || r.journal.FromID == "" || r.journal.ToID == "" || r.journal.FromID == r.journal.ToID {
+		if err := json.Unmarshal(content, &r.journal); err != nil || r.journal.ProjectID == "" || (r.journal.FromID == "" && r.journal.DraftID == "") || r.journal.ToID == "" || r.journal.FromID == r.journal.ToID {
 			return fmt.Errorf("invalid revision journal for %q", entry.Name())
 		}
 		value, err := lookup(ctx, entry.Name())
 		if err != nil {
 			return fmt.Errorf("verify revision %q: %w", entry.Name(), err)
 		}
-		if value.ID != r.journal.ProjectID || len(value.Deployments) == 0 {
+		if value.ID != r.journal.ProjectID {
 			return fmt.Errorf("revision project identity mismatch; preserve journal")
 		}
-		switch value.Deployments[0].ID {
+		if r.journal.DraftID != "" && (!validVersionID(r.journal.DraftID) || r.journal.DraftID != r.journal.ToID) {
+			return fmt.Errorf("invalid draft journal")
+		}
+		switch project.CurrentID(value) {
 		case r.journal.ToID:
 			err = r.Commit()
 		case r.journal.FromID:
@@ -70,7 +73,7 @@ func (d *Deployer) RecoverRevisions(ctx context.Context, lookup func(context.Con
 		if err != nil {
 			return fmt.Errorf("recover revision %q: %w", entry.Name(), err)
 		}
-		slog.InfoContext(ctx, "interrupted revision recovered", "slug", entry.Name(), "committed", value.Deployments[0].ID == r.journal.ToID)
+		slog.InfoContext(ctx, "interrupted revision recovered", "slug", entry.Name(), "committed", project.CurrentID(value) == r.journal.ToID)
 	}
 	return nil
 }

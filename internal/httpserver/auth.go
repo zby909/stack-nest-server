@@ -21,6 +21,14 @@ import (
 
 const sessionCookie = "stacknest_session"
 
+// sessionCookieName 在 HTTPS 使用浏览器强制主机隔离的名称，本地 HTTP 保留开发会话。
+func sessionCookieName(r *http.Request) string {
+	if requestScheme(r) == "https" {
+		return "__Host-" + sessionCookie
+	}
+	return sessionCookie
+}
+
 type authContextKey struct{}
 
 type loginCounter struct {
@@ -86,7 +94,7 @@ func (s *Server) protect(next http.Handler) http.Handler {
 				writeJSON(w, http.StatusUnauthorized, generated.ErrorResponse{Error: "请先登录"})
 				return
 			}
-			if (strings.HasPrefix(path, "/api/users") || path == "/api/system") && user.Role != auth.RoleAdmin {
+			if (strings.HasPrefix(path, "/api/users") || path == "/api/system" || strings.HasPrefix(path, "/api/backups")) && user.Role != auth.RoleAdmin {
 				writeJSON(w, http.StatusForbidden, generated.ErrorResponse{Error: "仅管理员可访问"})
 				return
 			}
@@ -114,7 +122,7 @@ func sameOrigin(r *http.Request) bool {
 
 // currentUser 从 HttpOnly Cookie 加载当前会话。
 func (s *Server) currentUser(r *http.Request) (auth.User, error) {
-	cookie, err := r.Cookie(sessionCookie)
+	cookie, err := r.Cookie(sessionCookieName(r))
 	if err != nil {
 		return auth.User{}, auth.ErrNotFound
 	}
@@ -124,7 +132,7 @@ func (s *Server) currentUser(r *http.Request) (auth.User, error) {
 // setSessionCookie 写入仅主机可用的严格同站会话 Cookie。
 func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, maxAge int) {
 	http.SetCookie(w, &http.Cookie{
-		Name: sessionCookie, Value: token, Path: "/", HttpOnly: true,
+		Name: sessionCookieName(r), Value: token, Path: "/", HttpOnly: true,
 		Secure: requestScheme(r) == "https", SameSite: http.SameSiteStrictMode,
 		MaxAge: maxAge,
 	})
@@ -233,7 +241,7 @@ func (s *Server) GetAuthSession(w http.ResponseWriter, r *http.Request) {
 
 // Logout 撤销会话并删除浏览器 Cookie。
 func (s *Server) Logout(w http.ResponseWriter, r *http.Request) {
-	if cookie, err := r.Cookie(sessionCookie); err == nil {
+	if cookie, err := r.Cookie(sessionCookieName(r)); err == nil {
 		if err := s.auth.Logout(r.Context(), cookie.Value); err != nil {
 			slog.ErrorContext(r.Context(), "logout failed", "error", err)
 			writeJSON(w, http.StatusInternalServerError, generated.ErrorResponse{Error: "退出登录失败"})
@@ -253,21 +261,29 @@ func (s *Server) ListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response := generated.UserListResponse{Users: make([]generated.AuthUser, 0, len(users))}
+	if loginURL, err := auth.NormalizeInvitationURL(s.config.InvitationLoginURL); err == nil {
+		response.InvitationLoginUrl = &loginURL
+	}
 	for _, user := range users {
 		response.Users = append(response.Users, authUserResponse(user))
 	}
 	writeJSON(w, http.StatusOK, response)
 }
 
-// AddUser 将普通用户邮箱加入白名单。
+// AddUser 将普通用户邮箱加入白名单，并仅在管理员勾选后尝试发送邀请。
 func (s *Server) AddUser(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Email string `json:"email"`
-	}
+	var input generated.AddUserRequest
 	if !readAuthJSON(w, r, &input) {
 		return
 	}
-	user, err := s.auth.AddUser(r.Context(), input.Email)
+	sendInvitation := input.SendInvitation != nil && *input.SendInvitation
+	if sendInvitation {
+		if _, err := auth.NormalizeInvitationURL(s.config.InvitationLoginURL); err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, generated.ErrorResponse{Error: "邀请登录地址尚未配置，请取消勾选发送邀请后添加"})
+			return
+		}
+	}
+	user, err := s.auth.AddUser(r.Context(), string(input.Email))
 	switch {
 	case errors.Is(err, auth.ErrInvalidEmail):
 		writeJSON(w, http.StatusBadRequest, generated.ErrorResponse{Error: "邮箱格式无效"})
@@ -277,7 +293,18 @@ func (s *Server) AddUser(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(r.Context(), "add user", "error", err)
 		writeJSON(w, http.StatusInternalServerError, generated.ErrorResponse{Error: "添加邮箱失败"})
 	default:
-		writeJSON(w, http.StatusCreated, authUserResponse(user))
+		invitation := generated.InvitationStatusNotRequested
+		if sendInvitation {
+			invitation = generated.InvitationStatusSent
+			if err := s.auth.SendInvitation(r.Context(), user.Email, s.config.InvitationLoginURL); err != nil {
+				invitation = generated.InvitationStatusFailed
+				slog.ErrorContext(r.Context(), "send user invitation failed", "user_id", user.ID, "request_id", requestID(r), "error", err)
+			}
+		}
+		writeJSON(w, http.StatusCreated, generated.AddUserResponse{
+			Id: user.ID, Email: openapi_types.Email(user.Email), Role: generated.AddUserResponseRole(user.Role),
+			CreatedAt: user.CreatedAt, Invitation: invitation,
+		})
 	}
 }
 

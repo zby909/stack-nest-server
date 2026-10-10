@@ -10,11 +10,14 @@ import (
 
 // Config 描述 StackNest 服务运行配置。
 type Config struct {
+	RunnerSocket         string
 	Addr                 string
 	DatabaseURL          string
 	DataDir              string
 	WebDir               string
 	BaseDomain           string
+	BackupStatusFile     string
+	InvitationLoginURL   string
 	MaxUploadSize        int64
 	AuthAdminEmail       string
 	AuthInitialUserEmail string
@@ -31,12 +34,21 @@ func Load() Config {
 	if err != nil {
 		smtpPort = 0
 	}
+	loginURL := strings.TrimSpace(os.Getenv("STACKNEST_INVITATION_LOGIN_URL"))
+	if loginURL == "" {
+		if domain := strings.TrimSpace(os.Getenv("STACKNEST_ADMIN_DOMAIN")); domain != "" {
+			loginURL = "https://" + domain + "/login"
+		}
+	}
 	return Config{
+		RunnerSocket:         strings.TrimSpace(os.Getenv("STACKNEST_RUNNER_SOCKET")),
 		Addr:                 getenv("STACKNEST_ADDR", "127.0.0.1:8080"),
 		DatabaseURL:          getenv("STACKNEST_DATABASE_URL", "postgres://stacknest:stacknest@localhost:15432/stacknest?sslmode=disable"),
 		DataDir:              getenv("STACKNEST_DATA_DIR", "./data"),
 		WebDir:               getenv("STACKNEST_WEB_DIR", "../web/dist"),
 		BaseDomain:           strings.TrimSpace(os.Getenv("STACKNEST_BASE_DOMAIN")),
+		BackupStatusFile:     strings.TrimSpace(os.Getenv("STACKNEST_BACKUP_STATUS_FILE")),
+		InvitationLoginURL:   loginURL,
 		MaxUploadSize:        storage.MaxArchiveBytes,
 		AuthAdminEmail:       strings.TrimSpace(os.Getenv("STACKNEST_AUTH_ADMIN_EMAIL")),
 		AuthInitialUserEmail: strings.TrimSpace(os.Getenv("STACKNEST_AUTH_INITIAL_USER_EMAIL")),

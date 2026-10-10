@@ -75,6 +75,10 @@ func init() {
 	deploymentDescError := deploymentFields[6].Descriptor()
 	// deployment.DefaultError holds the default value on creation for the error field.
 	deployment.DefaultError = deploymentDescError.Default.(string)
+	// deploymentDescNotes is the schema descriptor for notes field.
+	deploymentDescNotes := deploymentFields[7].Descriptor()
+	// deployment.DefaultNotes holds the default value on creation for the notes field.
+	deployment.DefaultNotes = deploymentDescNotes.Default.(string)
 	// deploymentDescID is the schema descriptor for id field.
 	deploymentDescID := deploymentFields[0].Descriptor()
 	// deployment.IDValidator is a validator for the "id" field. It is called by the builders before save.

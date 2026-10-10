@@ -28,31 +28,6 @@ func (s *Server) finishActivity(r *http.Request, event *activity.Event) {
 	}
 }
 
-// GetActivity 返回最近一百条上传与删除日志；认证由统一中间件执行。
-func (s *Server) GetActivity(w http.ResponseWriter, r *http.Request) {
-	events := make([]activity.Event, 0)
-	if s.config.Activity != nil {
-		var err error
-		events, err = s.config.Activity.List()
-		if err != nil {
-			slog.ErrorContext(r.Context(), "read activity log", "request_id", requestID(r), "error", err)
-			writeJSON(w, http.StatusInternalServerError, generated.ErrorResponse{Error: "操作日志暂时无法读取"})
-			return
-		}
-	}
-	user := s.requestUser(r)
-	if user.Role != auth.RoleAdmin {
-		visible := make([]activity.Event, 0, len(events))
-		for _, event := range events {
-			if event.ActorID == user.ID || event.ProjectOwnerID == user.ID {
-				visible = append(visible, event)
-			}
-		}
-		events = visible
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"events": events})
-}
-
 // GetStorage 向所有用户提供上传策略，仅向管理员展示磁盘容量。
 func (s *Server) GetStorage(w http.ResponseWriter, r *http.Request) {
 	usage, err := s.config.Storage.Usage()

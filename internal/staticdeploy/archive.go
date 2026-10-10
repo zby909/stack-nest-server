@@ -37,11 +37,25 @@ func extractZip(zipPath, destination string, maxFiles int, maxBytes int64) error
 
 // extractZipGuarded 同时校验 ZIP 声明大小和实际输出字节数。
 func extractZipGuarded(ctx context.Context, guard *storage.Guard, zipPath, destination string, maxFiles int, maxBytes int64) error {
-	reader, err := zip.OpenReader(zipPath)
+	file, err := os.Open(zipPath)
 	if err != nil {
+		return err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	reader, err := newZIPReader(ctx, file, info.Size())
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		if errors.Is(err, errZIPIndexTooLarge) {
+			return project.NewInvalidArchiveError("ZIP 目录信息过大，请减少条目或移除归档注释后重试")
+		}
 		return project.NewInvalidArchiveError("ZIP 文件损坏或格式无效")
 	}
-	defer reader.Close()
 
 	if len(reader.File) > maxFiles {
 		return project.NewInvalidArchiveError("ZIP 文件数量超过 5000 个")

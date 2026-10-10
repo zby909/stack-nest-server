@@ -95,6 +95,11 @@ func Error(v string) predicate.Deployment {
 	return predicate.Deployment(sql.FieldEQ(FieldError, v))
 }
 
+// Notes applies equality check predicate on the "notes" field. It's identical to NotesEQ.
+func Notes(v string) predicate.Deployment {
+	return predicate.Deployment(sql.FieldEQ(FieldNotes, v))
+}
+
 // ProjectIDEQ applies the EQ predicate on the "project_id" field.
 func ProjectIDEQ(v string) predicate.Deployment {
 	return predicate.Deployment(sql.FieldEQ(FieldProjectID, v))
@@ -443,6 +448,71 @@ func ErrorEqualFold(v string) predicate.Deployment {
 // ErrorContainsFold applies the ContainsFold predicate on the "error" field.
 func ErrorContainsFold(v string) predicate.Deployment {
 	return predicate.Deployment(sql.FieldContainsFold(FieldError, v))
+}
+
+// NotesEQ applies the EQ predicate on the "notes" field.
+func NotesEQ(v string) predicate.Deployment {
+	return predicate.Deployment(sql.FieldEQ(FieldNotes, v))
+}
+
+// NotesNEQ applies the NEQ predicate on the "notes" field.
+func NotesNEQ(v string) predicate.Deployment {
+	return predicate.Deployment(sql.FieldNEQ(FieldNotes, v))
+}
+
+// NotesIn applies the In predicate on the "notes" field.
+func NotesIn(vs ...string) predicate.Deployment {
+	return predicate.Deployment(sql.FieldIn(FieldNotes, vs...))
+}
+
+// NotesNotIn applies the NotIn predicate on the "notes" field.
+func NotesNotIn(vs ...string) predicate.Deployment {
+	return predicate.Deployment(sql.FieldNotIn(FieldNotes, vs...))
+}
+
+// NotesGT applies the GT predicate on the "notes" field.
+func NotesGT(v string) predicate.Deployment {
+	return predicate.Deployment(sql.FieldGT(FieldNotes, v))
+}
+
+// NotesGTE applies the GTE predicate on the "notes" field.
+func NotesGTE(v string) predicate.Deployment {
+	return predicate.Deployment(sql.FieldGTE(FieldNotes, v))
+}
+
+// NotesLT applies the LT predicate on the "notes" field.
+func NotesLT(v string) predicate.Deployment {
+	return predicate.Deployment(sql.FieldLT(FieldNotes, v))
+}
+
+// NotesLTE applies the LTE predicate on the "notes" field.
+func NotesLTE(v string) predicate.Deployment {
+	return predicate.Deployment(sql.FieldLTE(FieldNotes, v))
+}
+
+// NotesContains applies the Contains predicate on the "notes" field.
+func NotesContains(v string) predicate.Deployment {
+	return predicate.Deployment(sql.FieldContains(FieldNotes, v))
+}
+
+// NotesHasPrefix applies the HasPrefix predicate on the "notes" field.
+func NotesHasPrefix(v string) predicate.Deployment {
+	return predicate.Deployment(sql.FieldHasPrefix(FieldNotes, v))
+}
+
+// NotesHasSuffix applies the HasSuffix predicate on the "notes" field.
+func NotesHasSuffix(v string) predicate.Deployment {
+	return predicate.Deployment(sql.FieldHasSuffix(FieldNotes, v))
+}
+
+// NotesEqualFold applies the EqualFold predicate on the "notes" field.
+func NotesEqualFold(v string) predicate.Deployment {
+	return predicate.Deployment(sql.FieldEqualFold(FieldNotes, v))
+}
+
+// NotesContainsFold applies the ContainsFold predicate on the "notes" field.
+func NotesContainsFold(v string) predicate.Deployment {
+	return predicate.Deployment(sql.FieldContainsFold(FieldNotes, v))
 }
 
 // HasProject applies the HasEdge predicate on the "project" edge.

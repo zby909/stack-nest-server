@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"stacknest/server/internal/generated"
 	"stacknest/server/internal/project"
@@ -22,16 +23,36 @@ type memoryStore struct {
 	projects map[string]project.Project
 }
 
+// UpdateMetadata 模拟不可覆盖的归属和更新时间校验。
+func (s *memoryStore) UpdateMetadata(_ context.Context, value project.Project, expectedAt time.Time) error {
+	old, ok := s.projects[value.Slug]
+	if !ok || old.OwnerID != value.OwnerID || !old.UpdatedAt.Equal(expectedAt) {
+		return project.ErrVersionConflict
+	}
+	s.projects[value.Slug] = value
+	return nil
+}
+
 // ReplaceDeployment 模拟部署事务，保留与文件一致的最近两版。
 func (s *memoryStore) ReplaceDeployment(_ context.Context, slug, ownerID, expectedID string, next project.Deployment) error {
 	value, ok := s.projects[slug]
 	if !ok || ownerID != "" && value.OwnerID != ownerID {
 		return project.ErrNotFound
 	}
-	if len(value.Deployments) == 0 || value.Deployments[0].ID != expectedID {
+	if project.CurrentID(value) != expectedID {
 		return project.ErrVersionConflict
 	}
-	value.Deployments = []project.Deployment{next, value.Deployments[0]}
+	if len(value.Deployments) > 0 {
+		value.Deployments = []project.Deployment{next, value.Deployments[0]}
+	} else {
+		value.Deployments = []project.Deployment{next}
+	}
+	if value.Draft != nil && value.Draft.ID == next.ID {
+		value.Draft = nil
+	}
+	if value.Status == "draft" {
+		value.Status = "online"
+	}
 	value.UpdatedAt = next.CreatedAt
 	s.projects[slug] = value
 	return nil
@@ -224,7 +245,7 @@ func TestStaticProjectLifecycle(t *testing.T) {
 	if err := json.Unmarshal(createRecorder.Body.Bytes(), &created); err != nil {
 		t.Fatalf("decode project: %v", err)
 	}
-	if created.Slug != "landing-page" || created.Status != generated.Online {
+	if created.Slug != "landing-page" || created.Status != generated.ProjectStatusOnline {
 		t.Fatalf("unexpected project: %+v", created)
 	}
 	if created.SiteUrl != "http://stack-nest-landing-page.localhost:8080/" {
@@ -361,4 +382,41 @@ func TestChineseNameGetsAutomaticSlug(t *testing.T) {
 // previewRequest 模拟隔离项目域名上的站点请求。
 func previewRequest(slug string) *http.Request {
 	return httptest.NewRequest(http.MethodGet, "http://stack-nest-"+slug+".localhost:8080/sites/"+slug+"/", nil)
+}
+
+// SaveDraft 模拟待发布版本事务。
+func (s *memoryStore) SaveDraft(ctx context.Context, slug, ownerID, expectedID string, next project.Deployment) error {
+	value, err := s.Get(ctx, slug)
+	if err != nil {
+		return err
+	}
+	if value.OwnerID != ownerID {
+		return project.ErrNotFound
+	}
+	if project.CurrentID(value) != expectedID {
+		return project.ErrVersionConflict
+	}
+	if value.Draft != nil {
+		return project.ErrDraftExists
+	}
+	value.Draft, value.UpdatedAt = &next, next.CreatedAt
+	s.projects[slug] = value
+	return nil
+}
+
+// DeleteDraft 模拟按草稿编号删除，正式版不会被误删。
+func (s *memoryStore) DeleteDraft(ctx context.Context, slug, ownerID, draftID string) error {
+	value, err := s.Get(ctx, slug)
+	if err != nil {
+		return err
+	}
+	if value.OwnerID != ownerID {
+		return project.ErrNotFound
+	}
+	if value.Draft == nil || value.Draft.ID != draftID {
+		return project.ErrVersionConflict
+	}
+	value.Draft = nil
+	s.projects[slug] = value
+	return nil
 }

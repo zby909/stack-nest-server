@@ -14,6 +14,7 @@ import (
 
 	"stacknest/server/internal/activity"
 	"stacknest/server/internal/auth"
+	"stacknest/server/internal/generated"
 	"stacknest/server/internal/postgres"
 	"stacknest/server/internal/project"
 	"stacknest/server/internal/staticdeploy"
@@ -21,8 +22,11 @@ import (
 )
 
 type testMailer struct {
-	codes map[string]string
-	sends map[string]int
+	codes       map[string]string
+	sends       map[string]int
+	invites     map[string]string
+	inviteCalls int
+	inviteErr   error
 }
 
 // SendCode 记录测试验证码，不发送真实邮件。
@@ -30,6 +34,16 @@ func (m *testMailer) SendCode(_ context.Context, email, code string) error {
 	m.codes[email] = code
 	m.sends[email]++
 	return nil
+}
+
+// SendInvitation 记录测试邀请和模拟发送结果，不发送真实邮件。
+func (m *testMailer) SendInvitation(_ context.Context, email, loginURL string) error {
+	m.inviteCalls++
+	if m.invites == nil {
+		m.invites = make(map[string]string)
+	}
+	m.invites[email] = loginURL
+	return m.inviteErr
 }
 
 // TestEmailAuthIntegration 验证数据库、HTTP 权限、验证码消费及会话撤销。
@@ -90,7 +104,7 @@ func TestEmailAuthIntegration(t *testing.T) {
 		server.http.Handler.ServeHTTP(result, req)
 		return result
 	}
-	for _, route := range []string{"/api/storage", "/api/activity", "/api/system"} {
+	for _, route := range []string{"/api/storage", "/api/activity", "/api/system", "/api/backups/status", "/api/uploads/00000000-0000-4000-8000-000000000000"} {
 		if got := call(http.MethodGet, route, "", nil).Code; got != http.StatusUnauthorized {
 			t.Fatalf("unprotected operations route %s: %d", route, got)
 		}
@@ -209,16 +223,21 @@ func TestEmailAuthIntegration(t *testing.T) {
 		t.Fatalf("ordinary user deleted admin project: %d", got)
 	}
 	var ownedList struct {
-		Projects []project.Project `json:"projects"`
+		Projects []generated.Project `json:"projects"`
 	}
 	if err := json.Unmarshal(call(http.MethodGet, "/api/projects", "", userCookie).Body.Bytes(), &ownedList); err != nil || len(ownedList.Projects) != 1 || ownedList.Projects[0].Slug != "ordinary-site" {
 		t.Fatalf("ordinary user list leaked projects: %+v %v", ownedList, err)
 	}
 	var adminList struct {
-		Projects []project.Project `json:"projects"`
+		Projects []generated.Project `json:"projects"`
 	}
 	if err := json.Unmarshal(call(http.MethodGet, "/api/projects", "", adminCookie).Body.Bytes(), &adminList); err != nil || len(adminList.Projects) != 2 {
 		t.Fatalf("admin cannot list all projects: %+v %v", adminList, err)
+	}
+	for _, value := range append(ownedList.Projects, adminList.Projects...) {
+		if value.Deployments == nil || (*value.Deployments)[0].Files == nil || (*value.Deployments)[0].Files.Count != 1 {
+			t.Fatalf("authorized project missing file usage: %+v", value)
+		}
 	}
 	if got := call(http.MethodPost, "/api/users", `{"email":"other@example.com"}`, adminCookie).Code; got != http.StatusCreated {
 		t.Fatalf("add second user: %d", got)
@@ -299,6 +318,8 @@ func TestEmailAuthIntegration(t *testing.T) {
 		t.Fatal("project actor identity missing from activity")
 	}
 	exerciseAuthenticatedRevisions(t, server, userCookie, otherCookie, adminCookie)
+	exerciseAuthenticatedManagement(t, server, userCookie, otherCookie, adminCookie)
+	exerciseHTTPSCookies(t, server, service, mailer)
 	previewAPI := httptest.NewRequest(http.MethodPost, "http://stack-nest-ordinary-site.localhost:8080/api/users", bytes.NewBufferString(`{"email":"not-added@example.com"}`))
 	previewAPI.Header.Set("Origin", "http://stack-nest-ordinary-site.localhost:8080")
 	previewAPI.Header.Set("Content-Type", "application/json")
