@@ -11,22 +11,43 @@ import (
 
 // Defines values for ActivityEventAction.
 const (
-	ActivityEventActionDelete   ActivityEventAction = "delete"
-	ActivityEventActionDiscard  ActivityEventAction = "discard"
-	ActivityEventActionDraft    ActivityEventAction = "draft"
-	ActivityEventActionEdit     ActivityEventAction = "edit"
-	ActivityEventActionExport   ActivityEventAction = "export"
-	ActivityEventActionPause    ActivityEventAction = "pause"
-	ActivityEventActionPublish  ActivityEventAction = "publish"
-	ActivityEventActionResume   ActivityEventAction = "resume"
-	ActivityEventActionRollback ActivityEventAction = "rollback"
-	ActivityEventActionUpdate   ActivityEventAction = "update"
-	ActivityEventActionUpload   ActivityEventAction = "upload"
+	ActivityEventActionAppDelete  ActivityEventAction = "app-delete"
+	ActivityEventActionAppDeploy  ActivityEventAction = "app-deploy"
+	ActivityEventActionAppLimits  ActivityEventAction = "app-limits"
+	ActivityEventActionAppRestart ActivityEventAction = "app-restart"
+	ActivityEventActionAppStart   ActivityEventAction = "app-start"
+	ActivityEventActionAppStop    ActivityEventAction = "app-stop"
+	ActivityEventActionDelete     ActivityEventAction = "delete"
+	ActivityEventActionDiscard    ActivityEventAction = "discard"
+	ActivityEventActionDraft      ActivityEventAction = "draft"
+	ActivityEventActionEdit       ActivityEventAction = "edit"
+	ActivityEventActionExport     ActivityEventAction = "export"
+	ActivityEventActionNetwork    ActivityEventAction = "network"
+	ActivityEventActionPause      ActivityEventAction = "pause"
+	ActivityEventActionPublish    ActivityEventAction = "publish"
+	ActivityEventActionResume     ActivityEventAction = "resume"
+	ActivityEventActionRollback   ActivityEventAction = "rollback"
+	ActivityEventActionUpdate     ActivityEventAction = "update"
+	ActivityEventActionUpload     ActivityEventAction = "upload"
+	ActivityEventActionUserAdd    ActivityEventAction = "user-add"
+	ActivityEventActionUserRole   ActivityEventAction = "user-role"
 )
 
 // Valid indicates whether the value is a known member of the ActivityEventAction enum.
 func (e ActivityEventAction) Valid() bool {
 	switch e {
+	case ActivityEventActionAppDelete:
+		return true
+	case ActivityEventActionAppDeploy:
+		return true
+	case ActivityEventActionAppLimits:
+		return true
+	case ActivityEventActionAppRestart:
+		return true
+	case ActivityEventActionAppStart:
+		return true
+	case ActivityEventActionAppStop:
+		return true
 	case ActivityEventActionDelete:
 		return true
 	case ActivityEventActionDiscard:
@@ -36,6 +57,8 @@ func (e ActivityEventAction) Valid() bool {
 	case ActivityEventActionEdit:
 		return true
 	case ActivityEventActionExport:
+		return true
+	case ActivityEventActionNetwork:
 		return true
 	case ActivityEventActionPause:
 		return true
@@ -48,6 +71,10 @@ func (e ActivityEventAction) Valid() bool {
 	case ActivityEventActionUpdate:
 		return true
 	case ActivityEventActionUpload:
+		return true
+	case ActivityEventActionUserAdd:
+		return true
+	case ActivityEventActionUserRole:
 		return true
 	default:
 		return false
@@ -72,16 +99,37 @@ func (e ActivityEventStatus) Valid() bool {
 	}
 }
 
+// Defines values for AddUserRequestRole.
+const (
+	AddUserRequestRoleAdmin AddUserRequestRole = "admin"
+	AddUserRequestRoleUser  AddUserRequestRole = "user"
+)
+
+// Valid indicates whether the value is a known member of the AddUserRequestRole enum.
+func (e AddUserRequestRole) Valid() bool {
+	switch e {
+	case AddUserRequestRoleAdmin:
+		return true
+	case AddUserRequestRoleUser:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AddUserResponseRole.
 const (
-	AddUserResponseRoleAdmin AddUserResponseRole = "admin"
-	AddUserResponseRoleUser  AddUserResponseRole = "user"
+	AddUserResponseRoleAdmin      AddUserResponseRole = "admin"
+	AddUserResponseRoleSuperadmin AddUserResponseRole = "superadmin"
+	AddUserResponseRoleUser       AddUserResponseRole = "user"
 )
 
 // Valid indicates whether the value is a known member of the AddUserResponseRole enum.
 func (e AddUserResponseRole) Valid() bool {
 	switch e {
 	case AddUserResponseRoleAdmin:
+		return true
+	case AddUserResponseRoleSuperadmin:
 		return true
 	case AddUserResponseRoleUser:
 		return true
@@ -90,55 +138,19 @@ func (e AddUserResponseRole) Valid() bool {
 	}
 }
 
-// Defines values for AppRuntimeHealth.
-const (
-	AppRuntimeHealthHealthy   AppRuntimeHealth = "healthy"
-	AppRuntimeHealthStopped   AppRuntimeHealth = "stopped"
-	AppRuntimeHealthUnhealthy AppRuntimeHealth = "unhealthy"
-)
-
-// Valid indicates whether the value is a known member of the AppRuntimeHealth enum.
-func (e AppRuntimeHealth) Valid() bool {
-	switch e {
-	case AppRuntimeHealthHealthy:
-		return true
-	case AppRuntimeHealthStopped:
-		return true
-	case AppRuntimeHealthUnhealthy:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for AppRuntimeHealthCheck.
-const (
-	Http AppRuntimeHealthCheck = "http"
-	Tcp  AppRuntimeHealthCheck = "tcp"
-)
-
-// Valid indicates whether the value is a known member of the AppRuntimeHealthCheck enum.
-func (e AppRuntimeHealthCheck) Valid() bool {
-	switch e {
-	case Http:
-		return true
-	case Tcp:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for AuthUserRole.
 const (
-	AuthUserRoleAdmin AuthUserRole = "admin"
-	AuthUserRoleUser  AuthUserRole = "user"
+	AuthUserRoleAdmin      AuthUserRole = "admin"
+	AuthUserRoleSuperadmin AuthUserRole = "superadmin"
+	AuthUserRoleUser       AuthUserRole = "user"
 )
 
 // Valid indicates whether the value is a known member of the AuthUserRole enum.
 func (e AuthUserRole) Valid() bool {
 	switch e {
 	case AuthUserRoleAdmin:
+		return true
+	case AuthUserRoleSuperadmin:
 		return true
 	case AuthUserRoleUser:
 		return true
@@ -222,33 +234,6 @@ func (e BackupStatusState) Valid() bool {
 	}
 }
 
-// Defines values for ContainerAppStatus.
-const (
-	ContainerAppStatusDeploying ContainerAppStatus = "deploying"
-	ContainerAppStatusError     ContainerAppStatus = "error"
-	ContainerAppStatusPending   ContainerAppStatus = "pending"
-	ContainerAppStatusReady     ContainerAppStatus = "ready"
-	ContainerAppStatusStopped   ContainerAppStatus = "stopped"
-)
-
-// Valid indicates whether the value is a known member of the ContainerAppStatus enum.
-func (e ContainerAppStatus) Valid() bool {
-	switch e {
-	case ContainerAppStatusDeploying:
-		return true
-	case ContainerAppStatusError:
-		return true
-	case ContainerAppStatusPending:
-		return true
-	case ContainerAppStatusReady:
-		return true
-	case ContainerAppStatusStopped:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for DeploymentStatus.
 const (
 	DeploymentStatusDraft     DeploymentStatus = "draft"
@@ -293,16 +278,16 @@ func (e FileChangeKind) Valid() bool {
 
 // Defines values for HealthResponseStatus.
 const (
-	Ok          HealthResponseStatus = "ok"
-	Unavailable HealthResponseStatus = "unavailable"
+	HealthResponseStatusOk          HealthResponseStatus = "ok"
+	HealthResponseStatusUnavailable HealthResponseStatus = "unavailable"
 )
 
 // Valid indicates whether the value is a known member of the HealthResponseStatus enum.
 func (e HealthResponseStatus) Valid() bool {
 	switch e {
-	case Ok:
+	case HealthResponseStatusOk:
 		return true
-	case Unavailable:
+	case HealthResponseStatusUnavailable:
 		return true
 	default:
 		return false
@@ -369,30 +354,6 @@ func (e UploadRequestKind) Valid() bool {
 	}
 }
 
-// Defines values for OperateAppJSONBodyAction.
-const (
-	OperateAppJSONBodyActionDelete  OperateAppJSONBodyAction = "delete"
-	OperateAppJSONBodyActionRestart OperateAppJSONBodyAction = "restart"
-	OperateAppJSONBodyActionStart   OperateAppJSONBodyAction = "start"
-	OperateAppJSONBodyActionStop    OperateAppJSONBodyAction = "stop"
-)
-
-// Valid indicates whether the value is a known member of the OperateAppJSONBodyAction enum.
-func (e OperateAppJSONBodyAction) Valid() bool {
-	switch e {
-	case OperateAppJSONBodyActionDelete:
-		return true
-	case OperateAppJSONBodyActionRestart:
-		return true
-	case OperateAppJSONBodyActionStart:
-		return true
-	case OperateAppJSONBodyActionStop:
-		return true
-	default:
-		return false
-	}
-}
-
 // ActivityEvent defines model for ActivityEvent.
 type ActivityEvent struct {
 	Action         ActivityEventAction `json:"action"`
@@ -421,9 +382,15 @@ type ActivityEventStatus string
 type AddUserRequest struct {
 	Email openapi_types.Email `json:"email"`
 
+	// Role 只有超管可选择 admin，省略时添加普通用户；不允许授予超管
+	Role *AddUserRequestRole `json:"role,omitempty"`
+
 	// SendInvitation 只有明确为 true 时才发送邀请邮件
 	SendInvitation *bool `json:"sendInvitation,omitempty"`
 }
+
+// AddUserRequestRole 只有超管可选择 admin，省略时添加普通用户；不允许授予超管
+type AddUserRequestRole string
 
 // AddUserResponse defines model for AddUserResponse.
 type AddUserResponse struct {
@@ -438,91 +405,6 @@ type AddUserResponse struct {
 
 // AddUserResponseRole defines model for AddUserResponse.Role.
 type AddUserResponseRole string
-
-// AppInput defines model for AppInput.
-type AppInput struct {
-	ClearRegistry *bool   `json:"clearRegistry,omitempty"`
-	Cpus          float32 `json:"cpus"`
-
-	// DataPath 可选的单个容器内持久化目录
-	DataPath *string `json:"dataPath,omitempty"`
-
-	// Env 最多 64 个变量，总体积 16 KiB
-	Env *map[string]string `json:"env,omitempty"`
-
-	// Generation 更新时必填，采用上次查询的代次
-	Generation *int64 `json:"generation,omitempty"`
-
-	// HealthPath 可选 HTTP 路径，例如 /health；60 秒内返回 2xx 才就绪，留空仅检查端口
-	HealthPath *string `json:"healthPath,omitempty"`
-
-	// Image Linux amd64 仓库镜像地址，可使用标签或摘要
-	Image     string `json:"image"`
-	MemoryMiB int    `json:"memoryMiB"`
-	Name      string `json:"name"`
-	Port      int    `json:"port"`
-	Registry  *struct {
-		Password *string `json:"password,omitempty"`
-		Username string  `json:"username"`
-	} `json:"registry,omitempty"`
-
-	// ReplaceEnv 编辑时默认保留；设为 true 后整体替换
-	ReplaceEnv *bool `json:"replaceEnv,omitempty"`
-
-	// Slug 创建时必填；之后不可修改
-	Slug *string `json:"slug,omitempty"`
-}
-
-// AppList defines model for AppList.
-type AppList struct {
-	Apps      []AppView `json:"apps"`
-	Available bool      `json:"available"`
-	Limits    struct {
-		MaxApps        int `json:"maxApps"`
-		MaxMemoryMiB   int `json:"maxMemoryMiB"`
-		TotalMemoryMiB int `json:"totalMemoryMiB"`
-	} `json:"limits"`
-}
-
-// AppRuntime defines model for AppRuntime.
-type AppRuntime struct {
-	ContainerId string `json:"containerId"`
-	ExitCode    int    `json:"exitCode"`
-
-	// Health 查询时探测，不自动重启应用
-	Health      *AppRuntimeHealth      `json:"health,omitempty"`
-	HealthCheck *AppRuntimeHealthCheck `json:"healthCheck,omitempty"`
-	ImageId     string                 `json:"imageId"`
-	OomKilled   bool                   `json:"oomKilled"`
-	State       string                 `json:"state"`
-	Usage       *AppUsage              `json:"usage,omitempty"`
-}
-
-// AppRuntimeHealth 查询时探测，不自动重启应用
-type AppRuntimeHealth string
-
-// AppRuntimeHealthCheck defines model for AppRuntime.HealthCheck.
-type AppRuntimeHealthCheck string
-
-// AppUsage defines model for AppUsage.
-type AppUsage struct {
-	// CpuPercent 100% 表示一个 CPU 核心；采样不足时省略
-	CpuPercent *float32 `json:"cpuPercent,omitempty"`
-
-	// MemoryBytes Linux 内存用量，扣除非活跃文件缓存
-	MemoryBytes      int64 `json:"memoryBytes"`
-	MemoryLimitBytes int64 `json:"memoryLimitBytes"`
-
-	// Pids 进程和线程总数
-	Pids      int64     `json:"pids"`
-	SampledAt time.Time `json:"sampledAt"`
-}
-
-// AppView defines model for AppView.
-type AppView struct {
-	App     ContainerApp `json:"app"`
-	Runtime *AppRuntime  `json:"runtime,omitempty"`
-}
 
 // AuthUser defines model for AuthUser.
 type AuthUser struct {
@@ -565,34 +447,6 @@ type BackupSuccess struct {
 	FilesBytes    int64     `json:"filesBytes"`
 	TotalBytes    int64     `json:"totalBytes"`
 }
-
-// ContainerApp defines model for ContainerApp.
-type ContainerApp struct {
-	Action      *string            `json:"action,omitempty"`
-	Cpus        float32            `json:"cpus"`
-	CreatedAt   time.Time          `json:"createdAt"`
-	DataPath    string             `json:"dataPath"`
-	EnvKeys     []string           `json:"envKeys"`
-	Error       *string            `json:"error,omitempty"`
-	Generation  int64              `json:"generation"`
-	HasRegistry bool               `json:"hasRegistry"`
-	HealthPath  *string            `json:"healthPath,omitempty"`
-	Id          string             `json:"id"`
-	Image       string             `json:"image"`
-	ImageId     *string            `json:"imageId,omitempty"`
-	MemoryMiB   int                `json:"memoryMiB"`
-	Name        string             `json:"name"`
-	OwnerEmail  string             `json:"ownerEmail"`
-	OwnerId     string             `json:"ownerId"`
-	Port        int                `json:"port"`
-	Slug        string             `json:"slug"`
-	Status      ContainerAppStatus `json:"status"`
-	UpdatedAt   time.Time          `json:"updatedAt"`
-	Url         string             `json:"url"`
-}
-
-// ContainerAppStatus defines model for ContainerApp.Status.
-type ContainerAppStatus string
 
 // Deployment defines model for Deployment.
 type Deployment struct {
@@ -797,15 +651,6 @@ type GetActivityParams struct {
 	To *time.Time `form:"to,omitempty" json:"to,omitempty"`
 }
 
-// OperateAppJSONBody defines parameters for OperateApp.
-type OperateAppJSONBody struct {
-	Action     OperateAppJSONBodyAction `json:"action"`
-	Generation int64                    `json:"generation"`
-}
-
-// OperateAppJSONBodyAction defines parameters for OperateApp.
-type OperateAppJSONBodyAction string
-
 // CreateProjectMultipartBody defines parameters for CreateProject.
 type CreateProjectMultipartBody struct {
 	// Description UTF-8 编码最多 4096 字节
@@ -888,15 +733,6 @@ type RollbackProjectParams struct {
 type AppendUploadParams struct {
 	UploadOffset int64 `json:"Upload-Offset"`
 }
-
-// CreateAppJSONRequestBody defines body for CreateApp for application/json ContentType.
-type CreateAppJSONRequestBody = AppInput
-
-// UpdateAppJSONRequestBody defines body for UpdateApp for application/json ContentType.
-type UpdateAppJSONRequestBody = AppInput
-
-// OperateAppJSONRequestBody defines body for OperateApp for application/json ContentType.
-type OperateAppJSONRequestBody OperateAppJSONBody
 
 // RequestLoginCodeJSONRequestBody defines body for RequestLoginCode for application/json ContentType.
 type RequestLoginCodeJSONRequestBody = EmailRequest

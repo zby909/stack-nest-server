@@ -29,6 +29,8 @@ var (
 	ErrInvalidCode  = errors.New("invalid or expired code")
 	ErrInvalidEmail = errors.New("invalid email")
 	ErrCannotDelete = errors.New("cannot delete this user")
+	ErrForbidden    = errors.New("operation requires the configured super administrator or targets a protected account")
+	ErrRoleConflict = errors.New("user role changed")
 )
 
 // User 是管理端允许登录的邮箱及其权限。
@@ -44,7 +46,8 @@ type Store interface {
 	BootstrapUsers(ctx context.Context, adminEmail, initialUserEmail string) error
 	FindUserByEmail(ctx context.Context, email string) (User, error)
 	ListUsers(ctx context.Context) ([]User, error)
-	AddUser(ctx context.Context, email string) (User, error)
+	AddUser(ctx context.Context, email, role string) (User, error)
+	ChangeUserRole(ctx context.Context, id, expected, role, protectedEmail, bootstrapEmail string) (User, error)
 	DeleteUser(ctx context.Context, id string) error
 	SaveChallenge(ctx context.Context, userID, codeHash string, sentAt, expiresAt time.Time) error
 	DiscardChallenge(ctx context.Context, userID, codeHash string) error
@@ -61,10 +64,12 @@ type Mailer interface {
 
 // Service 实现一次性验证码和服务端会话规则。
 type Service struct {
-	store  Store
-	mailer Mailer
-	secret []byte
-	now    func() time.Time
+	store               Store
+	mailer              Mailer
+	secret              []byte
+	now                 func() time.Time
+	superAdminEmail     string
+	bootstrapAdminEmail string
 }
 
 // NewService 创建认证服务并检查密钥长度。
@@ -100,7 +105,11 @@ func (s *Service) BootstrapUsers(ctx context.Context, admin, initialUser string)
 			return errors.New("invalid initial user email")
 		}
 	}
-	return s.store.BootstrapUsers(ctx, adminEmail, initialUser)
+	if err := s.store.BootstrapUsers(ctx, adminEmail, initialUser); err != nil {
+		return err
+	}
+	s.bootstrapAdminEmail = adminEmail
+	return nil
 }
 
 // RequestCode 为已获准的邮箱生成一次性验证码并发送；未知邮箱静默返回。
@@ -163,7 +172,7 @@ func (s *Service) VerifyCode(ctx context.Context, rawEmail, code string) (User, 
 	if err := s.store.ExchangeChallenge(ctx, user.ID, s.codeHash(user.ID, code), TokenHash(token), now, now.Add(SessionTTL)); err != nil {
 		return User{}, "", err
 	}
-	return user, token, nil
+	return s.effectiveUser(user), token, nil
 }
 
 // CurrentUser 根据随机会话令牌查询当前用户。
@@ -171,7 +180,8 @@ func (s *Service) CurrentUser(ctx context.Context, token string) (User, error) {
 	if len(token) != 43 {
 		return User{}, ErrNotFound
 	}
-	return s.store.FindSession(ctx, TokenHash(token), s.now().UTC())
+	user, err := s.store.FindSession(ctx, TokenHash(token), s.now().UTC())
+	return s.effectiveUser(user), err
 }
 
 // Logout 删除当前令牌对应的服务端会话。
@@ -183,7 +193,13 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 }
 
 // ListUsers 返回全部获准登录的邮箱。
-func (s *Service) ListUsers(ctx context.Context) ([]User, error) { return s.store.ListUsers(ctx) }
+func (s *Service) ListUsers(ctx context.Context) ([]User, error) {
+	users, err := s.store.ListUsers(ctx)
+	for i := range users {
+		users[i] = s.effectiveUser(users[i])
+	}
+	return users, err
+}
 
 // AddUser 将普通用户邮箱加入登录名单。
 func (s *Service) AddUser(ctx context.Context, rawEmail string) (User, error) {
@@ -191,7 +207,7 @@ func (s *Service) AddUser(ctx context.Context, rawEmail string) (User, error) {
 	if err != nil {
 		return User{}, err
 	}
-	return s.store.AddUser(ctx, email)
+	return s.store.AddUser(ctx, email, RoleUser)
 }
 
 // DeleteUser 移除普通用户，并同时撤销该用户全部会话。

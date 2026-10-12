@@ -50,7 +50,7 @@ func TestConstrainedCreate(t *testing.T) {
 	root := t.TempDir()
 	runner := &Runner{engine: fakeEngine(server), instance: "test", source: "/docker/volumes/stacknest-data/_data", dataDir: root}
 	id := "0c2d84bb-15a1-492b-938a-83282600c112"
-	op := containerapp.Operation{ID: id, Generation: 1, Spec: containerapp.Spec{Image: "example/app:v1", Port: 3000, CPUs: 0.5, MemoryMiB: 128, DataPath: "/app/data"}}
+	op := containerapp.Operation{ID: id, Generation: 1, Spec: containerapp.Spec{Image: "example/app:v1", Port: 3000, CPUs: 0.5, MemoryMiB: 1024, DataPath: "/app/data"}}
 	if _, err := runner.create(context.Background(), op, imageInfo{ID: "sha256:abc"}); err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestConstrainedCreate(t *testing.T) {
 	if err := json.Unmarshal(payload["HostConfig"], &host); err != nil {
 		t.Fatal(err)
 	}
-	if host.Privileged || host.Memory != 128<<20 || host.MemorySwap != host.Memory || host.NanoCpus != 5e8 || host.PidsLimit != 128 || host.NetworkMode != runner.networkName(id) || len(host.PortBindings) != 0 || len(host.Binds) != 0 {
+	if host.Privileged || host.Memory != 1024<<20 || host.MemorySwap != host.Memory || host.NanoCpus != 5e8 || host.PidsLimit != 128 || host.NetworkMode != runner.networkName(id) || len(host.PortBindings) != 0 || len(host.Binds) != 0 {
 		t.Fatalf("unsafe host config: %+v", host)
 	}
 	if len(host.Mounts) != 1 || host.Mounts[0].Target != "/app/data" || host.Mounts[0].Source != filepath.Join(runner.source, "apps", id, "data") {

@@ -1,6 +1,8 @@
-h1:HNtKgU27YDcHWXqNoDlS41/3Jd7kM7B1QQfCjHPfFl8=
+h1:vtiXpn65cwZ83YXBtKh/AfQ/O5e0XTZ7nI/grQGK9aA=
 20260922150000_initial.sql h1:d6wuFEEwvu7npp77mMGTKpj0TqMCNSCKRY4Z9qOHIzI=
 20260928075537_email_auth.sql h1:3r/f5KPaXueXn+oftiNRqSR84xBqCou1LglTzwF/4Ao=
 20260929090000_project_owner.sql h1:BWtgdDYy1rE4i1+eq83NZCG7IOAPD+1dr0n9Uz/jq2g=
 20261009090000_release_notes.sql h1:spxQ9bSJnViPlZ0+Tu3Th1beVoVLWO5et75EcX/R3c0=
 20261009130000_container_apps.sql h1:h1UtDKeep7A3HsbmueWchdWqQqI2BfZr5V5+dejfLU4=
+20261011170000_app_limits.sql h1:XQ81upIJNyMLX4HN4aTTq8qAXKeBa9vUYbmQq1+JVko=
+20261011193000_app_memory_limit.sql h1:ylnX89ASTDeNrhEhDxE2g4Lx96WSxq8dqAzgimuD0vg=

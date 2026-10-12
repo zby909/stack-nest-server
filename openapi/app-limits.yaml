@@ -1,0 +1,59 @@
+openapi: 3.0.3
+info:
+  title: StackNest 实例资源配置
+  version: 1.0.0
+paths:
+  /api/apps/limits:
+    get:
+      description: 仅超管可查询实际预留量及宿主允许的预算上限；普通应用列表只提供配置后的公开配额。
+      responses:
+        '200':
+          description: 当前实例配置
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LimitsView' }
+        '401': { description: 未登录 }
+        '403': { description: 仅超管 }
+        '503': { description: 运行器不可用 }
+    put:
+      description: 仅超管可修改。不得低于已有应用的数量及预留内存；队列执行中禁止修改；与应用创建共用事务锁。此操作不修改现有容器资源。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: '#/components/schemas/Limits' }
+                - type: object
+                  required: [expectedRevision]
+                  properties:
+                    expectedRevision: { type: integer, format: int64, minimum: 1 }
+      responses:
+        '200':
+          description: 已保存
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LimitsView' }
+        '400': { description: 非法字段、范围或超过宿主容量 }
+        '401': { description: 未登录 }
+        '403': { description: 角色或同源校验失败 }
+        '409': { description: 版本已变化、已有应用占用或队列执行中 }
+        '503': { description: 运行器不可用 }
+components:
+  schemas:
+    Limits:
+      type: object
+      required: [maxApps, totalMemoryMiB]
+      properties:
+        maxApps: { type: integer, minimum: 1, maximum: 100 }
+        totalMemoryMiB: { type: integer, minimum: 64, maximum: 131072 }
+    LimitsView:
+      allOf:
+        - { $ref: '#/components/schemas/Limits' }
+        - type: object
+          required: [revision, usedApps, allocatedMemoryMiB, maxTotalMemoryMiB]
+          properties:
+            revision: { type: integer, format: int64, minimum: 1 }
+            usedApps: { type: integer, minimum: 0 }
+            allocatedMemoryMiB: { type: integer, minimum: 0 }
+            maxTotalMemoryMiB: { type: integer, minimum: 64 }

@@ -37,7 +37,7 @@ func (s *Server) ListProjects(w http.ResponseWriter, r *http.Request) {
 		Projects: make([]generated.Project, 0, len(values)),
 	}
 	for _, value := range values {
-		if user.Role != auth.RoleAdmin && value.OwnerID != user.ID {
+		if !auth.IsAdmin(user.Role) && value.OwnerID != user.ID {
 			continue
 		}
 		response.Projects = append(response.Projects, s.toProjectResponse(r, value))
@@ -117,7 +117,7 @@ func (s *Server) DeleteProject(w http.ResponseWriter, r *http.Request, slug gene
 		return
 	}
 	event.ProjectOwnerID = value.OwnerID
-	if err := s.projects.DeleteAs(r.Context(), slug, project.Actor{ID: user.ID, IsAdmin: user.Role == auth.RoleAdmin}); err != nil {
+	if err := s.projects.DeleteAs(r.Context(), slug, project.Actor{ID: user.ID, IsAdmin: auth.IsAdmin(user.Role)}); err != nil {
 		event.Message = s.writeProjectError(w, r, err)
 		return
 	}
@@ -182,7 +182,7 @@ func (s *Server) writeProjectError(w http.ResponseWriter, r *http.Request, err e
 // toProjectResponse 转换项目元数据与访问地址。
 func (s *Server) toProjectResponse(r *http.Request, value project.Project) generated.Project {
 	user := s.requestUser(r)
-	usage, err := s.projects.FileUsageAs(r.Context(), value, project.Actor{ID: user.ID, IsAdmin: user.Role == auth.RoleAdmin})
+	usage, err := s.projects.FileUsageAs(r.Context(), value, project.Actor{ID: user.ID, IsAdmin: auth.IsAdmin(user.Role)})
 	if err != nil && !errors.Is(err, context.Canceled) {
 		slog.WarnContext(r.Context(), "project file usage unavailable", "request_id", requestID(r), "slug", value.Slug, "error", err)
 	}
@@ -267,7 +267,7 @@ func (s *Server) requestUser(r *http.Request) auth.User {
 
 // canManageProject 使用数据库所有者 ID 判断项目是否属于当前用户。
 func canManageProject(user auth.User, value project.Project) bool {
-	return user.Role == auth.RoleAdmin || user.ID != "" && value.OwnerID == user.ID
+	return auth.IsAdmin(user.Role) || user.ID != "" && value.OwnerID == user.ID
 }
 
 // siteURL 在本地生成隔离预览，在公网生成项目子域名。

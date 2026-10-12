@@ -47,7 +47,7 @@ func (s *Server) GetStorage(w http.ResponseWriter, r *http.Request) {
 		"maxUploadBytes": s.config.MaxUploadSize, "maxExpandedBytes": storage.MaxExpandedBytes,
 		"maxFiles": storage.MaxFiles,
 	}
-	if user.Role == auth.RoleAdmin {
+	if auth.IsAdmin(user.Role) {
 		response["totalBytes"] = usage.TotalBytes
 		response["freeBytes"] = usage.FreeBytes
 		response["usedPercent"] = usage.UsedPercent
@@ -60,12 +60,12 @@ func (s *Server) GetStorage(w http.ResponseWriter, r *http.Request) {
 // uploadStorageReason 统一上传与容量接口的提示，普通用户只获知原因和处理方式。
 func uploadStorageReason(user auth.User, unavailable bool) string {
 	if unavailable {
-		if user.Role == auth.RoleAdmin {
+		if auth.IsAdmin(user.Role) {
 			return "暂时无法检查磁盘空间，已暂停上传和更新，请检查服务后重试"
 		}
 		return "暂时无法检查上传条件，已暂停上传和更新，请稍后重新检查"
 	}
-	if user.Role == auth.RoleAdmin {
+	if auth.IsAdmin(user.Role) {
 		return "磁盘使用率已达到 90%，或剩余空间不足以接收和解压文件；已暂停上传和更新，请清理后重试"
 	}
 	return "服务器存储空间不足，已暂停上传和更新；请联系管理员清理后重新检查"
@@ -73,7 +73,7 @@ func uploadStorageReason(user auth.User, unavailable bool) string {
 
 // GetSystem 仅向管理员返回主机 CPU、内存、运行时间及数据卷容量。
 func (s *Server) GetSystem(w http.ResponseWriter, r *http.Request) {
-	if s.requestUser(r).Role != auth.RoleAdmin {
+	if !auth.IsAdmin(s.requestUser(r).Role) {
 		writeJSON(w, http.StatusForbidden, generated.ErrorResponse{Error: "仅管理员可访问"})
 		return
 	}

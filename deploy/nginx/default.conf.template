@@ -10,6 +10,12 @@ map $host $stacknest_dynamic_site {
     default 0;
 }
 
+# 严格匹配单级项目域名，避免多级未知主机误用已有静态目录。
+map $host $stacknest_host_domain {
+    "~^stack-nest-[a-z0-9-]+\.(?<stacknest_domain_suffix>.+)$" $stacknest_domain_suffix;
+    default "";
+}
+
 map $host $stacknest_project_slug {
     "~^stack-nest-(?<stacknest_slug>[a-z0-9](?:[a-z0-9-]{0,50}[a-z0-9])?)\." $stacknest_slug;
     default "__invalid__";
@@ -70,6 +76,7 @@ server {
     listen 80;
     server_name *.${STACKNEST_BASE_DOMAIN};
 
+    if ($stacknest_host_domain != "${STACKNEST_BASE_DOMAIN}") { return 404; }
     error_page 418 = @dynamic_site;
     if ($stacknest_dynamic_site) { return 418; }
     client_max_body_size 91m;

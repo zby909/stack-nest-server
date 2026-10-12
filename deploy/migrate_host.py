@@ -16,7 +16,7 @@ import tarfile
 from datetime import datetime, timezone
 
 FORMAT = "stacknest-migration-v1"
-SERVICES = {"postgres", "migrate", "stacknest", "nginx", "tunnel"}
+SERVICES = {"postgres", "migrate", "stacknest", "nginx"}
 DATA_DIRS = {"sites", "previous", "changes", "trash", "pending", "logs", "paused", "drafts", "apps"}
 
 # run 隐藏命令输出中的连接串和配置；错误仅显示阶段与返回码。
@@ -33,6 +33,17 @@ def digest(path):
         for chunk in iter(lambda: source.read(1 << 20), b""):
             checksum.update(chunk)
     return checksum.hexdigest()
+
+# bundle_files 私有化迁移文件，仅固定网络服务二进制保留执行权限。
+def bundle_files(root):
+    result = {}
+    for path in sorted(root.rglob("*")):
+        if path.is_file():
+            name = path.relative_to(root).as_posix()
+            path.chmod(0o700 if name == "deploy/stacknest-egress" else 0o600)
+            result[name] = digest(path)
+    return result
+
 
 # image_store 区分使用不同固定镜像编号的两类 Docker 镜像存储。
 def image_store(info):
@@ -101,7 +112,7 @@ def check_layout(config):
     volumes = {"postgres-data", "stacknest-data"}
     if "runner" in services:
         volumes.add("runner-control")
-    if services not in (SERVICES, SERVICES | {"runner"}) or set(config.get("volumes", {})) != volumes:
+    if not SERVICES.issubset(services) or services - SERVICES - {"runner", "tunnel"} or set(config.get("volumes", {})) != volumes:
         raise ValueError("only the StackNest release Compose layout is supported")
 
 # verify_bundle 先检查完整文件清单与摘要，未完成包不允许导入。
@@ -161,23 +172,24 @@ def portable_config(config, destination):
                 # 新服务器导入时替换为其真实 Docker 存储根目录。
                 mount["source"] = "/var/lib/docker"
                 continue
+            if service_name in ("runner", "stacknest") and target == "/run/stacknest-egress" and mount.get("read_only") and mount["source"] == target:
+                continue
             if target == "/run/stacknest-backup":
                 mount["source"] = "./backup-status"
                 continue
             source = Path(mount["source"])
-            if target == "/etc/nginx/certs":
+            if service_name == "nginx" and target == "/etc/nginx/certs" and mount.get("read_only"):
                 local = "cert"
                 (destination / local).mkdir(mode=0o700)
                 for filename in ("certificate.pem", "private.key"):
                     shutil.copyfile(source / filename, destination / local / filename)
                     (destination / local / filename).chmod(0o600)
-            elif service_name == "tunnel" and target == "/etc/nginx/templates/cloudflare-tunnel.conf.template" and mount.get("read_only"):
-                # 公网 Tunnel 模板与原 SSH 入口使用不同文件名，避免导出时相互覆盖。
-                local = "deploy/nginx/tunnel-cloudflare.conf.template"
-                (destination / local).parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-                shutil.copyfile(source, destination / local)
-            elif target in ("/etc/nginx/templates/default.conf.template", "/etc/nginx/conf.d/default.conf"):
-                local = f"deploy/nginx/{service_name}.conf"
+            elif service_name in ("nginx", "tunnel") and target in (
+                "/etc/nginx/templates/default.conf.template", "/etc/nginx/conf.d/default.conf",
+                "/etc/nginx/templates/cloudflare-tunnel.conf.template", "/etc/nginx/templates/ssh.conf.template",
+            ) and mount.get("read_only"):
+                # 每个入口保留独立文件名，兼容单 Nginx 和旧版双 Nginx 布局。
+                local = f"deploy/nginx/{service_name}-{PurePosixPath(target).name}"
                 (destination / local).parent.mkdir(parents=True, exist_ok=True, mode=0o700)
                 shutil.copyfile(source, destination / local)
             else:
@@ -221,10 +233,19 @@ def export_bundle(args):
     if len(platforms) != 1:
         raise ValueError("service images use different platforms")
     scripts = Path(__file__).resolve().parent
-    for filename in ("backup.sh", "backup_status.py", "migrate_host.py"):
+    filenames = ["backup.sh", "backup_status.py", "migrate_host.py"]
+    if "tunnel" not in config["services"]:
+        filenames.append("nginx/ssh.conf.template")
+    if config["services"].get("runner", {}).get("environment", {}).get("STACKNEST_APP_EGRESS_POLICY"):
+        filenames += ["stacknest-egress"]
+    for filename in filenames:
         dest = target / "deploy" / filename
         dest.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        shutil.copyfile(scripts / filename, dest)
+        origin = scripts / filename
+        if filename == "stacknest-egress" and not origin.is_file():
+            origin = Path("/usr/local/bin/stacknest-egress")
+        shutil.copyfile(origin, dest)
+        if filename == "stacknest-egress": dest.chmod(0o700)
     with backup_lock(args.project) as lock:
         api_was_running = bool(run(command + ["ps", "--status", "running", "-q", "stacknest"]).strip())
         success, frozen = False, False
@@ -262,10 +283,7 @@ def export_bundle(args):
             # Compose config 输出的 JSON 已转义美元符号，直接复用，不能重复转义。
             write_json(target / "compose.json", portable)
             manifest = {"format": FORMAT, "createdAt": datetime.now(timezone.utc).isoformat(), "platform": platforms.pop(), "imageStore": image_store(source_info), "files": {}}
-            for path in sorted(target.rglob("*")):
-                if path.is_file():
-                    path.chmod(0o600)
-                    manifest["files"][path.relative_to(target).as_posix()] = digest(path)
+            manifest["files"] = bundle_files(target)
             write_json(target / "manifest.json", manifest)
             verify_bundle(target)
             success = True
@@ -288,6 +306,23 @@ def ensure_empty(project):
     if run(["docker", "volume", "ls", "-q", "--filter", "label=com.docker.compose.project=" + project]).strip():
         raise ValueError("target Compose project already has volumes")
 
+# preview_configs 保留公网候选配置，仅向恢复实例开放回环预览，兼容旧迁移包。
+def preview_configs(config, port):
+    if not 1 <= port <= 65535:
+        raise ValueError("invalid preview port")
+    public = copy.deepcopy(config)
+    local = copy.deepcopy(config)
+    entry = "tunnel" if "tunnel" in config["services"] else "nginx"
+    local["services"][entry]["ports"] = [{"target": 80 if entry == "tunnel" else 82, "published": str(port), "host_ip": "127.0.0.1", "protocol": "tcp"}]
+    if entry == "tunnel":
+        public["services"]["tunnel"]["ports"] = copy.deepcopy(local["services"]["tunnel"]["ports"])
+        local["services"]["nginx"].pop("ports", None)
+    else:
+        mounts = local["services"]["nginx"].setdefault("volumes", [])
+        mounts[:] = [m for m in mounts if m["target"] != "/etc/nginx/templates/ssh.conf.template"]
+        mounts.append({"type": "bind", "source": "./deploy/nginx/ssh.conf.template", "target": "/etc/nginx/templates/ssh.conf.template", "read_only": True})
+    return public, local
+
 # import_bundle 在全新实例恢复，先仅开放本机预览，确认后再 activate。
 def import_bundle(args):
     bundle = Path(args.bundle).resolve(strict=True)
@@ -305,6 +340,15 @@ def import_bundle(args):
     docker_root = Path(destination_info["DockerRootDir"])
     if shutil.disk_usage(target.parent).free < needed or shutil.disk_usage(docker_root).free < needed:
         raise ValueError("insufficient free space for migration")
+    config = json.loads((bundle / "compose.json").read_text(encoding="utf-8"))
+    check_layout(config)
+    if "tunnel" not in config["services"] and not (bundle / "deploy/nginx/ssh.conf.template").is_file():
+        raise ValueError("single-entry migration bundle lacks SSH preview template")
+    policy = config["services"].get("runner", {}).get("environment", {}).get("STACKNEST_APP_EGRESS_POLICY")
+    if policy:
+        if policy != "/run/stacknest-egress/status.json":
+            raise ValueError("unexpected application egress policy path")
+        run(["/usr/local/bin/stacknest-egress", "check"], stage="prepare target host egress policy first")
     target.mkdir(mode=0o700)
     for folder in ("cert", "deploy"):
         if (bundle / folder).exists():
@@ -316,9 +360,8 @@ def import_bundle(args):
     for mount in config["services"].get("runner", {}).get("volumes", []):
         if mount["type"] == "bind" and mount["target"] == "/docker-storage":
             mount["source"] = str(docker_root)
-    config["services"]["tunnel"]["ports"] = [{"target": 80, "published": str(args.preview_port), "host_ip": "127.0.0.1", "protocol": "tcp"}]
-    write_json(target / "compose.public.json", config)
-    config["services"]["nginx"].pop("ports", None)
+    public, config = preview_configs(config, args.preview_port)
+    write_json(target / "compose.public.json", public)
     config_path = target / "compose.json"
     write_json(config_path, config)
     command = compose(config_path, args.project)
@@ -337,7 +380,8 @@ def import_bundle(args):
             run(command + ["run", "--rm", "--no-deps", "-T", "--user", "0:0", "--entrypoint", "sh", "stacknest", "-ec", "test -z \"$(find /data -type f -print -quit)\"; tar -xzf - -C /data"], stdin=source, stage="restore files")
         run(command + ["up", "-d", "--wait", "--wait-timeout", "120"], stage="start restored services")
         for name in ("nginx", "tunnel"):
-            run(command + ["exec", "-T", name, "nginx", "-t"], stage="validate nginx")
+            if name in config["services"]:
+                run(command + ["exec", "-T", name, "nginx", "-t"], stage="validate nginx")
         write_json(target / "migration-ready.json", {"format": FORMAT, "project": args.project, "previewPort": args.preview_port})
         print(f"import_complete={target} preview=http://127.0.0.1:{args.preview_port}/ public_ports_closed=true")
     except Exception:
@@ -346,7 +390,8 @@ def import_bundle(args):
                 run(command + ["exec", "-T", "runner", "/usr/local/bin/stacknest", "apps-freeze"], stage="keep failed applications offline")
             except RuntimeError:
                 pass
-        run(command + ["stop", "stacknest", "nginx", "tunnel"], stage="keep failed import offline")
+        entries = [name for name in ("nginx", "tunnel") if name in config["services"]]
+        run(command + ["stop", "stacknest", *entries], stage="keep failed import offline")
         raise
 
 # activate 明确确认新实例后才恢复公网监听，不自动修改 DNS 或旧服务器。

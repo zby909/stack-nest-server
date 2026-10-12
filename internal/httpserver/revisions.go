@@ -57,7 +57,7 @@ func (s *Server) reviseProject(w http.ResponseWriter, r *http.Request, slug, mat
 	}
 	defer s.uploadMu.Unlock()
 	user := s.requestUser(r)
-	actor := project.Actor{ID: user.ID, IsAdmin: user.Role == auth.RoleAdmin}
+	actor := project.Actor{ID: user.ID, IsAdmin: auth.IsAdmin(user.Role)}
 	var result project.CreatedProject
 	if revert {
 		result, err = s.projects.RollbackAs(r.Context(), slug, actor, expectedID)

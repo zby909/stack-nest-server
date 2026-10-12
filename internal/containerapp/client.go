@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -80,6 +81,24 @@ func (c *Client) Health(ctx context.Context) error {
 	task, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	return c.call(task, "GET", "/health", nil, nil)
+}
+
+// Capacity 读取宿主核对后的预算上限，不开放任意 Docker 信息查询。
+func (c *Client) Capacity(ctx context.Context) (Capacity, error) {
+	task, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	var value Capacity
+	err := c.call(task, "GET", "/capacity", nil, &value)
+	return value, err
+}
+
+// Progress 读取对应操作代次的瞬时进度，浏览器断开不影响任务执行。
+func (c *Client) Progress(ctx context.Context, id string, generation int64) (Progress, error) {
+	task, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	var value Progress
+	err := c.call(task, "GET", "/progress/"+id+"/"+strconv.FormatInt(generation, 10), nil, &value)
+	return value, err
 }
 
 // Operate 执行有时限的后台生命周期操作。

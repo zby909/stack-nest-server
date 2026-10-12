@@ -15,7 +15,10 @@ import (
 )
 
 // Engine 仅通过主机 Unix socket 使用已验证的 Docker API。
-type Engine struct{ client *http.Client }
+type Engine struct {
+	client  *http.Client
+	version string
+}
 
 // NewEngine 创建不访问任意 TCP 地址的 Docker 客户端。
 func NewEngine(socket string) *Engine {
@@ -34,7 +37,11 @@ func (e *Engine) request(ctx context.Context, method, path string, body any, hea
 		}
 		reader = bytes.NewReader(raw)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, "http://docker/v1.45"+path, reader)
+	version := e.version
+	if version == "" {
+		version = "1.45"
+	}
+	req, err := http.NewRequestWithContext(ctx, method, "http://docker/v"+version+path, reader)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +82,11 @@ var errMissing = errors.New("Docker resource missing")
 
 // inspection 只读取运行器需要的字段，完整 inspect 不跨越私有 socket。
 type inspection struct {
-	ID     string `json:"Id"`
+	ID          string `json:"Id"`
+	GraphDriver struct {
+		Name string
+		Data map[string]string
+	}
 	Image  string
 	Config struct {
 		Labels  map[string]string
@@ -97,7 +108,10 @@ type inspection struct {
 	NetworkSettings struct {
 		Networks map[string]struct{ IPAddress string }
 	}
-	Mounts []struct{ Type, Source, Destination, Name string }
+	Mounts []struct {
+		Type, Source, Destination, Name string
+		RW                              bool
+	}
 }
 
 // inspect 获取指定资源，调用方仍须验证托管标签。
@@ -138,6 +152,9 @@ func (r *Runner) stop(ctx context.Context, id string) error {
 
 // start 启动已确认归属于本应用的容器。
 func (r *Runner) start(ctx context.Context, id string) error {
+	if err := r.checkEgress(); err != nil {
+		return err
+	}
 	return r.engine.call(ctx, "POST", "/containers/"+url.PathEscape(id)+"/start", nil, nil)
 }
 

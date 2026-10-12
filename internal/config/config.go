@@ -11,6 +11,8 @@ import (
 // Config 描述 StackNest 服务运行配置。
 type Config struct {
 	RunnerSocket         string
+	EgressSocket         string
+	AuthSuperAdminEmail  string
 	Addr                 string
 	DatabaseURL          string
 	DataDir              string
@@ -42,6 +44,8 @@ func Load() Config {
 	}
 	return Config{
 		RunnerSocket:         strings.TrimSpace(os.Getenv("STACKNEST_RUNNER_SOCKET")),
+		EgressSocket:         strings.TrimSpace(os.Getenv("STACKNEST_EGRESS_SOCKET")),
+		AuthSuperAdminEmail:  getenv("STACKNEST_AUTH_SUPER_ADMIN_EMAIL", strings.TrimSpace(os.Getenv("STACKNEST_AUTH_ADMIN_EMAIL"))),
 		Addr:                 getenv("STACKNEST_ADDR", "127.0.0.1:8080"),
 		DatabaseURL:          getenv("STACKNEST_DATABASE_URL", "postgres://stacknest:stacknest@localhost:15432/stacknest?sslmode=disable"),
 		DataDir:              getenv("STACKNEST_DATA_DIR", "./data"),

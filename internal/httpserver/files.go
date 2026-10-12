@@ -10,7 +10,7 @@ import (
 // ListProjectFiles 返回所选版本的文件清单，普通用户只能查看自己的项目。
 func (s *Server) ListProjectFiles(w http.ResponseWriter, r *http.Request, slug generated.ProjectSlug, params generated.ListProjectFilesParams) {
 	user := s.requestUser(r)
-	files, err := s.projects.FilesAs(r.Context(), slug, project.Actor{ID: user.ID, IsAdmin: user.Role == auth.RoleAdmin}, params.DeploymentId)
+	files, err := s.projects.FilesAs(r.Context(), slug, project.Actor{ID: user.ID, IsAdmin: auth.IsAdmin(user.Role)}, params.DeploymentId)
 	if err != nil {
 		s.writeProjectError(w, r, err)
 		return

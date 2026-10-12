@@ -72,11 +72,19 @@ func (s *Store) SaveApp(ctx context.Context, a containerapp.App, actor container
 			return containerapp.ErrBusy
 		}
 	}
+	// 更新期间保留旧版与候选版中较大的额度，失败恢复不会占用别人的预算。
+	if !create && a.MemoryMiB < oldMemory {
+		a.MemoryMiB = oldMemory
+	}
+	limits, err := transactionLimits(ctx, tx)
+	if err != nil {
+		return err
+	}
 	var count, memory int
 	if err = tx.QueryRowContext(ctx, "SELECT count(*),COALESCE(sum(memory_mib),0) FROM container_apps").Scan(&count, &memory); err != nil {
 		return err
 	}
-	if create && count >= containerapp.MaxApps || memory-oldMemory+a.MemoryMiB > containerapp.TotalMemoryMiB {
+	if create && count >= limits.MaxApps || memory-oldMemory+a.MemoryMiB > limits.TotalMemoryMiB {
 		return containerapp.ErrQuota
 	}
 	if create {

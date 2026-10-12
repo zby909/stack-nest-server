@@ -1,5 +1,5 @@
 # 可选：仅在 Docker 与 stacknest-data 都位于启用 prjquota 的 XFS 时叠加。
-# docker compose -f compose.release.yaml -f compose.quota.yaml up -d
+# docker compose -f compose.yaml -f compose.tls.yaml -f compose.quota.yaml up -d
 services:
   runner:
     cap_add: [SYS_ADMIN]

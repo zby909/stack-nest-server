@@ -1,0 +1,23 @@
+# 可选：先在 Linux 宿主安装 stacknest-egress install，再叠加本文件。
+# 未叠加时应用保持 internal 网络，不开放公网出站。
+services:
+  stacknest:
+    environment:
+      STACKNEST_EGRESS_SOCKET: /run/stacknest-egress/control.sock
+    volumes:
+      - type: bind
+        source: /run/stacknest-egress
+        target: /run/stacknest-egress
+        read_only: true
+        bind:
+          create_host_path: false
+  runner:
+    environment:
+      STACKNEST_APP_EGRESS_POLICY: /run/stacknest-egress/status.json
+    volumes:
+      - type: bind
+        source: /run/stacknest-egress
+        target: /run/stacknest-egress
+        read_only: true
+        bind:
+          create_host_path: false

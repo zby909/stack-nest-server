@@ -83,9 +83,12 @@ func (s *Store) ListUsers(ctx context.Context) ([]auth.User, error) {
 	return users, nil
 }
 
-// AddUser 添加一个普通用户邮箱。
-func (s *Store) AddUser(ctx context.Context, email string) (auth.User, error) {
-	user := auth.User{ID: uuid.NewString(), Email: email, Role: auth.RoleUser, CreatedAt: time.Now().UTC()}
+// AddUser 只保存普通用户或管理员，超管始终由实例部署配置指定。
+func (s *Store) AddUser(ctx context.Context, email, role string) (auth.User, error) {
+	if role != auth.RoleUser && role != auth.RoleAdmin {
+		return auth.User{}, auth.ErrForbidden
+	}
+	user := auth.User{ID: uuid.NewString(), Email: email, Role: role, CreatedAt: time.Now().UTC()}
 	_, err := s.db.ExecContext(ctx, "INSERT INTO auth_users (id,email,role,created_at) VALUES ($1,$2,$3,$4)", user.ID, user.Email, user.Role, user.CreatedAt)
 	if uniqueViolation(err) {
 		return auth.User{}, auth.ErrExists
@@ -167,6 +170,14 @@ func (s *Store) ExchangeChallenge(ctx context.Context, userID, codeHash, tokenHa
 		return fmt.Errorf("begin auth verification: %w", err)
 	}
 	defer tx.Rollback()
+	// 与角色变更使用相同锁顺序，旧验证码不能在撤销会话后补建登录。
+	var lockedUser string
+	if err = tx.QueryRowContext(ctx, "SELECT id FROM auth_users WHERE id=$1 FOR UPDATE", userID).Scan(&lockedUser); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return auth.ErrInvalidCode
+		}
+		return err
+	}
 	var storedHash string
 	var attempts int
 	var expiresAt time.Time

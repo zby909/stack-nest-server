@@ -15,6 +15,8 @@ import (
 	"stacknest/server/internal/config"
 	"stacknest/server/internal/containerapp"
 	"stacknest/server/internal/dockerrunner"
+	"stacknest/server/internal/doctor"
+	"stacknest/server/internal/egress"
 	"stacknest/server/internal/httpserver"
 	"stacknest/server/internal/postgres"
 	"stacknest/server/internal/project"
@@ -24,6 +26,13 @@ import (
 
 // main 配置结构化日志并启动服务。
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "doctor" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		code := doctor.Main(ctx, config.Load(), os.Args[2:], os.Stdout, os.Stderr)
+		stop()
+		os.Exit(code)
+	}
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	if err := run(); err != nil {
 		slog.Error("stacknest stopped", "error", err)
@@ -113,9 +122,14 @@ func run() error {
 		return err
 	}
 
+	if err := authService.SetSuperAdmin(context.Background(), cfg.AuthSuperAdminEmail); err != nil {
+		return err
+	}
+
 	apps := containerapp.New(store, containerapp.NewClient(cfg.RunnerSocket), cfg.AuthSecret, guard, activityLog)
 	server := httpserver.New(httpserver.Config{
 		Apps:               apps,
+		Network:            egress.NewClient(cfg.EgressSocket),
 		Addr:               cfg.Addr,
 		WebDir:             cfg.WebDir,
 		SitesDir:           cfg.SitesDir(),

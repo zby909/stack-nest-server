@@ -1,21 +1,30 @@
 # StackNest Server
 
-StackNest 是个人自托管的项目部署控制中心，支持静态站点及单容器 Docker HTTP 应用。后端使用 Go、PostgreSQL、Ent 和 Atlas；Web 管理端通过邮件验证码登录，并通过 OpenAPI 契约与后端协作。
+[文档导航](docs/README.md) · [架构与维护边界](docs/ARCHITECTURE.md) · [日常运维](docs/OPERATIONS.md)。
+
+部署入口：[下载版本镜像部署](docs/INSTALL_RELEASE.md) · [源码 Docker 部署](docs/GETTING_STARTED.md) · [家用电脑 + Cloudflare Tunnel](docs/HOME_SERVER_TUNNEL.md)。四个常驻容器，一个 Nginx；普通公网 HTTPS 是默认方案。
+
+StackNest 面向个人开发者和中小型公司，是在自有服务器上部署和管理私有项目的工具，支持静态站点及单容器 Docker HTTP 应用。后端使用 Go、PostgreSQL、Ent 和 Atlas；Web 管理端通过邮件验证码登录，并通过 OpenAPI 契约与后端协作。
+
+以可信成员和单服务器为当前使用场景，优先保证易部署、易维护、易迁移。后续功能按实际工作流和维护成本取舍，产品边界见 [需求文档](docs/REQUIREMENTS.md#1-目标)。
 
 项目归属由 PostgreSQL 的用户 ID 字段记录。普通用户只管理自己的项目和相关操作日志，管理员可管理全部项目；公开站点本身无需登录。
 
-管理员添加邮箱时可以勾选“发送邀请邮件”，默认不勾选。邀请包含固定登录地址和验证码登录说明；发信未能确认时邮箱仍已添加，界面提示手动告知登录地址。
+管理员添加邮箱时可以勾选“发送邀请邮件”，默认不勾选。超管在添加确认弹窗中还可选择“管理员”，默认仍为普通用户；普通管理员不能授予管理员角色。邀请包含固定登录地址和验证码登录说明；发信未能确认时邮箱仍已添加，界面提示手动告知登录地址。
 
-| 需要做什么                         | 阅读入口                                                                              |
-| ---------------------------------- | ------------------------------------------------------------------------------------- |
-| 部署 Docker HTTP 应用 | [Docker 应用说明](docs/DOCKER_APPS.md) |
-| 了解范围和验收标准                 | [需求文档](docs/REQUIREMENTS.md)                                                      |
-| 在服务器首次部署、升级、备份或恢复 | [后端与联合部署](docs/DEPLOYMENT.md)                                                  |
-| 把现有实例搬到另一台服务器 | [完整迁移步骤](docs/MIGRATION.md) |
-| 没有公网 IP，通过 Cloudflare Tunnel 访问 | [Tunnel 配置与维护](docs/CLOUDFLARE_TUNNEL.md) |
-| 构建或单独更新管理端               | [Web 部署文档](https://github.com/zby909/stack-nest-web/blob/main/docs/DEPLOYMENT.md) |
-| 本地运行、修改和测试后端           | 本文                                                                                  |
-| 查询接口字段与状态码               | [OpenAPI 契约](openapi/openapi.yaml)                                                  |
+| 需要做什么                               | 阅读入口                                                                              |
+| ---------------------------------------- | ------------------------------------------------------------------------------------- |
+| 部署 Docker HTTP 应用                    | [Docker 应用说明](docs/DOCKER_APPS.md)                                                |
+| 超管配置应用联网并保护宿主局域网         | [网络保护配置](docs/NETWORK_EGRESS.md)                                                |
+| 了解范围和验收标准                       | [需求文档](docs/REQUIREMENTS.md)                                                      |
+| 在服务器首次部署、升级、备份或恢复       | [后端与联合部署](docs/DEPLOYMENT.md)                                                  |
+| 把现有实例搬到另一台服务器               | [完整迁移步骤](docs/MIGRATION.md)                                                     |
+| 没有公网 IP，通过 Cloudflare Tunnel 访问 | [Tunnel 配置与维护](docs/CLOUDFLARE_TUNNEL.md)                                        |
+| 构建或单独更新管理端                     | [Web 部署文档](https://github.com/zby909/stack-nest-web/blob/main/docs/DEPLOYMENT.md) |
+| 本地运行、修改和测试后端                 | 本文                                                                                  |
+| 查询接口字段与状态码                     | [OpenAPI 契约](openapi/openapi.yaml)                                                  |
+
+首次给自己的服务器安装，优先读 [版本镜像部署](docs/INSTALL_RELEASE.md)；维护者发布版本见 [GitHub Actions 发布说明](docs/RELEASING.md)。角色调整接口补充契约见 [user-roles.yaml](openapi/user-roles.yaml)。
 
 ## 1. 本地开发
 
@@ -208,6 +217,7 @@ API 0.7.0 在项目的每项 `deployments[].files` 返回 `{bytes, count}`，按
 | `STACKNEST_ADMIN_DOMAIN`                          | 空                                                                         | 用于生成邀请中的正式 HTTPS 登录地址，Compose 同时用于 Nginx                                       |
 | `STACKNEST_INVITATION_LOGIN_URL`                  | 空                                                                         | 可选覆盖邀请地址；未覆盖时使用 `https://管理域名/login`，仅接受无凭据、查询参数或片段的 HTTPS URL |
 | `STACKNEST_AUTH_ADMIN_EMAIL`                      | 无                                                                         | 首次启动时创建的管理员邮箱；后续启动须与数据库现有管理员匹配                                      |
+| `STACKNEST_AUTH_SUPER_ADMIN_EMAIL`                | 同初始管理员邮箱                                                           | 指定一位已有管理员为超管；仅超管可配置网络、实例资源预算和新增管理员                              |
 | `STACKNEST_AUTH_INITIAL_USER_EMAIL`               | 空                                                                         | 用户表为空时一并导入的普通用户邮箱                                                                |
 | `STACKNEST_AUTH_SECRET`                           | 无                                                                         | 至少 32 字节的随机密钥，用于验证码摘要                                                            |
 | `STACKNEST_SMTP_HOST` / `STACKNEST_SMTP_PORT`     | `smtp.qq.com` / `465`                                                      | 隐式 TLS SMTP 服务                                                                                |

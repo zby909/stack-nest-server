@@ -17,6 +17,10 @@ var staticAssetPath = regexp.MustCompile(`(?i)\.(html?|css|[cm]?js|map|json|xml|
 // serveSite 提供正式站点的本地预览，页面路由允许回退到入口文件。
 func (s *Server) serveSite(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/sites/")
+	if hiddenStaticPath(path) {
+		http.NotFound(w, r)
+		return
+	}
 	parts := strings.SplitN(path, "/", 2)
 	slug := parts[0]
 	if slug == "" {
@@ -67,7 +71,7 @@ func (s *Server) serveSite(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveWeb(w http.ResponseWriter, r *http.Request) {
-	if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/sites/") {
+	if hiddenStaticPath(r.URL.Path) || strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/sites/") {
 		http.NotFound(w, r)
 		return
 	}
@@ -100,6 +104,16 @@ func (s *Server) serveWeb(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
 		"message": "StackNest API is running. Build the frontend with pnpm build.",
 	})
+}
+
+// hiddenStaticPath 统一拒绝隐藏文件和目录，普通含点文件名不受影响。
+func hiddenStaticPath(path string) bool {
+	for _, part := range strings.Split(strings.ReplaceAll(path, "\\", "/"), "/") {
+		if strings.HasPrefix(part, ".") {
+			return true
+		}
+	}
+	return false
 }
 
 // safeJoin 将 URL 相对路径限制在指定根目录内。

@@ -175,7 +175,7 @@ func (s *Server) CompleteUpload(w http.ResponseWriter, r *http.Request, id strin
 		var result project.CreatedProject
 		var err error
 		if input.Kind == "update" {
-			result, err = s.projects.UpdateAs(ctx, ticket.TargetSlug, project.Actor{ID: user.ID, IsAdmin: user.Role == auth.RoleAdmin}, project.UpdateInput{Preview: input.Preview, Notes: input.Notes, DeploymentID: "dep-" + id, ExpectedID: input.ExpectedID, FileName: input.FileName, Source: source})
+			result, err = s.projects.UpdateAs(ctx, ticket.TargetSlug, project.Actor{ID: user.ID, IsAdmin: auth.IsAdmin(user.Role)}, project.UpdateInput{Preview: input.Preview, Notes: input.Notes, DeploymentID: "dep-" + id, ExpectedID: input.ExpectedID, FileName: input.FileName, Source: source})
 		} else {
 			result, err = s.projects.Create(ctx, project.CreateInput{Preview: input.Preview, Notes: input.Notes, DeploymentID: "dep-" + id, OwnerID: user.ID, OwnerEmail: user.Email, Name: input.Name, Description: input.Description, Slug: ticket.TargetSlug, FileName: input.FileName, Source: source})
 		}

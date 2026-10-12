@@ -22,6 +22,7 @@ import (
 // Config 定义 HTTP Server 所需配置。
 type Config struct {
 	Apps                *containerapp.Service
+	Network             NetworkControl
 	Addr                string
 	WebDir              string
 	SitesDir            string
@@ -91,6 +92,11 @@ func New(config Config, projects ProjectService, authService *auth.Service) *Ser
 
 	mux := http.NewServeMux()
 	generated.HandlerFromMux(server, mux)
+	mux.HandleFunc("PUT /api/users/{id}/role", server.ChangeUserRole)
+	mux.HandleFunc("GET /api/apps/limits", server.GetAppLimits)
+	mux.HandleFunc("PUT /api/apps/limits", server.UpdateAppLimits)
+	mux.HandleFunc("GET /api/network", server.GetNetwork)
+	mux.HandleFunc("PUT /api/network", server.UpdateNetwork)
 	mux.HandleFunc("/sites/", server.serveSite)
 	mux.HandleFunc("/", server.serveWeb)
 

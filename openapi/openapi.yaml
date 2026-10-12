@@ -57,10 +57,10 @@ paths:
       summary: 查询应用配置与实时容器状态
       responses:
         '200':
-          description: 应用详情，环境变量与密码不回显
+          description: 应用详情、运行器可用性和公开配额，环境变量与密码不回显
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/AppView'}
+              schema: {$ref: '#/components/schemas/AppDetail'}
         '404': {description: 不存在或无权访问}
     put:
       tags: [Apps]
@@ -803,7 +803,7 @@ components:
         slug: {type: string, maxLength: 32, description: 创建时必填；之后不可修改}
         image: {type: string, maxLength: 256, description: Linux amd64 仓库镜像地址，可使用标签或摘要}
         port: {type: integer, minimum: 1, maximum: 65535}
-        memoryMiB: {type: integer, minimum: 64, maximum: 512}
+        memoryMiB: {type: integer, minimum: 64, maximum: 1024}
         cpus: {type: number, minimum: 0.1, maximum: 1}
         dataPath: {type: string, description: 可选的单个容器内持久化目录}
         healthPath: {type: string, maxLength: 256, description: 可选 HTTP 路径，例如 /health；60 秒内返回 2xx 才就绪，留空仅检查端口}
@@ -854,6 +854,25 @@ components:
         health: {type: string, enum: [healthy, unhealthy, stopped], description: 查询时探测，不自动重启应用}
         healthCheck: {type: string, enum: [tcp, http]}
         usage: {$ref: '#/components/schemas/AppUsage'}
+        disk: {$ref: '#/components/schemas/AppDiskUsage'}
+    AppDiskArea:
+      type: object
+      required: [source]
+      description: 用量缺失表示未知；XFS 使用实际分配块，docker-estimate 是逻辑文件大小估计，不能当作硬配额计量
+      properties:
+        usedBytes: {type: integer, format: int64, minimum: 0}
+        limitBytes: {type: integer, format: int64, minimum: 0}
+        usedInodes: {type: integer, format: int64, minimum: 0}
+        limitInodes: {type: integer, format: int64, minimum: 0}
+        source: {type: string, enum: [xfs, docker-estimate, quota-disabled, unavailable]}
+    AppDiskUsage:
+      type: object
+      required: [writable, sampledAt]
+      description: 最多每分钟采样一次，首次采样可能省略；不包含镜像共享层、容器日志与临时内存盘
+      properties:
+        writable: {$ref: '#/components/schemas/AppDiskArea'}
+        persistent: {$ref: '#/components/schemas/AppDiskArea'}
+        sampledAt: {type: string, format: date-time}
     AppUsage:
       type: object
       required: [memoryBytes, memoryLimitBytes, pids, sampledAt]
@@ -869,6 +888,32 @@ components:
       properties:
         app: {$ref: '#/components/schemas/ContainerApp'}
         runtime: {$ref: '#/components/schemas/AppRuntime'}
+        progress: {$ref: '#/components/schemas/AppProgress'}
+    AppProgress:
+      type: object
+      required: [generation, stage, updatedAt]
+      description: 当前代次的瞬时快照，刷新页面仍可查询；运行器重启后由持久化队列重试，历史快照不作为日志保存
+      properties:
+        generation: {type: integer, format: int64}
+        stage: {type: string, enum: [queued, preparing, pulling, verifying, creating, stopping, starting, healthchecking, cleaning, restoring, deleting, completed, failed]}
+        failedStage: {type: string}
+        downloadedBytes: {type: integer, format: int64, minimum: 0}
+        totalBytes: {type: integer, format: int64, minimum: 0, description: 当前已发现镜像层的下载总量，可能随新层发现变化，不是整个部署进度}
+        updatedAt: {type: string, format: date-time}
+    AppDetail:
+      allOf:
+        - {$ref: '#/components/schemas/AppView'}
+        - type: object
+          required: [available, limits]
+          properties:
+            available: {type: boolean}
+            limits:
+              type: object
+              required: [maxApps, totalMemoryMiB, maxMemoryMiB]
+              properties:
+                maxApps: {type: integer}
+                totalMemoryMiB: {type: integer}
+                maxMemoryMiB: {type: integer}
     AppList:
       type: object
       required: [apps, available, limits]
@@ -996,7 +1041,7 @@ components:
       properties:
         id: {type: string}
         createdAt: {type: string, format: date-time}
-        action: {type: string, enum: [upload, update, rollback, delete, edit, export, pause, resume, draft, publish, discard]}
+        action: {type: string, enum: [upload, update, rollback, delete, edit, export, pause, resume, draft, publish, discard, app-deploy, app-start, app-stop, app-restart, app-delete, network, app-limits, user-add, user-role]}
         actor: {type: string}
         actorId: {type: string}
         projectOwnerId: {type: string}
@@ -1017,11 +1062,17 @@ components:
           format: email
     AddUserRequest:
       type: object
+      additionalProperties: false
       required: [email]
       properties:
         email:
           type: string
           format: email
+        role:
+          type: string
+          enum: [user, admin]
+          default: user
+          description: 只有超管可选择 admin，省略时添加普通用户；不允许授予超管
         sendInvitation:
           type: boolean
           default: false
@@ -1059,7 +1110,7 @@ components:
           format: email
         role:
           type: string
-          enum: [admin, user]
+          enum: [superadmin, admin, user]
         createdAt:
           type: string
           format: date-time

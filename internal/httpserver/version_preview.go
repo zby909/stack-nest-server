@@ -29,10 +29,7 @@ func (s *Server) versionURL(r *http.Request, id string) string {
 // isVersionHost 保留整个版本命名空间，非法编号也不能落入管理页面。
 func (s *Server) isVersionHost(value string) bool {
 	host, _ := splitHost(value)
-	if !strings.HasPrefix(host, "stack-nest--") {
-		return false
-	}
-	return strings.HasSuffix(host, ".localhost") || s.config.BaseDomain != "" && strings.HasSuffix(host, "."+s.config.BaseDomain)
+	return strings.HasPrefix(host, "stack-nest--")
 }
 
 // serveVersion 通过已保留版本打开受限目录，只提供静态内容且永不访问后台接口。
@@ -45,7 +42,11 @@ func (s *Server) serveVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	host, _ := splitHost(r.Host)
-	label, _, _ := strings.Cut(host, ".")
+	label, domain, found := strings.Cut(host, ".")
+	if !found || domain != "localhost" && (s.config.BaseDomain == "" || domain != s.config.BaseDomain) {
+		http.NotFound(w, r)
+		return
+	}
 	id := strings.TrimPrefix(label, "stack-nest--")
 	parsed, err := uuid.Parse(id)
 	if err != nil || parsed.String() != id {
@@ -57,11 +58,9 @@ func (s *Server) serveVersion(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	for _, part := range strings.Split(name, "/") {
-		if strings.HasPrefix(part, ".") {
-			http.NotFound(w, r)
-			return
-		}
+	if hiddenStaticPath(name) {
+		http.NotFound(w, r)
+		return
 	}
 	root, err := s.projects.OpenPreview(r.Context(), "dep-"+id)
 	if err != nil {

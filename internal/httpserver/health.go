@@ -23,8 +23,8 @@ func (s *Server) GetHealth(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		slog.WarnContext(r.Context(), "database health check failed", "request_id", requestID(r), "error", err)
-		writeJSON(w, http.StatusServiceUnavailable, generated.HealthResponse{Status: generated.Unavailable})
+		writeJSON(w, http.StatusServiceUnavailable, generated.HealthResponse{Status: generated.HealthResponseStatusUnavailable})
 		return
 	}
-	writeJSON(w, http.StatusOK, generated.HealthResponse{Status: generated.Ok})
+	writeJSON(w, http.StatusOK, generated.HealthResponse{Status: generated.HealthResponseStatusOk})
 }

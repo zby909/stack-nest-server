@@ -1,12 +1,9 @@
-# Cloudflare Tunnel 专用回源入口；与 SSH 本地 HTTP 入口分开。
+# 可选 Cloudflare Tunnel；同一 Nginx 同时提供本机回源与 SSH 入口。
 services:
-  tunnel:
-    environment:
-      STACKNEST_ADMIN_DOMAIN: ${STACKNEST_ADMIN_DOMAIN:?required}
-      STACKNEST_BASE_DOMAIN: ${STACKNEST_BASE_DOMAIN:?required}
-      NGINX_ENVSUBST_FILTER: "STACKNEST_ADMIN_DOMAIN|STACKNEST_BASE_DOMAIN"
-    ports:
+  nginx:
+    ports: !override
+      - "127.0.0.1:18080:82"
       - "127.0.0.1:18081:81"
     volumes:
+      - ./deploy/nginx/ssh.conf.template:/etc/nginx/templates/ssh.conf.template:ro
       - ./deploy/nginx/cloudflare-tunnel.conf.template:/etc/nginx/templates/cloudflare-tunnel.conf.template:ro
-      - stacknest-data:/data:ro

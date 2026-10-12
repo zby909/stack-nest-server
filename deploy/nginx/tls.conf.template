@@ -1,0 +1,130 @@
+map $http_upgrade $stacknest_connection {
+    default upgrade;
+    "" close;
+}
+
+# 双连字符命名空间不与合法项目 slug 冲突，版本由 Go 按数据库保留状态解析。
+map $host $stacknest_dynamic_site {
+    "~^stack-nest--[0-9a-f-]+\." 1;
+    "~^stack-nest--app-[a-z0-9-]+\." 1;
+    default 0;
+}
+
+# 严格匹配单级项目域名，避免多级未知主机误用已有静态目录。
+map $host $stacknest_host_domain {
+    "~^stack-nest-[a-z0-9-]+\.(?<stacknest_domain_suffix>.+)$" $stacknest_domain_suffix;
+    default "";
+}
+
+map $host $stacknest_project_slug {
+    "~^stack-nest-(?<stacknest_slug>[a-z0-9](?:[a-z0-9-]{0,50}[a-z0-9])?)\." $stacknest_slug;
+    default "__invalid__";
+}
+
+# 正式静态响应使用默认协商缓存；错误页和动态应用继续禁止保存。
+map "$stacknest_dynamic_site:$status" $stacknest_static_cache {
+    default "no-store";
+    "0:200" "no-cache";
+    "0:206" "no-cache";
+    "0:304" "no-cache";
+}
+
+# 页面路由保留 SPA 回退，缺失 CSS、脚本、图片等资源直接返回 404。
+map $uri $stacknest_spa_index {
+    default /index.html;
+    "~*\.(html?|css|[cm]?js|map|json|xml|txt|csv|svg|ico|png|jpe?g|gif|webp|avif|bmp|woff2?|ttf|otf|eot|wasm|webmanifest|pdf|zip|rar|gz|mp4|webm|mp3|ogg|wav)/?$" "";
+}
+
+server {
+    listen 80 default_server;
+    server_name _;
+    return 404;
+}
+
+server {
+    listen 80;
+    server_name ${STACKNEST_ADMIN_DOMAIN} *.${STACKNEST_BASE_DOMAIN};
+    return 308 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl default_server;
+    ssl_reject_handshake on;
+}
+
+server {
+    listen 443 ssl;
+    server_name ${STACKNEST_ADMIN_DOMAIN};
+    http2 on;
+
+    ssl_certificate /etc/nginx/certs/certificate.pem;
+    ssl_certificate_key /etc/nginx/certs/private.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    client_max_body_size 91m;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location ~ ^/(api/|openapi\.yaml$) {
+        proxy_pass http://stacknest:8080;
+        proxy_http_version 1.1;
+        proxy_request_buffering off;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+
+    location ^~ /sites/ { return 404; }
+
+    location / {
+        try_files $uri $uri/ $stacknest_spa_index =404;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name *.${STACKNEST_BASE_DOMAIN};
+    http2 on;
+
+    ssl_certificate /etc/nginx/certs/certificate.pem;
+    ssl_certificate_key /etc/nginx/certs/private.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    if ($stacknest_host_domain != "${STACKNEST_BASE_DOMAIN}") { return 404; }
+    error_page 418 = @dynamic_site;
+    if ($stacknest_dynamic_site) { return 418; }
+    client_max_body_size 91m;
+    location @dynamic_site {
+        proxy_pass http://stacknest:8080;
+        proxy_http_version 1.1;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $stacknest_connection;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+
+    root /data/sites/$stacknest_project_slug;
+    if (-e /data/paused/$stacknest_project_slug) { return 503; }
+    add_header Cache-Control $stacknest_static_cache always;
+    add_header X-Content-Type-Options "nosniff" always;
+    index index.html;
+
+    location ~ /\. {
+        return 404;
+    }
+
+    location / {
+        try_files $uri $uri/ $stacknest_spa_index =404;
+    }
+}

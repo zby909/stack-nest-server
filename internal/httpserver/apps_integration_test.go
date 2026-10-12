@@ -249,3 +249,13 @@ func TestContainerAppsIntegration(t *testing.T) {
 		t.Fatal("deleted user's session remained valid")
 	}
 }
+
+// Capacity 为测试提供明确的宿主预算上限。
+func (appTestRuntime) Capacity(context.Context) (containerapp.Capacity, error) {
+	return containerapp.Capacity{MaxTotalMemoryMiB: 4096}, nil
+}
+
+// Progress 模拟当前代次的有界阶段反馈。
+func (appTestRuntime) Progress(_ context.Context, _ string, generation int64) (containerapp.Progress, error) {
+	return containerapp.Progress{Generation: generation, Stage: "pulling"}, nil
+}

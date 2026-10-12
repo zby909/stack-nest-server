@@ -11,7 +11,7 @@ services:
     environment:
       POSTGRES_DB: stacknest
       POSTGRES_USER: stacknest
-      POSTGRES_PASSWORD: ${STACKNEST_POSTGRES_PASSWORD:?required}
+      POSTGRES_PASSWORD: ${STACKNEST_POSTGRES_PASSWORD:?STACKNEST_POSTGRES_PASSWORD is required}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -22,7 +22,7 @@ services:
     logging: *default-logging
 
   migrate:
-    image: stacknest-migrate:${STACKNEST_RELEASE:?required}
+    image: ${STACKNEST_MIGRATE_IMAGE:-stacknest-migrate:${STACKNEST_RELEASE:?STACKNEST_RELEASE is required}}
     restart: "no"
     depends_on:
       postgres:
@@ -33,11 +33,11 @@ services:
       - --dir
       - file:///migrations
       - --url
-      - ${STACKNEST_DATABASE_URL:?required}
+      - ${STACKNEST_DATABASE_URL:?STACKNEST_DATABASE_URL is required}
     logging: *default-logging
 
   runner:
-    image: stacknest-app:${STACKNEST_RELEASE:?required}
+    image: ${STACKNEST_APP_IMAGE:-stacknest-app:${STACKNEST_RELEASE:?STACKNEST_RELEASE is required}}
     command: ["docker-runner"]
     user: "0:0"
     restart: unless-stopped
@@ -64,7 +64,7 @@ services:
     logging: *default-logging
 
   stacknest:
-    image: stacknest-app:${STACKNEST_RELEASE:?required}
+    image: ${STACKNEST_APP_IMAGE:-stacknest-app:${STACKNEST_RELEASE:?STACKNEST_RELEASE is required}}
     restart: unless-stopped
     depends_on:
       migrate:
@@ -74,59 +74,49 @@ services:
     environment:
       STACKNEST_RUNNER_SOCKET: /run/stacknest-runner/control.sock
       STACKNEST_ADDR: :8080
-      STACKNEST_DATABASE_URL: ${STACKNEST_DATABASE_URL:?required}
+      STACKNEST_DATABASE_URL: ${STACKNEST_DATABASE_URL:?STACKNEST_DATABASE_URL is required}
       STACKNEST_DATA_DIR: /data
       STACKNEST_BACKUP_STATUS_FILE: /run/stacknest-backup/status.json
-      STACKNEST_BASE_DOMAIN: ${STACKNEST_BASE_DOMAIN:?required}
-      STACKNEST_ADMIN_DOMAIN: ${STACKNEST_ADMIN_DOMAIN:?required}
+      STACKNEST_BASE_DOMAIN: ${STACKNEST_BASE_DOMAIN:?STACKNEST_BASE_DOMAIN is required}
+      STACKNEST_ADMIN_DOMAIN: ${STACKNEST_ADMIN_DOMAIN:?STACKNEST_ADMIN_DOMAIN is required}
       STACKNEST_INVITATION_LOGIN_URL: ${STACKNEST_INVITATION_LOGIN_URL:-}
-      STACKNEST_AUTH_ADMIN_EMAIL: ${STACKNEST_AUTH_ADMIN_EMAIL:?required}
+      STACKNEST_AUTH_ADMIN_EMAIL: ${STACKNEST_AUTH_ADMIN_EMAIL:?STACKNEST_AUTH_ADMIN_EMAIL is required}
+      STACKNEST_AUTH_SUPER_ADMIN_EMAIL: ${STACKNEST_AUTH_SUPER_ADMIN_EMAIL:-}
       STACKNEST_AUTH_INITIAL_USER_EMAIL: ${STACKNEST_AUTH_INITIAL_USER_EMAIL:-}
-      STACKNEST_AUTH_SECRET: ${STACKNEST_AUTH_SECRET:?required}
+      STACKNEST_AUTH_SECRET: ${STACKNEST_AUTH_SECRET:?STACKNEST_AUTH_SECRET is required}
       STACKNEST_SMTP_HOST: ${STACKNEST_SMTP_HOST:-smtp.qq.com}
       STACKNEST_SMTP_PORT: ${STACKNEST_SMTP_PORT:-465}
-      STACKNEST_SMTP_USER: ${STACKNEST_SMTP_USER:?required}
-      STACKNEST_SMTP_PASSWORD: ${STACKNEST_SMTP_PASSWORD:?required}
+      STACKNEST_SMTP_USER: ${STACKNEST_SMTP_USER:?STACKNEST_SMTP_USER is required}
+      STACKNEST_SMTP_PASSWORD: ${STACKNEST_SMTP_PASSWORD:?STACKNEST_SMTP_PASSWORD is required}
     volumes:
       - stacknest-data:/data
       - runner-control:/run/stacknest-runner
       - ${STACKNEST_BACKUP_STATUS_DIR:-./backup-status}:/run/stacknest-backup:ro
+    expose:
+      - "8080"
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/api/health"]
+      test:
+        ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/api/health"]
       interval: 10s
       timeout: 3s
       retries: 10
     logging: *default-logging
 
   nginx:
-    image: stacknest-web:${STACKNEST_RELEASE:?required}
+    image: ${STACKNEST_WEB_IMAGE:-stacknest-web:${STACKNEST_RELEASE:?STACKNEST_RELEASE is required}}
     restart: unless-stopped
     depends_on:
       stacknest:
         condition: service_healthy
     environment:
-      STACKNEST_ADMIN_DOMAIN: ${STACKNEST_ADMIN_DOMAIN:?required}
-      STACKNEST_BASE_DOMAIN: ${STACKNEST_BASE_DOMAIN:?required}
+      STACKNEST_ADMIN_DOMAIN: ${STACKNEST_ADMIN_DOMAIN:?STACKNEST_ADMIN_DOMAIN is required}
+      STACKNEST_BASE_DOMAIN: ${STACKNEST_BASE_DOMAIN:?STACKNEST_BASE_DOMAIN is required}
       NGINX_ENVSUBST_FILTER: "STACKNEST_ADMIN_DOMAIN|STACKNEST_BASE_DOMAIN"
     ports:
       - "80:80"
-      - "443:443"
     volumes:
-      - ./deploy/nginx/cloudflare.conf.template:/etc/nginx/templates/default.conf.template:ro
-      - ${STACKNEST_ORIGIN_CERT_DIR:?required}:/etc/nginx/certs:ro
+      - ./deploy/nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
       - stacknest-data:/data:ro
-    logging: *default-logging
-
-  tunnel:
-    image: stacknest-web:${STACKNEST_RELEASE:?required}
-    restart: unless-stopped
-    depends_on:
-      stacknest:
-        condition: service_healthy
-    ports:
-      - "127.0.0.1:18080:80"
-    volumes:
-      - ./deploy/nginx/tunnel.conf:/etc/nginx/conf.d/default.conf:ro
     logging: *default-logging
 
 volumes:

@@ -33,7 +33,7 @@ func (s *Server) PublishDraft(w http.ResponseWriter, r *http.Request, slug gener
 	event.Slug = slug
 	defer s.finishActivity(r, event)
 	user := s.requestUser(r)
-	result, err := s.projects.PublishDraftAs(ctx, slug, project.Actor{ID: user.ID, IsAdmin: user.Role == auth.RoleAdmin}, *input.DraftID, *input.ExpectedID)
+	result, err := s.projects.PublishDraftAs(ctx, slug, project.Actor{ID: user.ID, IsAdmin: auth.IsAdmin(user.Role)}, *input.DraftID, *input.ExpectedID)
 	if err != nil {
 		event.Message = s.writeProjectError(w, r, err)
 		return
@@ -49,7 +49,7 @@ func (s *Server) DiscardDraft(w http.ResponseWriter, r *http.Request, slug gener
 	event.Slug = slug
 	defer s.finishActivity(r, event)
 	user := s.requestUser(r)
-	value, err := s.projects.DiscardDraftAs(r.Context(), slug, project.Actor{ID: user.ID, IsAdmin: user.Role == auth.RoleAdmin}, params.DraftId)
+	value, err := s.projects.DiscardDraftAs(r.Context(), slug, project.Actor{ID: user.ID, IsAdmin: auth.IsAdmin(user.Role)}, params.DraftId)
 	if err != nil {
 		event.Message = s.writeProjectError(w, r, err)
 		return
@@ -67,7 +67,7 @@ func (s *Server) ListProjectChanges(w http.ResponseWriter, r *http.Request, slug
 	if params.BaseId != nil {
 		base = *params.BaseId
 	}
-	changes, err := s.projects.ChangesAs(ctx, slug, project.Actor{ID: user.ID, IsAdmin: user.Role == auth.RoleAdmin}, params.DeploymentId, base)
+	changes, err := s.projects.ChangesAs(ctx, slug, project.Actor{ID: user.ID, IsAdmin: auth.IsAdmin(user.Role)}, params.DeploymentId, base)
 	if err != nil {
 		s.writeProjectError(w, r, err)
 		return

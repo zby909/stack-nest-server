@@ -32,8 +32,16 @@ type Runner struct {
 	selfID, instance, source, dataDir string
 	guard                             *storage.Guard
 	quota                             dataQuota
+	egressFile                        string
 	mu                                sync.Mutex
 	frozen                            bool
+	maxTotalMemoryMiB                 int
+	progressMu                        sync.Mutex
+	progress                          map[string]containerapp.Progress
+	dockerRoot                        string
+	diskMu                            sync.Mutex
+	disk                              map[string]*diskSample
+	diskActive                        int
 }
 
 var hexID = regexp.MustCompile(`^[a-f0-9]{12,64}$`)
@@ -59,9 +67,13 @@ func New(ctx context.Context, socket, dataDir, dockerStorage string) (*Runner, e
 	if r.source == "" {
 		return nil, errors.New("运行器需要独立的 StackNest 命名数据卷")
 	}
+	if err = r.configureEgress(ctx, self); err != nil {
+		return nil, err
+	}
 	var info struct {
-		MemTotal int64
-		OSType   string
+		MemTotal      int64
+		OSType        string
+		DockerRootDir string
 	}
 	if err = r.engine.call(ctx, "GET", "/info", nil, &info); err != nil {
 		return nil, err
@@ -69,6 +81,8 @@ func New(ctx context.Context, socket, dataDir, dockerStorage string) (*Runner, e
 	if info.OSType != "linux" || info.MemTotal < (containerapp.TotalMemoryMiB*2+64)<<20 {
 		return nil, errors.New("Docker 应用运行需要 Linux 容器和至少 1600 MiB 内存")
 	}
+	r.maxTotalMemoryMiB = capacityBudget(info.MemTotal)
+	r.dockerRoot = info.DockerRootDir
 	if err = os.MkdirAll(filepath.Join(dataDir, "apps"), 0700); err != nil {
 		return nil, err
 	}
@@ -131,12 +145,19 @@ func (r *Runner) Serve(ctx context.Context, socket string) error {
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, req *http.Request) {
 		check, cancel := context.WithTimeout(req.Context(), 3*time.Second)
 		defer cancel()
+		if err := r.checkEgress(); err != nil {
+			http.Error(w, err.Error(), 503)
+			return
+		}
 		if err := r.engine.call(check, "GET", "/_ping", nil, nil); err != nil {
 			http.Error(w, "Docker 不可用", 503)
 			return
 		}
 		respond(w, 200, map[string]bool{"ok": true})
 	})
+	mux.HandleFunc("GET /diagnostics", r.diagnostics)
+	mux.HandleFunc("GET /capacity", r.capacity)
+	mux.HandleFunc("GET /progress/{id}/{generation}", r.readProgress)
 	mux.HandleFunc("POST /operation", r.operation)
 	mux.HandleFunc("GET /state/{id}/{container}", r.state)
 	mux.HandleFunc("GET /logs/{id}/{container}", r.logs)
@@ -222,6 +243,7 @@ func (r *Runner) state(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	response := stateResponse(value)
+	response.Disk = r.diskUsage(req.PathValue("id"), value)
 	response.HealthCheck = "tcp"
 	if value.Config.Labels[healthPathLabel] != "" {
 		response.HealthCheck = "http"

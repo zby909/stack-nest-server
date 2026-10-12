@@ -1,0 +1,7 @@
+# 仅本机 SSH 预览；明确替换公网映射，不额外创建 Nginx。
+services:
+  nginx:
+    ports: !override
+      - "127.0.0.1:18080:82"
+    volumes:
+      - ./deploy/nginx/ssh.conf.template:/etc/nginx/templates/ssh.conf.template:ro

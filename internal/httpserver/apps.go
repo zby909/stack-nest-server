@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"stacknest/server/internal/auth"
 	"stacknest/server/internal/containerapp"
 	"strings"
 	"sync"
@@ -15,7 +16,7 @@ import (
 // appActor 把后台会话转换为应用所有权限制。
 func (s *Server) appActor(r *http.Request) containerapp.Actor {
 	user := s.requestUser(r)
-	return containerapp.Actor{ID: user.ID, Email: user.Email, Admin: user.Role == "admin"}
+	return containerapp.Actor{ID: user.ID, Email: user.Email, Admin: auth.IsAdmin(user.Role)}
 }
 
 // appsReady 未配置运行器时给出明确提示，而非访问 Docker daemon。
@@ -46,9 +47,16 @@ func (s *Server) appResponse(r *http.Request, value containerapp.App) map[string
 	value.URL = s.appURL(r, value.Slug)
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	state, err := s.config.Apps.State(ctx, value)
 	response := map[string]any{"app": value}
-	if err == nil {
+	// 先读取独立的进度快照，容器状态采样变慢时仍保留阶段反馈。
+	if value.Status == "pending" {
+		response["progress"] = containerapp.Progress{Generation: value.Generation, Stage: "queued", UpdatedAt: value.UpdatedAt}
+	} else if value.Status == "deploying" || value.Status == "error" {
+		if progress, progressErr := s.config.Apps.Runtime().Progress(ctx, value.ID, value.Generation); progressErr == nil && progress.Generation == value.Generation {
+			response["progress"] = progress
+		}
+	}
+	if state, err := s.config.Apps.State(ctx, value); err == nil {
 		response["runtime"] = state
 	}
 	return response
@@ -74,8 +82,13 @@ func (s *Server) ListApps(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 	wait.Wait()
+	limits, err := s.config.Apps.Limits(r.Context())
+	if err != nil {
+		s.writeAppError(w, r, err)
+		return
+	}
 	available := s.config.Apps.Runtime().Health(r.Context()) == nil
-	writeJSON(w, 200, map[string]any{"apps": views, "available": available, "limits": map[string]int{"maxApps": containerapp.MaxApps, "totalMemoryMiB": containerapp.TotalMemoryMiB, "maxMemoryMiB": containerapp.MaxMemoryMiB}})
+	writeJSON(w, 200, map[string]any{"apps": views, "available": available, "limits": map[string]int{"maxApps": limits.MaxApps, "totalMemoryMiB": limits.TotalMemoryMiB, "maxMemoryMiB": containerapp.MaxMemoryMiB}})
 }
 
 // CreateApp 提交持久化后台部署任务，浏览器断开不影响执行。
@@ -114,7 +127,15 @@ func (s *Server) GetApp(w http.ResponseWriter, r *http.Request, id string) {
 		s.writeAppError(w, r, err)
 		return
 	}
-	writeJSON(w, 200, s.appResponse(r, value))
+	response := s.appResponse(r, value)
+	limits, err := s.config.Apps.Limits(r.Context())
+	if err != nil {
+		s.writeAppError(w, r, err)
+		return
+	}
+	response["available"] = s.config.Apps.Runtime().Health(r.Context()) == nil
+	response["limits"] = map[string]int{"maxApps": limits.MaxApps, "totalMemoryMiB": limits.TotalMemoryMiB, "maxMemoryMiB": containerapp.MaxMemoryMiB}
+	writeJSON(w, 200, response)
 }
 
 // OperateApp 对启停、重启、删除执行相同身份和版本校验。
@@ -161,7 +182,7 @@ func (s *Server) writeAppError(w http.ResponseWriter, r *http.Request, err error
 	switch {
 	case errors.Is(err, containerapp.ErrNotFound):
 		status, message = 404, err.Error()
-	case errors.Is(err, containerapp.ErrBusy), errors.Is(err, containerapp.ErrQuota):
+	case errors.Is(err, containerapp.ErrBusy), errors.Is(err, containerapp.ErrQuota), errors.Is(err, containerapp.ErrConflict):
 		status, message = 409, err.Error()
 	case errors.Is(err, containerapp.ErrUnavailable):
 		status, message = 503, err.Error()

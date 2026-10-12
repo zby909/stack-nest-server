@@ -38,7 +38,14 @@ func (r *Runner) current(ctx context.Context, id string) (inspection, error) {
 }
 
 // operate 仅对本应用执行操作，启动失败尽力恢复旧容器。
-func (r *Runner) operate(ctx context.Context, op containerapp.Operation) (result, error) {
+func (r *Runner) operate(ctx context.Context, op containerapp.Operation) (output result, operationErr error) {
+	ctx = r.beginProgress(ctx, op)
+	defer func() { r.finishProgress(ctx, operationErr) }()
+	if op.Action == "deploy" || op.Action == "start" || op.Action == "restart" {
+		if err := r.checkEgress(); err != nil {
+			return result{}, err
+		}
+	}
 	old, oldErr := r.current(ctx, op.ID)
 	fallback := result{State: "missing"}
 	if oldErr == nil {
@@ -50,6 +57,7 @@ func (r *Runner) operate(ctx context.Context, op containerapp.Operation) (result
 	case "deploy":
 		return r.deploy(ctx, op, old)
 	case "start":
+		r.stage(ctx, "starting")
 		if oldErr != nil {
 			return r.deploy(ctx, op, old)
 		}
@@ -59,6 +67,7 @@ func (r *Runner) operate(ctx context.Context, op containerapp.Operation) (result
 			}
 		}
 	case "stop":
+		r.stage(ctx, "stopping")
 		if oldErr != nil {
 			return fallback, nil
 		}
@@ -68,6 +77,7 @@ func (r *Runner) operate(ctx context.Context, op containerapp.Operation) (result
 			}
 		}
 	case "restart":
+		r.stage(ctx, "starting")
 		if oldErr != nil {
 			return r.deploy(ctx, op, old)
 		}
@@ -75,6 +85,7 @@ func (r *Runner) operate(ctx context.Context, op containerapp.Operation) (result
 			return fallback, err
 		}
 	case "delete":
+		r.stage(ctx, "deleting")
 		return r.delete(ctx, op.ID)
 	}
 	value, err := r.owned(ctx, op.ID, old.ID)
@@ -90,7 +101,7 @@ func (r *Runner) operate(ctx context.Context, op containerapp.Operation) (result
 }
 
 // checkQuota 在运行器再次检查资源，即使后台配置错误也不触碰平台容器。
-func (r *Runner) checkQuota(ctx context.Context, id string, memory int) error {
+func (r *Runner) checkQuota(ctx context.Context, id string, memory int, limits containerapp.Limits) error {
 	values, err := r.containers(ctx, "")
 	if err != nil {
 		return err
@@ -113,7 +124,7 @@ func (r *Runner) checkQuota(ctx context.Context, id string, memory int) error {
 	for _, value := range allocations {
 		total += value
 	}
-	if len(allocations) >= containerapp.MaxApps || total > containerapp.TotalMemoryMiB<<20 {
+	if len(allocations) >= limits.MaxApps || total > int64(limits.TotalMemoryMiB)<<20 {
 		return containerapp.ErrQuota
 	}
 	return nil
@@ -145,6 +156,13 @@ func (r *Runner) create(ctx context.Context, op containerapp.Operation, image im
 			"LogConfig":     map[string]any{"Type": "json-file", "Config": map[string]string{"max-size": "5m", "max-file": "2"}},
 		},
 	}
+	if r.egressFile != "" {
+		status, err := readEgressStatus(r.egressFile)
+		if err != nil {
+			return "", err
+		}
+		payload["HostConfig"].(map[string]any)["Dns"] = status.DNSServers
+	}
 	if r.quota != nil {
 		payload["HostConfig"].(map[string]any)["StorageOpt"] = map[string]string{"size": "1G"}
 	}
@@ -161,7 +179,11 @@ func (r *Runner) deploy(ctx context.Context, op containerapp.Operation, old insp
 	if old.ID != "" {
 		fallback = stateResponse(old)
 	}
-	if err := r.checkQuota(ctx, op.ID, op.Spec.MemoryMiB); err != nil {
+	limits, err := r.operationLimits(op)
+	if err != nil {
+		return fallback, err
+	}
+	if err := r.checkQuota(ctx, op.ID, op.Spec.MemoryMiB, limits); err != nil {
 		return fallback, err
 	}
 	if err := r.ensureNetwork(ctx, op.ID); err != nil {
@@ -193,22 +215,26 @@ func (r *Runner) deploy(ctx context.Context, op containerapp.Operation, old insp
 	if err != nil {
 		return fallback, err
 	}
+	r.stage(ctx, "creating")
 	cid, err := r.create(ctx, op, image)
 	if err != nil {
 		return fallback, err
 	}
 	// 旧容器退出后才启动新容器，避免共享数据目录并发写入。
 	if old.ID != "" && old.State.Running {
+		r.stage(ctx, "stopping")
 		if err = r.stop(ctx, old.ID); err != nil {
 			_ = r.remove(ctx, cid)
 			return fallback, err
 		}
 	}
+	r.stage(ctx, "starting")
 	err = r.start(ctx, cid)
 	if err == nil {
 		err = r.ready(ctx, op.ID, cid)
 	}
 	if err != nil {
+		r.stage(ctx, "restoring")
 		recoverCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		_ = r.remove(recoverCtx, cid)
@@ -223,12 +249,14 @@ func (r *Runner) deploy(ctx context.Context, op containerapp.Operation, old insp
 	if err != nil {
 		return fallback, err
 	}
+	r.stage(ctx, "cleaning")
 	r.cleanOthers(ctx, op.ID, cid)
 	return stateResponse(value), nil
 }
 
 // ready 等待私有端口或 HTTP 健康路径就绪，不请求用户指定的外部地址。
 func (r *Runner) ready(ctx context.Context, id, cid string) error {
+	r.stage(ctx, "healthchecking")
 	task, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	for {

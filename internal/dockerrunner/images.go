@@ -22,9 +22,11 @@ type imageInfo struct {
 
 // pull 在拉取期间持续检查 Docker 文件系统，错误消息不携带仓库凭据。
 func (r *Runner) pull(ctx context.Context, spec containerapp.Spec, pinned string) (imageInfo, error) {
+	r.stage(ctx, "pulling")
 	var value imageInfo
 	if pinned != "" && strings.HasPrefix(pinned, "sha256:") && len(pinned) == 71 {
 		if err := r.engine.call(ctx, "GET", "/images/"+url.PathEscape(pinned)+"/json", nil, &value); err == nil {
+			r.stage(ctx, "verifying")
 			return value, r.validateImage(value, spec)
 		}
 	}
@@ -64,19 +66,21 @@ func (r *Runner) pull(ctx context.Context, spec containerapp.Spec, pinned string
 	}
 	defer response.Body.Close()
 	decoder := json.NewDecoder(response.Body)
+	layers := map[string]pullLayer{}
 	for {
-		var event struct {
-			Error string `json:"error"`
-		}
+		var event pullEvent
 		if err = decoder.Decode(&event); err == io.EOF {
 			break
 		} else if err != nil {
 			return value, errors.New("镜像拉取中断或磁盘不足")
 		}
+		current, total := recordPull(layers, event)
+		r.download(ctx, current, total)
 		if event.Error != "" {
 			return value, errors.New("镜像拉取失败，请确认 Linux 镜像、服务器架构和仓库权限")
 		}
 	}
+	r.stage(ctx, "verifying")
 	if err = r.engine.call(ctx, "GET", "/images/"+url.PathEscape(spec.Image)+"/json", nil, &value); err != nil {
 		return value, err
 	}

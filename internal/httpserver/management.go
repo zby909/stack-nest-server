@@ -63,7 +63,7 @@ func (s *Server) EditProject(w http.ResponseWriter, r *http.Request, slug genera
 		return
 	}
 	user := s.requestUser(r)
-	updated, err := s.projects.EditAs(r.Context(), slug, project.Actor{ID: user.ID, IsAdmin: user.Role == auth.RoleAdmin}, project.MetadataInput{Name: *body.Name, Description: *body.Description, ExpectedAt: expectedAt})
+	updated, err := s.projects.EditAs(r.Context(), slug, project.Actor{ID: user.ID, IsAdmin: auth.IsAdmin(user.Role)}, project.MetadataInput{Name: *body.Name, Description: *body.Description, ExpectedAt: expectedAt})
 	if err != nil {
 		event.Message = s.writeProjectError(w, r, err)
 		return
@@ -97,7 +97,7 @@ func (s *Server) ExportProject(w http.ResponseWriter, r *http.Request, slug gene
 		return
 	}
 	defer s.exportMu.Unlock()
-	result, err := s.projects.ExportAs(r.Context(), slug, project.Actor{ID: user.ID, IsAdmin: user.Role == auth.RoleAdmin}, params.DeploymentId)
+	result, err := s.projects.ExportAs(r.Context(), slug, project.Actor{ID: user.ID, IsAdmin: auth.IsAdmin(user.Role)}, params.DeploymentId)
 	if err != nil {
 		if errors.Is(err, storage.ErrInsufficient) || errors.Is(err, storage.ErrUnavailable) {
 			code := http.StatusInsufficientStorage
@@ -165,7 +165,7 @@ func (w *exportResponse) Write(data []byte) (int, error) {
 
 // GetBackupStatus 仅向管理员返回独立目录中的安全摘要。
 func (s *Server) GetBackupStatus(w http.ResponseWriter, r *http.Request) {
-	if s.requestUser(r).Role != auth.RoleAdmin {
+	if !auth.IsAdmin(s.requestUser(r).Role) {
 		writeJSON(w, http.StatusForbidden, generated.ErrorResponse{Error: "仅管理员可访问"})
 		return
 	}

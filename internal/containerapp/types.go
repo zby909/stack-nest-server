@@ -21,11 +21,12 @@ var (
 	ErrNotFound    = errors.New("应用不存在或无权访问")
 	ErrBusy        = errors.New("应用正在执行操作，请稍后重试")
 	ErrQuota       = errors.New("应用数量或内存总配额不足")
+	ErrConflict    = errors.New("资源配置已被更新，请刷新后重试")
 	ErrUnavailable = errors.New("Docker 运行器暂时不可用")
 )
 
 const MaxApps = 3
-const MaxMemoryMiB = 512
+const MaxMemoryMiB = 1024
 const TotalMemoryMiB = 768
 const MaxImageBytes int64 = 1 << 30
 const HostPrefix = "stack-nest--app-"
@@ -102,14 +103,15 @@ type Actor struct {
 
 // Result 是运行器确认的容器状态，不含运行环境变量。
 type Result struct {
-	ContainerID string `json:"containerId"`
-	ImageID     string `json:"imageId"`
-	State       string `json:"state"`
-	OOMKilled   bool   `json:"oomKilled"`
-	ExitCode    int    `json:"exitCode"`
-	Health      string `json:"health,omitempty"`
-	HealthCheck string `json:"healthCheck,omitempty"`
-	Usage       *Usage `json:"usage,omitempty"`
+	ContainerID string     `json:"containerId"`
+	ImageID     string     `json:"imageId"`
+	State       string     `json:"state"`
+	OOMKilled   bool       `json:"oomKilled"`
+	ExitCode    int        `json:"exitCode"`
+	Health      string     `json:"health,omitempty"`
+	HealthCheck string     `json:"healthCheck,omitempty"`
+	Usage       *Usage     `json:"usage,omitempty"`
+	Disk        *DiskUsage `json:"disk,omitempty"`
 }
 
 // Usage 是容器的当前采样，CPU 的 100% 表示占用一个核心，不包含宿主信息。
@@ -123,16 +125,19 @@ type Usage struct {
 
 // Operation 只表达平台允许的生命周期操作。
 type Operation struct {
-	ID         string `json:"id"`
-	Generation int64  `json:"generation"`
-	Action     string `json:"action"`
-	ImageID    string `json:"imageId,omitempty"`
-	Spec       Spec   `json:"spec"`
+	Limits     *Limits `json:"limits,omitempty"`
+	ID         string  `json:"id"`
+	Generation int64   `json:"generation"`
+	Action     string  `json:"action"`
+	ImageID    string  `json:"imageId,omitempty"`
+	Spec       Spec    `json:"spec"`
 }
 
 // Runtime 将 Docker 权限收敛在独立运行器的几个固定操作中。
 type Runtime interface {
 	Health(context.Context) error
+	Capacity(context.Context) (Capacity, error)
+	Progress(context.Context, string, int64) (Progress, error)
 	Operate(context.Context, Operation) (Result, error)
 	State(context.Context, string, string) (Result, error)
 	Logs(context.Context, string, string) (string, error)
@@ -141,6 +146,8 @@ type Runtime interface {
 
 // Store 定义队列与所有权的持久化边界。
 type Store interface {
+	AppLimits(context.Context) (LimitsView, error)
+	UpdateAppLimits(context.Context, LimitsUpdate) (LimitsView, error)
 	Apps(context.Context, Actor) ([]App, error)
 	App(context.Context, string, Actor) (App, error)
 	SaveApp(context.Context, App, Actor, bool) error
@@ -168,7 +175,7 @@ func (s Spec) Validate() error {
 		return err
 	}
 	if s.MemoryMiB < 64 || s.MemoryMiB > MaxMemoryMiB || s.CPUs < 0.1 || s.CPUs > 1 || math.IsNaN(s.CPUs) || math.IsInf(s.CPUs, 0) {
-		return invalid("内存须为 64–512 MiB，CPU 须为 0.1–1 核")
+		return invalid(fmt.Sprintf("内存须为 64–%d MiB，CPU 须为 0.1–1 核", MaxMemoryMiB))
 	}
 	if s.DataPath != "" {
 		if len(s.DataPath) > 4096 || !strings.HasPrefix(s.DataPath, "/") || path.Clean(s.DataPath) != s.DataPath || strings.ContainsAny(s.DataPath, "\\\x00:") {

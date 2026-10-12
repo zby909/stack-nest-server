@@ -13,3 +13,12 @@ pem.txt
 *.log
 stacknest
 stacknest.exe
+
+/compose.resolved.json
+/compose.public.json
+/compose.json
+/compose.proxy.yaml
+/docs/INSTANCE.md
+*.key
+stacknest-egress
+stacknest-egress.exe

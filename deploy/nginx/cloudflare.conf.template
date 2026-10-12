@@ -35,6 +35,12 @@ set_real_ip_from 2a06:98c0::/29;
 set_real_ip_from 2c0f:f248::/32;
 real_ip_header CF-Connecting-IP;
 
+# 严格匹配单级项目域名，避免多级未知主机误用已有静态目录。
+map $host $stacknest_host_domain {
+    "~^stack-nest-[a-z0-9-]+\.(?<stacknest_domain_suffix>.+)$" $stacknest_domain_suffix;
+    default "";
+}
+
 map $host $stacknest_project_slug {
     "~^stack-nest-(?<stacknest_slug>[a-z0-9](?:[a-z0-9-]{0,50}[a-z0-9])?)\." $stacknest_slug;
     default "__invalid__";
@@ -113,6 +119,7 @@ server {
     ssl_certificate_key /etc/nginx/certs/private.key;
     ssl_protocols TLSv1.2 TLSv1.3;
 
+    if ($stacknest_host_domain != "${STACKNEST_BASE_DOMAIN}") { return 404; }
     error_page 418 = @dynamic_site;
     if ($stacknest_dynamic_site) { return 418; }
     client_max_body_size 91m;

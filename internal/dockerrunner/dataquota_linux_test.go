@@ -54,6 +54,16 @@ func TestXFSDataQuota(t *testing.T) {
 	if err = q.Ensure(id2, dir2); err != nil {
 		t.Fatal(err)
 	}
+	area, err := q.Usage(id1, dir1)
+	if err != nil || area.Source != "xfs" || area.UsedBytes == nil || *area.UsedBytes < 8<<20 || area.LimitBytes == nil || *area.LimitBytes != 32<<20 || area.LimitInodes == nil || *area.LimitInodes != 100000 {
+		t.Fatal("invalid actual quota usage", area, err)
+	}
+	if _, err := q.Usage(id1, dir2); err == nil {
+		t.Fatal("cross-application quota read accepted")
+	}
+	if err := q.Check(); err != nil {
+		t.Fatal("quota capability check", err)
+	}
 	record1, err := readQuotaRecord(filepath.Join(root, "apps", id1, "disk-quota.json"))
 	if err != nil || !record1.Ready {
 		t.Fatal(record1, err)

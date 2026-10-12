@@ -45,7 +45,7 @@ func (s *Server) SetProjectAccess(w http.ResponseWriter, r *http.Request, slug g
 	event.Slug, event.ProjectOwnerID = slug, value.OwnerID
 	defer s.finishActivity(r, event)
 	user := s.requestUser(r)
-	updated, err := s.projects.SetAccessAs(r.Context(), slug, project.Actor{ID: user.ID, IsAdmin: user.Role == auth.RoleAdmin}, *body.Paused, expectedAt)
+	updated, err := s.projects.SetAccessAs(r.Context(), slug, project.Actor{ID: user.ID, IsAdmin: auth.IsAdmin(user.Role)}, *body.Paused, expectedAt)
 	if err != nil {
 		event.Message = s.writeProjectError(w, r, err)
 		return

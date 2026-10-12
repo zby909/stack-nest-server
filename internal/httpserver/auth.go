@@ -15,6 +15,8 @@ import (
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
+	"github.com/google/uuid"
+	"stacknest/server/internal/activity"
 	"stacknest/server/internal/auth"
 	"stacknest/server/internal/generated"
 )
@@ -94,7 +96,15 @@ func (s *Server) protect(next http.Handler) http.Handler {
 				writeJSON(w, http.StatusUnauthorized, generated.ErrorResponse{Error: "请先登录"})
 				return
 			}
-			if (strings.HasPrefix(path, "/api/users") || path == "/api/system" || strings.HasPrefix(path, "/api/backups")) && user.Role != auth.RoleAdmin {
+			if path == "/api/apps/limits" && user.Role != auth.RoleSuperAdmin {
+				writeJSON(w, 403, generated.ErrorResponse{Error: "仅超级管理员可配置应用资源"})
+				return
+			}
+			if path == "/api/network" && user.Role != auth.RoleSuperAdmin {
+				writeJSON(w, http.StatusForbidden, generated.ErrorResponse{Error: "仅超级管理员可配置容器网络"})
+				return
+			}
+			if (strings.HasPrefix(path, "/api/users") || path == "/api/system" || strings.HasPrefix(path, "/api/backups")) && !auth.IsAdmin(user.Role) {
 				writeJSON(w, http.StatusForbidden, generated.ErrorResponse{Error: "仅管理员可访问"})
 				return
 			}
@@ -270,10 +280,22 @@ func (s *Server) ListUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
-// AddUser 将普通用户邮箱加入白名单，并仅在管理员勾选后尝试发送邀请。
+// AddUser 允许管理员添加普通用户，超管额外可添加管理员，邀请仍需主动勾选。
 func (s *Server) AddUser(w http.ResponseWriter, r *http.Request) {
 	var input generated.AddUserRequest
 	if !readAuthJSON(w, r, &input) {
+		return
+	}
+	role := auth.RoleUser
+	if input.Role != nil {
+		role = string(*input.Role)
+	}
+	if role != auth.RoleUser && role != auth.RoleAdmin {
+		writeJSON(w, 400, generated.ErrorResponse{Error: "只能添加普通用户或管理员"})
+		return
+	}
+	if role == auth.RoleAdmin && s.requestUser(r).Role != auth.RoleSuperAdmin {
+		writeJSON(w, 403, generated.ErrorResponse{Error: "仅超级管理员可添加管理员"})
 		return
 	}
 	sendInvitation := input.SendInvitation != nil && *input.SendInvitation
@@ -283,8 +305,16 @@ func (s *Server) AddUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	user, err := s.auth.AddUser(r.Context(), string(input.Email))
+	var user auth.User
+	var err error
+	if role == auth.RoleAdmin {
+		user, err = s.auth.AddAdministrator(r.Context(), s.requestUser(r), string(input.Email))
+	} else {
+		user, err = s.auth.AddUser(r.Context(), string(input.Email))
+	}
 	switch {
+	case errors.Is(err, auth.ErrForbidden):
+		writeJSON(w, 403, generated.ErrorResponse{Error: "仅超级管理员可添加管理员"})
 	case errors.Is(err, auth.ErrInvalidEmail):
 		writeJSON(w, http.StatusBadRequest, generated.ErrorResponse{Error: "邮箱格式无效"})
 	case errors.Is(err, auth.ErrExists):
@@ -293,6 +323,12 @@ func (s *Server) AddUser(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(r.Context(), "add user", "error", err)
 		writeJSON(w, http.StatusInternalServerError, generated.ErrorResponse{Error: "添加邮箱失败"})
 	default:
+		if s.config.Activity != nil {
+			actor := s.requestUser(r)
+			if logErr := s.config.Activity.Append(activity.Event{ID: uuid.NewString(), CreatedAt: time.Now().UTC(), Action: "user-add", Actor: actor.Email, ActorID: actor.ID, Status: "succeeded", Message: "已添加登录邮箱：" + user.Email + "，角色：" + user.Role}); logErr != nil {
+				slog.Error("record added user", "error", logErr)
+			}
+		}
 		invitation := generated.InvitationStatusNotRequested
 		if sendInvitation {
 			invitation = generated.InvitationStatusSent

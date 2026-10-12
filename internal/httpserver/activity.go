@@ -13,7 +13,7 @@ import (
 // GetActivity 在服务端保留的日志中筛选并分页，不将他人记录计入普通用户的总数。
 func (s *Server) GetActivity(w http.ResponseWriter, r *http.Request, params generated.GetActivityParams) {
 	user := s.requestUser(r)
-	query := activity.Query{UserID: user.ID, IsAdmin: user.Role == auth.RoleAdmin, Page: 1, PageSize: 50}
+	query := activity.Query{UserID: user.ID, IsAdmin: auth.IsAdmin(user.Role), Page: 1, PageSize: 50}
 	if params.Page != nil {
 		query.Page = *params.Page
 	}

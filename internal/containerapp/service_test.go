@@ -28,10 +28,18 @@ func TestSpecBoundaries(t *testing.T) {
 			t.Fatal(image, err)
 		}
 	}
+	for _, memory := range []int{64, 256, 768, 1024} {
+		spec := testSpec()
+		spec.MemoryMiB = memory
+		if err := spec.Validate(); err != nil {
+			t.Fatal("valid application memory rejected", memory, err)
+		}
+	}
 	cases := []func(*Spec){
 		func(s *Spec) { s.Image = "https://registry/app:v1" },
 		func(s *Spec) { s.Image = "repo/app;rm -rf /" },
-		func(s *Spec) { s.MemoryMiB = 1024 }, func(s *Spec) { s.CPUs = math.NaN() },
+		func(s *Spec) { s.MemoryMiB = 63 }, func(s *Spec) { s.MemoryMiB = 1025 },
+		func(s *Spec) { s.CPUs = math.NaN() },
 		func(s *Spec) { s.Port = 0 }, func(s *Spec) { s.DataPath = "/var/run/docker.sock" },
 		func(s *Spec) { s.DataPath = "/app/../../data" }, func(s *Spec) { s.DataPath = "/etc/" },
 		func(s *Spec) { s.Env = map[string]string{"BAD=KEY": "value"} },
@@ -273,5 +281,53 @@ func TestCompletionRetryStopsOnShutdown(t *testing.T) {
 	New(store, runtime, secret, storage.New(t.TempDir()), nil).execute(ctx, App{ID: id, Sealed: sealed, Action: "deploy"})
 	if store.completeCalls != 1 || store.completed.ID != "" || runtime.calls != 1 {
 		t.Fatal("shutdown did not leave the interrupted task available for startup recovery")
+	}
+}
+
+// Capacity 为测试提供明确的宿主预算上限。
+func (*testRuntime) Capacity(context.Context) (Capacity, error) {
+	return Capacity{MaxTotalMemoryMiB: 4096}, nil
+}
+
+// Progress 模拟当前代次的有界阶段反馈。
+func (*testRuntime) Progress(_ context.Context, _ string, generation int64) (Progress, error) {
+	return Progress{Generation: generation, Stage: "pulling"}, nil
+}
+
+// AppLimits 模拟保持升级前的实例默认配置。
+func (*testStore) AppLimits(context.Context) (LimitsView, error) {
+	return LimitsView{Limits: DefaultLimits(), Revision: 1}, nil
+}
+
+// UpdateAppLimits 模拟数据库保存预算。
+func (*testStore) UpdateAppLimits(_ context.Context, input LimitsUpdate) (LimitsView, error) {
+	return LimitsView{Limits: input.Limits, Revision: input.ExpectedRevision + 1}, nil
+}
+
+// TestLowerMemoryUpdateReleasesReservation 只在低内存候选成功后释放旧版预留额度，失败恢复仍有空间。
+func TestLowerMemoryUpdateReleasesReservation(t *testing.T) {
+	secret, id := "thirty-two-byte-test-secret-only", "0c2d84bb-15a1-492b-938a-83282600c112"
+	old := testSpec()
+	active, err := seal(secret, id, old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := old
+	next.MemoryMiB = 64
+	sealed, err := seal(secret, id, next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fail := range []bool{false, true} {
+		store := &testStore{}
+		service := New(store, &testRuntime{fail: fail}, secret, storage.New(t.TempDir()), nil)
+		service.execute(context.Background(), App{ID: id, Action: "deploy", Generation: 2, Sealed: sealed, ActiveSealed: active, MemoryMiB: 128})
+		wantMemory, wantSealed := 64, sealed
+		if fail {
+			wantMemory, wantSealed = 128, active
+		}
+		if store.completed.MemoryMiB != wantMemory || store.completed.Sealed != wantSealed {
+			t.Fatal("incorrect reserved memory after candidate result", fail, store.completed.MemoryMiB)
+		}
 	}
 }

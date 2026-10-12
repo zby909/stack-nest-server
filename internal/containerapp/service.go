@@ -171,15 +171,16 @@ func (s *Service) Logs(ctx context.Context, a App) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for _, v := range spec.Env {
-		if v != "" {
-			text = strings.ReplaceAll(text, v, "[已隐藏]")
+	specs := []Spec{spec}
+	// 更新期间后台保存候选配置，但日志仍可能来自使用旧配置的容器。
+	if a.ActiveSealed != "" && a.ActiveSealed != a.Sealed {
+		active, err := open(s.secret, a.ID, a.ActiveSealed)
+		if err != nil {
+			return "", err
 		}
+		specs = append(specs, active)
 	}
-	if spec.Registry != nil {
-		text = strings.ReplaceAll(text, spec.Registry.Password, "[已隐藏]")
-	}
-	return text, nil
+	return redactLog(text, specs...), nil
 }
 
 // Resolve 为公开应用域名查询目标，结果不经过后台会话鉴权。
@@ -249,9 +250,14 @@ func (s *Service) execute(ctx context.Context, a App) {
 	spec, err := open(s.secret, a.ID, a.Sealed)
 	result := Result{ContainerID: a.ContainerID, ImageID: a.ImageID, State: "unknown"}
 	if err == nil {
-		task, cancel := context.WithTimeout(ctx, 10*time.Minute)
-		result, err = s.runtime.Operate(task, Operation{ID: a.ID, Generation: a.Generation, Action: a.Action, Spec: spec, ImageID: a.ImageID})
-		cancel()
+		a.MemoryMiB = spec.MemoryMiB
+		var limits LimitsView
+		limits, err = s.Limits(ctx)
+		if err == nil {
+			task, cancel := context.WithTimeout(ctx, 10*time.Minute)
+			result, err = s.runtime.Operate(task, Operation{ID: a.ID, Generation: a.Generation, Action: a.Action, Spec: spec, ImageID: a.ImageID, Limits: &limits.Limits})
+			cancel()
+		}
 	}
 	if ctx.Err() != nil {
 		return

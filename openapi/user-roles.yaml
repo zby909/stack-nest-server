@@ -1,0 +1,37 @@
+openapi: 3.1.0
+info:
+  title: StackNest 用户角色管理补充契约
+  version: 0.10.1
+paths:
+  /api/users/{id}/role:
+    put:
+      summary: 超管调整现有用户角色
+      description: 仅配置的超管可调用；保护部署指定的管理员及超管。成功后撤销目标用户的所有会话和验证码，项目归属不变。不发送邀请。
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [role, expectedRole]
+              properties:
+                role: {type: string, enum: [admin, user]}
+                expectedRole: {type: string, enum: [admin, user]}
+      responses:
+        '200':
+          description: 角色已变更，返回更新后的用户
+          content:
+            application/json:
+              schema: {$ref: './openapi.yaml#/components/schemas/AuthUser'}
+        '400': {description: 非法角色、没有变化、非法用户 ID 或请求体}
+        '401': {description: 未登录}
+        '403': {description: 非超管、受保护账户或非同源请求}
+        '404': {description: 用户不存在}
+        '409': {description: 当前角色与 expectedRole 不一致，请刷新}
+        '500': {description: 变更失败}

@@ -1,0 +1,9 @@
+# 普通公网服务器 HTTPS；证书须覆盖管理域名和项目泛域名。
+services:
+  nginx:
+    ports: !override
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/tls.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ${STACKNEST_TLS_CERT_DIR:?STACKNEST_TLS_CERT_DIR is required}:/etc/nginx/certs:ro

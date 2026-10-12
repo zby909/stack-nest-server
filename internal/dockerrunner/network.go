@@ -12,18 +12,27 @@ import (
 // networkName 为每个应用创建独立、不可冲突的 Docker 私有网络。
 func (r *Runner) networkName(id string) string { return "stacknest-app-" + r.instance + "-" + id }
 
-// ensureNetwork 校验已有网络，应用没有公网端口和出站互联网连接。
+// ensureNetwork 保留应用独立网络，仅在宿主规则就绪时开启受控公网出站。
 func (r *Runner) ensureNetwork(ctx context.Context, id string) error {
+	if err := r.checkEgress(); err != nil {
+		return err
+	}
 	name := r.networkName(id)
+	internal := r.egressFile == ""
+	options := map[string]string{}
+	if !internal {
+		options["com.docker.network.bridge.name"] = r.bridgeName(id)
+	}
 	var value struct {
 		Driver   string
 		Internal bool
 		Labels   map[string]string
+		Options  map[string]string
 	}
 	err := r.engine.call(ctx, "GET", "/networks/"+name, nil, &value)
 	if errors.Is(err, errMissing) {
-		err = r.engine.call(ctx, "POST", "/networks/create", map[string]any{"Name": name, "Driver": "bridge", "Internal": true, "Labels": map[string]string{instanceLabel: r.instance, appLabel: id}}, nil)
-	} else if err == nil && (value.Driver != "bridge" || !value.Internal || value.Labels[instanceLabel] != r.instance || value.Labels[appLabel] != id) {
+		err = r.engine.call(ctx, "POST", "/networks/create", map[string]any{"Name": name, "Driver": "bridge", "Internal": internal, "Options": options, "Labels": map[string]string{instanceLabel: r.instance, appLabel: id}}, nil)
+	} else if err == nil && (value.Driver != "bridge" || value.Internal != internal || (!internal && value.Options["com.docker.network.bridge.name"] != r.bridgeName(id)) || value.Labels[instanceLabel] != r.instance || value.Labels[appLabel] != id) {
 		return errors.New("应用网络归属或隔离配置异常")
 	}
 	if err != nil {
@@ -36,7 +45,12 @@ func (r *Runner) ensureNetwork(ctx context.Context, id string) error {
 	if _, ok := self.NetworkSettings.Networks[name]; ok {
 		return nil
 	}
-	return r.engine.call(ctx, "POST", "/networks/"+name+"/connect", map[string]string{"Container": r.selfID}, nil)
+	payload := map[string]any{"Container": r.selfID}
+	if !internal {
+		// 应用网关优先级低于平台网络，避免运行器拉镜像的默认出口被改变。
+		payload["EndpointConfig"] = map[string]any{"GwPriority": -1}
+	}
+	return r.engine.call(ctx, "POST", "/networks/"+name+"/connect", payload, nil)
 }
 
 // bind 准备唯一允许的应用目录，禁止挂载平台、主机或其他项目目录。
