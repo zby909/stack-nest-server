@@ -10,6 +10,7 @@ import re
 import tarfile
 
 FILES = (
+    "LICENSE", "NOTICE", "internal/dockerrunner/seccomp-LICENSE",
     "compose.release.yaml", "compose.tls.yaml", "compose.cloudflare.yaml",
     "compose.ssh.yaml", "compose.tunnel-public.yaml", "compose.quota.yaml",
     "compose.egress.yaml", "deploy/nginx/default.conf.template",
@@ -50,12 +51,15 @@ def read_public(root, name):
 
 
 # package_release 使用固定清单组包；不扫描工作区或携带任何实例数据。
-def package_release(root, output, manifest, egress_binary):
+def package_release(root, output, manifest, egress_binary, setup_binary):
     validate(manifest)
     root = Path(root).resolve()
-    binary = Path(egress_binary).read_bytes()
-    if binary[:6] != b"\x7fELF\x02\x01" or binary[18:20] != b"\x3e\x00":
-        raise ValueError("network helper must be a Linux amd64 ELF binary")
+    binaries = {}
+    for name, path in (("stacknest-egress", egress_binary), ("stacknest-setup", setup_binary)):
+        binary = Path(path).read_bytes()
+        if binary[:6] != b"\x7fELF\x02\x01" or binary[18:20] != b"\x3e\x00":
+            raise ValueError(name + " must be a Linux amd64 ELF binary")
+        binaries["bin/" + name] = binary
     files = {name: read_public(root, name) for name in FILES}
     env = read_public(root, ".env.compose.example").decode("utf-8")
     old = "COMPOSE_FILE=compose.yaml:compose.tls.yaml"
@@ -74,7 +78,7 @@ def package_release(root, output, manifest, egress_binary):
     readme = readme.replace("https://github.com/zby909/stack-nest-server/releases",
                            "https://github.com/" + source["repository"] + "/releases")
     files["README.md"] = readme.encode("utf-8")
-    files["bin/stacknest-egress"] = binary
+    files.update(binaries)
     files["release.json"] = (json.dumps(manifest, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
     sums = "".join(hashlib.sha256(value).hexdigest() + "  " + name + "\n" for name, value in sorted(files.items()))
     files["SHA256SUMS"] = sums.encode("utf-8")
@@ -107,6 +111,7 @@ def main():
     for component in ("app", "web", "migrate"):
         parser.add_argument("--" + component + "-image", required=True)
     parser.add_argument("--egress-binary", type=Path, required=True)
+    parser.add_argument("--setup-binary", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     manifest = {
@@ -115,7 +120,7 @@ def main():
                     for name in ("server", "web")},
         "images": {name: getattr(args, name + "_image") for name in ("app", "web", "migrate")},
     }
-    print(package_release(Path(__file__).resolve().parents[1], args.output, manifest, args.egress_binary))
+    print(package_release(Path(__file__).resolve().parents[1], args.output, manifest, args.egress_binary, args.setup_binary))
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 	"stacknest/server/internal/activity"
 	"stacknest/server/internal/auth"
+	"stacknest/server/internal/buildinfo"
 	"stacknest/server/internal/config"
 	"stacknest/server/internal/containerapp"
 	"stacknest/server/internal/dockerrunner"
@@ -46,6 +48,9 @@ func run() error {
 	if len(os.Args) > 1 {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
+		if os.Args[1] == "version" {
+			return json.NewEncoder(os.Stdout).Encode(buildinfo.Current())
+		}
 		if os.Args[1] == "docker-runner" {
 			runner, err := dockerrunner.New(ctx, "/var/run/docker.sock", cfg.DataDir, "/docker-storage")
 			if err != nil {
@@ -64,6 +69,9 @@ func run() error {
 		return errors.New("unknown command")
 	}
 
+	if err := auth.ValidateSecret(cfg.AuthSecret); err != nil {
+		return err
+	}
 	connectCtx, cancelConnect := context.WithTimeout(context.Background(), 10*time.Second)
 	store, err := postgres.Open(connectCtx, cfg.DatabaseURL)
 	cancelConnect()
@@ -126,6 +134,8 @@ func run() error {
 		return err
 	}
 
+	// inspect 复用 CLI 诊断，只向 HTTP 层传递安全摘要。
+	inspect := func(ctx context.Context) doctor.Report { return doctor.Inspect(ctx, cfg) }
 	apps := containerapp.New(store, containerapp.NewClient(cfg.RunnerSocket), cfg.AuthSecret, guard, activityLog)
 	server := httpserver.New(httpserver.Config{
 		Apps:               apps,
@@ -139,6 +149,7 @@ func run() error {
 		MaxUploadSize:      cfg.MaxUploadSize,
 		Storage:            guard,
 		CheckDatabase:      store.Ping,
+		Inspect:            inspect,
 		Activity:           activityLog,
 	}, projects, authService)
 

@@ -1,5 +1,8 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/v2.8.0/configuration-schema.json
 package: generated
-output: ../internal/generated/models.gen.go
+output: ../internal/generated/requests.gen.go
 generate:
   models: true
+
+import-mapping:
+  ./components.yaml: "-"

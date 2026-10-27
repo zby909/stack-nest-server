@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -171,7 +172,7 @@ func TestResumableUpdateIsIdempotent(t *testing.T) {
 	r = r.WithContext(context.WithValue(r.Context(), authContextKey{}, auth.User{ID: "alice"}))
 	w := httptest.NewRecorder()
 	s.http.Handler.ServeHTTP(w, r)
-	if w.Code != 400 {
+	if w.Code != http.StatusRequestTimeout {
 		t.Fatal(w.Code)
 	}
 	progress, _ := s.uploads.Get(input.ID, "alice")

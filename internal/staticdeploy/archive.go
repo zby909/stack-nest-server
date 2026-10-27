@@ -13,20 +13,22 @@ import (
 	"stacknest/server/internal/project"
 )
 
-// extractArchive 按文件扩展名选择解码器，解码器还会校验实际文件格式。
+// extractArchive 按扩展名准备站点；ZIP/RAR 校验归档格式，HTML 原样保存为入口。
 func extractArchive(archivePath, fileName, destination string, maxFiles int, maxBytes int64) error {
 	return extractArchiveGuarded(context.Background(), nil, archivePath, fileName, destination, maxFiles, maxBytes)
 }
 
-// extractArchiveGuarded 在所有格式解压过程中持续检查容量与请求取消。
+// extractArchiveGuarded 在解压或复制过程中持续检查容量与请求取消。
 func extractArchiveGuarded(ctx context.Context, guard *storage.Guard, archivePath, fileName, destination string, maxFiles int, maxBytes int64) error {
 	switch strings.ToLower(filepath.Ext(fileName)) {
 	case ".zip":
 		return extractZipGuarded(ctx, guard, archivePath, destination, maxFiles, maxBytes)
 	case ".rar":
 		return extractRARGuarded(ctx, guard, archivePath, destination, maxFiles, maxBytes)
+	case ".html", ".htm":
+		return prepareHTML(ctx, guard, archivePath, destination, maxFiles, maxBytes)
 	default:
-		return project.NewInvalidArchiveError("仅支持 ZIP 或 RAR 静态项目")
+		return project.NewInvalidArchiveError("仅支持 ZIP、RAR 或单个 HTML 静态项目")
 	}
 }
 

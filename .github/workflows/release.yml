@@ -131,18 +131,23 @@ jobs:
         with:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
-      - name: Build the optional Linux network helper
+      - name: Build Linux deployment tools
         working-directory: server
         env:
           CGO_ENABLED: "0"
           GOOS: linux
           GOARCH: amd64
-        run: go build -trimpath -ldflags="-s -w" -o "$RUNNER_TEMP/stacknest-egress" ./cmd/stacknest-egress
+        run: |
+          go build -trimpath -ldflags="-s -w" -o "$RUNNER_TEMP/stacknest-egress" ./cmd/stacknest-egress
+          go build -trimpath -ldflags="-s -w" -o "$RUNNER_TEMP/stacknest-setup" ./cmd/stacknest-setup
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Build API and Runner image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: server
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            REVISION=${{ env.SERVER_SHA }}
           load: true
           platforms: linux/amd64
           tags: ${{ env.IMAGE_PREFIX }}/stacknest-app:${{ env.VERSION }}
@@ -156,6 +161,9 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: web
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            REVISION=${{ env.WEB_SHA }}
           load: true
           platforms: linux/amd64
           tags: ${{ env.IMAGE_PREFIX }}/stacknest-web:${{ env.VERSION }}
@@ -207,7 +215,8 @@ jobs:
             --version "$VERSION" --server-repository "$GITHUB_REPOSITORY" --server-sha "$SERVER_SHA" \
             --web-repository "$WEB_REPOSITORY" --web-sha "$WEB_SHA" \
             --app-image "$APP_IMAGE" --web-image "$WEB_IMAGE" --migrate-image "$MIGRATE_IMAGE" \
-            --egress-binary "$RUNNER_TEMP/stacknest-egress" --output "$RUNNER_TEMP/stacknest-release"
+            --egress-binary "$RUNNER_TEMP/stacknest-egress" --setup-binary "$RUNNER_TEMP/stacknest-setup" \
+            --output "$RUNNER_TEMP/stacknest-release"
       - name: Publish the complete release
         env:
           GH_TOKEN: ${{ github.token }}

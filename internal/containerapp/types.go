@@ -61,8 +61,9 @@ type Input struct {
 	Name string `json:"name"`
 	Slug string `json:"slug"`
 	Spec
-	ReplaceEnv    bool `json:"replaceEnv"`
-	ClearRegistry bool `json:"clearRegistry"`
+	ReplaceEnv    bool               `json:"replaceEnv"`
+	EnvPatch      map[string]*string `json:"envPatch,omitempty"`
+	ClearRegistry bool               `json:"clearRegistry"`
 }
 
 // App 在数据库保存配置密文，公开接口仅返回非敏感配置。

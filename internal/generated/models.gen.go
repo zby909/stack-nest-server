@@ -604,12 +604,16 @@ type UploadRequestKind string
 
 // UploadStatus defines model for UploadStatus.
 type UploadStatus struct {
+	// ChunkSize 单片最大字节数；未提供 minChunkSize 时按固定分片大小处理
 	ChunkSize int64     `json:"chunkSize"`
 	Completed bool      `json:"completed"`
 	ExpiresAt time.Time `json:"expiresAt"`
 	Id        string    `json:"id"`
-	Offset    int64     `json:"offset"`
-	Size      int64     `json:"size"`
+
+	// MinChunkSize 单片最小字节数，最后一片可更小；存在此字段表示支持可变分片
+	MinChunkSize *int64 `json:"minChunkSize,omitempty"`
+	Offset       int64  `json:"offset"`
+	Size         int64  `json:"size"`
 }
 
 // UserListResponse defines model for UserListResponse.
@@ -633,130 +637,3 @@ type MetadataVersion = string
 
 // ProjectSlug defines model for ProjectSlug.
 type ProjectSlug = string
-
-// GetActivityParams defines parameters for GetActivity.
-type GetActivityParams struct {
-	Page     *int    `form:"page,omitempty" json:"page,omitempty"`
-	PageSize *int    `form:"pageSize,omitempty" json:"pageSize,omitempty"`
-	Slug     *string `form:"slug,omitempty" json:"slug,omitempty"`
-	Action   *string `form:"action,omitempty" json:"action,omitempty"`
-	Status   *string `form:"status,omitempty" json:"status,omitempty"`
-	Actor    *string `form:"actor,omitempty" json:"actor,omitempty"`
-	Q        *string `form:"q,omitempty" json:"q,omitempty"`
-
-	// From 包含此时间
-	From *time.Time `form:"from,omitempty" json:"from,omitempty"`
-
-	// To 不包含此时间
-	To *time.Time `form:"to,omitempty" json:"to,omitempty"`
-}
-
-// CreateProjectMultipartBody defines parameters for CreateProject.
-type CreateProjectMultipartBody struct {
-	// Description UTF-8 编码最多 4096 字节
-	Description *string            `json:"description,omitempty"`
-	File        openapi_types.File `json:"file"`
-
-	// Name UTF-8 编码最多 256 字节
-	Name string `json:"name"`
-
-	// Slug 为空时由项目名称自动生成；手填时必须满足 DNS 标签规则
-	Slug *string `json:"slug,omitempty"`
-}
-
-// EditProjectParams defines parameters for EditProject.
-type EditProjectParams struct {
-	// IfMatch 项目响应 updatedAt，必须加双引号，例如 "2026-09-30T08:00:00.123456Z"
-	IfMatch MetadataVersion `json:"If-Match"`
-}
-
-// SetProjectAccessJSONBody defines parameters for SetProjectAccess.
-type SetProjectAccessJSONBody struct {
-	Paused bool `json:"paused"`
-}
-
-// SetProjectAccessParams defines parameters for SetProjectAccess.
-type SetProjectAccessParams struct {
-	// IfMatch 项目响应 updatedAt，必须加双引号，例如 "2026-09-30T08:00:00.123456Z"
-	IfMatch MetadataVersion `json:"If-Match"`
-}
-
-// ListProjectChangesParams defines parameters for ListProjectChanges.
-type ListProjectChangesParams struct {
-	DeploymentId string `form:"deploymentId" json:"deploymentId"`
-
-	// BaseId 基线版本，首次发布时省略
-	BaseId *string `form:"baseId,omitempty" json:"baseId,omitempty"`
-}
-
-// UpdateProjectMultipartBody defines parameters for UpdateProject.
-type UpdateProjectMultipartBody struct {
-	File openapi_types.File `json:"file"`
-}
-
-// UpdateProjectParams defines parameters for UpdateProject.
-type UpdateProjectParams struct {
-	// IfMatch 当前部署 ID，必须带双引号，例如 "dep-00000000-0000-0000-0000-000000000000"
-	IfMatch DeploymentVersion `json:"If-Match"`
-}
-
-// DiscardDraftParams defines parameters for DiscardDraft.
-type DiscardDraftParams struct {
-	DraftId string `form:"draftId" json:"draftId"`
-}
-
-// PublishDraftJSONBody defines parameters for PublishDraft.
-type PublishDraftJSONBody struct {
-	DraftId string `json:"draftId"`
-
-	// ExpectedId 当前正式版编号，首次发布使用空字符串
-	ExpectedId string `json:"expectedId"`
-}
-
-// ExportProjectParams defines parameters for ExportProject.
-type ExportProjectParams struct {
-	DeploymentId string `form:"deploymentId" json:"deploymentId"`
-}
-
-// ListProjectFilesParams defines parameters for ListProjectFiles.
-type ListProjectFilesParams struct {
-	DeploymentId string `form:"deploymentId" json:"deploymentId"`
-}
-
-// RollbackProjectParams defines parameters for RollbackProject.
-type RollbackProjectParams struct {
-	// IfMatch 当前部署 ID，必须带双引号，例如 "dep-00000000-0000-0000-0000-000000000000"
-	IfMatch DeploymentVersion `json:"If-Match"`
-}
-
-// AppendUploadParams defines parameters for AppendUpload.
-type AppendUploadParams struct {
-	UploadOffset int64 `json:"Upload-Offset"`
-}
-
-// RequestLoginCodeJSONRequestBody defines body for RequestLoginCode for application/json ContentType.
-type RequestLoginCodeJSONRequestBody = EmailRequest
-
-// VerifyLoginCodeJSONRequestBody defines body for VerifyLoginCode for application/json ContentType.
-type VerifyLoginCodeJSONRequestBody = VerifyCodeRequest
-
-// CreateProjectMultipartRequestBody defines body for CreateProject for multipart/form-data ContentType.
-type CreateProjectMultipartRequestBody CreateProjectMultipartBody
-
-// EditProjectJSONRequestBody defines body for EditProject for application/json ContentType.
-type EditProjectJSONRequestBody = EditProjectRequest
-
-// SetProjectAccessJSONRequestBody defines body for SetProjectAccess for application/json ContentType.
-type SetProjectAccessJSONRequestBody SetProjectAccessJSONBody
-
-// UpdateProjectMultipartRequestBody defines body for UpdateProject for multipart/form-data ContentType.
-type UpdateProjectMultipartRequestBody UpdateProjectMultipartBody
-
-// PublishDraftJSONRequestBody defines body for PublishDraft for application/json ContentType.
-type PublishDraftJSONRequestBody PublishDraftJSONBody
-
-// CreateUploadJSONRequestBody defines body for CreateUpload for application/json ContentType.
-type CreateUploadJSONRequestBody = UploadRequest
-
-// AddUserJSONRequestBody defines body for AddUser for application/json ContentType.
-type AddUserJSONRequestBody = AddUserRequest

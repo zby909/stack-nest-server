@@ -144,30 +144,6 @@ func (e ContainerAppStatus) Valid() bool {
 	}
 }
 
-// Defines values for OperateAppJSONBodyAction.
-const (
-	OperateAppJSONBodyActionDelete  OperateAppJSONBodyAction = "delete"
-	OperateAppJSONBodyActionRestart OperateAppJSONBodyAction = "restart"
-	OperateAppJSONBodyActionStart   OperateAppJSONBodyAction = "start"
-	OperateAppJSONBodyActionStop    OperateAppJSONBodyAction = "stop"
-)
-
-// Valid indicates whether the value is a known member of the OperateAppJSONBodyAction enum.
-func (e OperateAppJSONBodyAction) Valid() bool {
-	switch e {
-	case OperateAppJSONBodyActionDelete:
-		return true
-	case OperateAppJSONBodyActionRestart:
-		return true
-	case OperateAppJSONBodyActionStart:
-		return true
-	case OperateAppJSONBodyActionStop:
-		return true
-	default:
-		return false
-	}
-}
-
 // AppDetail defines model for AppDetail.
 type AppDetail struct {
 	App       ContainerApp `json:"app"`
@@ -215,6 +191,9 @@ type AppInput struct {
 
 	// Env 最多 64 个变量，总体积 16 KiB
 	Env *map[string]string `json:"env,omitempty"`
+
+	// EnvPatch 仅更新时使用；字符串设置值（允许空字符串），null 删除，未出现的键保留。不能与 replaceEnv=true 或非空 env 同用；合并后仍受环境变量配额限制。
+	EnvPatch *map[string]*string `json:"envPatch,omitempty"`
 
 	// Generation 更新时必填，采用上次查询的代次
 	Generation *int64 `json:"generation,omitempty"`
@@ -338,21 +317,3 @@ type ContainerApp struct {
 
 // ContainerAppStatus defines model for ContainerApp.Status.
 type ContainerAppStatus string
-
-// OperateAppJSONBody defines parameters for OperateApp.
-type OperateAppJSONBody struct {
-	Action     OperateAppJSONBodyAction `json:"action"`
-	Generation int64                    `json:"generation"`
-}
-
-// OperateAppJSONBodyAction defines parameters for OperateApp.
-type OperateAppJSONBodyAction string
-
-// CreateAppJSONRequestBody defines body for CreateApp for application/json ContentType.
-type CreateAppJSONRequestBody = AppInput
-
-// UpdateAppJSONRequestBody defines body for UpdateApp for application/json ContentType.
-type UpdateAppJSONRequestBody = AppInput
-
-// OperateAppJSONRequestBody defines body for OperateApp for application/json ContentType.
-type OperateAppJSONRequestBody OperateAppJSONBody

@@ -20,6 +20,9 @@ func probeSMTP(ctx context.Context, cfg config.Config) error {
 		return err
 	}
 	defer conn.Close()
+	// stopClose 在浏览器取消诊断后立即打断 SMTP 读写。
+	stopClose := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stopClose()
 	deadline, _ := ctx.Deadline()
 	_ = conn.SetDeadline(deadline)
 	client, err := smtp.NewClient(conn, cfg.SMTPHost)

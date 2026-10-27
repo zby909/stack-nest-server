@@ -3,3 +3,6 @@ package: generated
 output: ../internal/generated/server.gen.go
 generate:
   std-http-server: true
+
+import-mapping:
+  ./components.yaml: "-"

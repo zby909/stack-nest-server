@@ -81,6 +81,9 @@ func (s *Service) Save(ctx context.Context, id string, actor Actor, input Input,
 	create := id == ""
 	var a App
 	if create {
+		if input.EnvPatch != nil {
+			return a, invalid("新应用请使用完整环境变量配置")
+		}
 		a.ID = uuid.NewString()
 		a.Slug = strings.TrimSpace(input.Slug)
 		a.OwnerID = actor.ID
@@ -97,7 +100,15 @@ func (s *Service) Save(ctx context.Context, id string, actor Actor, input Input,
 		if err != nil {
 			return a, err
 		}
-		if !input.ReplaceEnv {
+		if input.EnvPatch != nil {
+			if input.ReplaceEnv || len(input.Env) != 0 {
+				return a, invalid("逐项修改与整体替换环境变量不能同时使用")
+			}
+			input.Env, err = patchEnvironment(previous.Env, input.EnvPatch)
+			if err != nil {
+				return a, err
+			}
+		} else if !input.ReplaceEnv {
 			input.Env = previous.Env
 		}
 		if !input.ClearRegistry && input.Registry == nil && registryHost(input.Image) == registryHost(previous.Image) {

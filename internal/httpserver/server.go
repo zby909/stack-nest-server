@@ -12,6 +12,7 @@ import (
 	"stacknest/server/internal/activity"
 	"stacknest/server/internal/auth"
 	"stacknest/server/internal/containerapp"
+	"stacknest/server/internal/doctor"
 	"stacknest/server/internal/generated"
 	"stacknest/server/internal/project"
 	"stacknest/server/internal/resumable"
@@ -31,6 +32,7 @@ type Config struct {
 	InvitationLoginURL  string
 	MaxUploadSize       int64
 	Storage             *storage.Guard
+	Inspect             func(context.Context) doctor.Report
 	CheckDatabase       func(context.Context) error
 	ReadSystem          func(context.Context) (systeminfo.Usage, error)
 	Activity            *activity.Store
@@ -58,15 +60,16 @@ type ProjectService interface {
 
 // Server 是 StackNest 的 HTTP 传输层。
 type Server struct {
-	uploads  *resumable.Store
-	chunkMu  sync.Mutex
-	config   Config
-	projects ProjectService
-	auth     *auth.Service
-	limiter  *loginLimiter
-	http     *http.Server
-	uploadMu sync.Mutex
-	exportMu sync.Mutex
+	uploads      *resumable.Store
+	chunkMu      sync.Mutex
+	config       Config
+	projects     ProjectService
+	auth         *auth.Service
+	limiter      *loginLimiter
+	http         *http.Server
+	uploadMu     sync.Mutex
+	exportMu     sync.Mutex
+	diagnosticMu sync.Mutex
 }
 
 var _ generated.ServerInterface = (*Server)(nil)
@@ -92,6 +95,8 @@ func New(config Config, projects ProjectService, authService *auth.Service) *Ser
 
 	mux := http.NewServeMux()
 	generated.HandlerFromMux(server, mux)
+	mux.HandleFunc("GET /api/version", server.GetVersion)
+	mux.HandleFunc("POST /api/system/diagnostics", server.RunDiagnostics)
 	mux.HandleFunc("PUT /api/users/{id}/role", server.ChangeUserRole)
 	mux.HandleFunc("GET /api/apps/limits", server.GetAppLimits)
 	mux.HandleFunc("PUT /api/apps/limits", server.UpdateAppLimits)

@@ -1,0 +1,474 @@
+openapi: 3.1.0
+info:
+  title: StackNest API models
+  version: 0.10.0
+paths: {}
+components:
+  securitySchemes:
+    SecureSessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-stacknest_session
+      description: HTTPS 登录设置的 Secure、HttpOnly、SameSite=Strict 主机会话 Cookie，Path=/ 且不设置 Domain；HTTPS 不接受旧名称。
+    SessionCookie:
+      type: apiKey
+      in: cookie
+      name: stacknest_session
+      description: 仅用于本地 HTTP 开发或 SSH 入口的 HttpOnly 会话 Cookie；公网使用 HTTPS 和 SecureSessionCookie。
+  parameters:
+    MetadataVersion:
+      name: If-Match
+      in: header
+      required: true
+      schema: {type: string}
+      description: 项目响应 updatedAt，必须加双引号，例如 "2026-09-30T08:00:00.123456Z"
+    DeploymentVersion:
+      name: If-Match
+      in: header
+      required: true
+      schema:
+        type: string
+      description: 当前部署 ID，必须带双引号，例如 "dep-00000000-0000-0000-0000-000000000000"
+    ProjectSlug:
+      name: slug
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[a-z0-9](?:[a-z0-9-]{0,50}[a-z0-9])?$'
+        maxLength: 52
+  schemas:
+    AppInput:
+      type: object
+      additionalProperties: false
+      required: [name, image, port, memoryMiB, cpus]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100}
+        slug: {type: string, maxLength: 32, description: 创建时必填；之后不可修改}
+        image: {type: string, maxLength: 256, description: Linux amd64 仓库镜像地址，可使用标签或摘要}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        memoryMiB: {type: integer, minimum: 64, maximum: 1024}
+        cpus: {type: number, minimum: 0.1, maximum: 1}
+        dataPath: {type: string, description: 可选的单个容器内持久化目录}
+        healthPath: {type: string, maxLength: 256, description: 可选 HTTP 路径，例如 /health；60 秒内返回 2xx 才就绪，留空仅检查端口}
+        env: {type: object, additionalProperties: {type: string}, description: 最多 64 个变量，总体积 16 KiB}
+        replaceEnv: {type: boolean, default: false, description: 编辑时默认保留；设为 true 后整体替换}
+        envPatch:
+          type: object
+          maxProperties: 64
+          writeOnly: true
+          additionalProperties: {type: [string, "null"]}
+          description: 仅更新时使用；字符串设置值（允许空字符串），null 删除，未出现的键保留。不能与 replaceEnv=true 或非空 env 同用；合并后仍受环境变量配额限制。
+        registry:
+          type: object
+          required: [username, password]
+          properties:
+            username: {type: string}
+            password: {type: string, writeOnly: true}
+        clearRegistry: {type: boolean, default: false}
+        generation: {type: integer, format: int64, description: 更新时必填，采用上次查询的代次}
+    ContainerApp:
+      type: object
+      required: [id, ownerId, ownerEmail, name, slug, image, port, memoryMiB, cpus, dataPath, envKeys, hasRegistry, generation, status, createdAt, updatedAt, url]
+      properties:
+        id: {type: string}
+        ownerId: {type: string}
+        ownerEmail: {type: string}
+        name: {type: string}
+        slug: {type: string}
+        image: {type: string}
+        port: {type: integer}
+        memoryMiB: {type: integer}
+        cpus: {type: number}
+        dataPath: {type: string}
+        healthPath: {type: string}
+        envKeys: {type: array, items: {type: string}}
+        hasRegistry: {type: boolean}
+        generation: {type: integer, format: int64}
+        status: {type: string, enum: [pending, deploying, ready, stopped, error]}
+        action: {type: string}
+        error: {type: string}
+        imageId: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        url: {type: string}
+    AppRuntime:
+      type: object
+      required: [state, containerId, imageId, oomKilled, exitCode]
+      properties:
+        state: {type: string}
+        containerId: {type: string}
+        imageId: {type: string}
+        oomKilled: {type: boolean}
+        exitCode: {type: integer}
+        health: {type: string, enum: [healthy, unhealthy, stopped], description: 查询时探测，不自动重启应用}
+        healthCheck: {type: string, enum: [tcp, http]}
+        usage: {$ref: '#/components/schemas/AppUsage'}
+        disk: {$ref: '#/components/schemas/AppDiskUsage'}
+    AppDiskArea:
+      type: object
+      required: [source]
+      description: 用量缺失表示未知；XFS 使用实际分配块，docker-estimate 是逻辑文件大小估计，不能当作硬配额计量
+      properties:
+        usedBytes: {type: integer, format: int64, minimum: 0}
+        limitBytes: {type: integer, format: int64, minimum: 0}
+        usedInodes: {type: integer, format: int64, minimum: 0}
+        limitInodes: {type: integer, format: int64, minimum: 0}
+        source: {type: string, enum: [xfs, docker-estimate, quota-disabled, unavailable]}
+    AppDiskUsage:
+      type: object
+      required: [writable, sampledAt]
+      description: 最多每分钟采样一次，首次采样可能省略；不包含镜像共享层、容器日志与临时内存盘
+      properties:
+        writable: {$ref: '#/components/schemas/AppDiskArea'}
+        persistent: {$ref: '#/components/schemas/AppDiskArea'}
+        sampledAt: {type: string, format: date-time}
+    AppUsage:
+      type: object
+      required: [memoryBytes, memoryLimitBytes, pids, sampledAt]
+      properties:
+        cpuPercent: {type: number, minimum: 0, description: 100% 表示一个 CPU 核心；采样不足时省略}
+        memoryBytes: {type: integer, format: int64, minimum: 0, description: Linux 内存用量，扣除非活跃文件缓存}
+        memoryLimitBytes: {type: integer, format: int64, minimum: 0}
+        pids: {type: integer, format: int64, minimum: 0, description: 进程和线程总数}
+        sampledAt: {type: string, format: date-time}
+    AppView:
+      type: object
+      required: [app]
+      properties:
+        app: {$ref: '#/components/schemas/ContainerApp'}
+        runtime: {$ref: '#/components/schemas/AppRuntime'}
+        progress: {$ref: '#/components/schemas/AppProgress'}
+    AppProgress:
+      type: object
+      required: [generation, stage, updatedAt]
+      description: 当前代次的瞬时快照，刷新页面仍可查询；运行器重启后由持久化队列重试，历史快照不作为日志保存
+      properties:
+        generation: {type: integer, format: int64}
+        stage: {type: string, enum: [queued, preparing, pulling, verifying, creating, stopping, starting, healthchecking, cleaning, restoring, deleting, completed, failed]}
+        failedStage: {type: string}
+        downloadedBytes: {type: integer, format: int64, minimum: 0}
+        totalBytes: {type: integer, format: int64, minimum: 0, description: 当前已发现镜像层的下载总量，可能随新层发现变化，不是整个部署进度}
+        updatedAt: {type: string, format: date-time}
+    AppDetail:
+      allOf:
+        - {$ref: '#/components/schemas/AppView'}
+        - type: object
+          required: [available, limits]
+          properties:
+            available: {type: boolean}
+            limits:
+              type: object
+              required: [maxApps, totalMemoryMiB, maxMemoryMiB]
+              properties:
+                maxApps: {type: integer}
+                totalMemoryMiB: {type: integer}
+                maxMemoryMiB: {type: integer}
+    AppList:
+      type: object
+      required: [apps, available, limits]
+      properties:
+        apps: {type: array, items: {$ref: '#/components/schemas/AppView'}}
+        available: {type: boolean}
+        limits:
+          type: object
+          required: [maxApps, totalMemoryMiB, maxMemoryMiB]
+          properties:
+            maxApps: {type: integer}
+            totalMemoryMiB: {type: integer}
+            maxMemoryMiB: {type: integer}
+    UploadRequest:
+      type: object
+      additionalProperties: false
+      required: [id, kind, fileName, size, sha256]
+      properties:
+        id: {type: string, description: 客户端 UUID 幂等键，重试必须保持不变}
+        kind: {type: string, enum: [create, update]}
+        preview: {type: boolean, default: false, description: 为 true 时只创建待发布版，不改变正式站点；旧客户端默认直接发布}
+        notes: {type: string, maxLength: 4096, description: 更新说明，UTF-8 最多 4096 字节}
+        name: {type: string, maxLength: 256}
+        description: {type: string, maxLength: 4096}
+        slug: {type: string, maxLength: 52}
+        expectedId: {type: string, description: 更新必须携带页面当前部署编号}
+        fileName: {type: string, maxLength: 255}
+        size: {type: integer, format: int64, minimum: 1, maximum: 94371840}
+        sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+    FileChange:
+      type: object
+      required: [path, kind, beforeBytes, afterBytes]
+      properties:
+        path: {type: string}
+        kind: {type: string, enum: [added, modified, deleted]}
+        beforeBytes: {type: integer, format: int64}
+        afterBytes: {type: integer, format: int64}
+    UploadStatus:
+      type: object
+      required: [id, offset, size, chunkSize, expiresAt, completed]
+      properties:
+        id: {type: string}
+        offset: {type: integer, format: int64}
+        size: {type: integer, format: int64}
+        chunkSize: {type: integer, format: int64, description: 单片最大字节数；未提供 minChunkSize 时按固定分片大小处理}
+        minChunkSize: {type: integer, format: int64, description: 单片最小字节数，最后一片可更小；存在此字段表示支持可变分片}
+        expiresAt: {type: string, format: date-time}
+        completed: {type: boolean}
+    PublishedFile:
+      type: object
+      required: [path, bytes]
+      properties:
+        path: {type: string, description: 部署内相对路径，无服务器绝对路径}
+        bytes: {type: integer, format: int64}
+    EditProjectRequest:
+      type: object
+      additionalProperties: false
+      required: [name, description]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: 去除两端空白后不能为空，UTF-8 最多 256 字节
+        description:
+          type: string
+          description: UTF-8 最多 4096 字节；空字符串清除说明
+    BackupAttempt:
+      type: object
+      required: [startedAt, stage]
+      properties:
+        startedAt: {type: string, format: date-time}
+        finishedAt: {type: string, format: date-time}
+        stage:
+          type: string
+          enum: [initialize, stop, apps-freeze, apps-restore, database, files, verify, publish, prune, restart, completed]
+    BackupSuccess:
+      type: object
+      required: [createdAt, databaseBytes, filesBytes, totalBytes]
+      properties:
+        createdAt: {type: string, format: date-time}
+        databaseBytes: {type: integer, format: int64, minimum: 1}
+        filesBytes: {type: integer, format: int64, minimum: 1}
+        totalBytes: {type: integer, format: int64, minimum: 1}
+    BackupStatus:
+      type: object
+      required: [state, retainedCount, retainedBytes, overdue]
+      properties:
+        state:
+          type: string
+          enum: [not_configured, never, running, succeeded, failed, interrupted]
+        lastAttempt: {$ref: '#/components/schemas/BackupAttempt'}
+        lastSuccess: {$ref: '#/components/schemas/BackupSuccess'}
+        retainedCount: {type: integer, minimum: 0}
+        retainedBytes: {type: integer, format: int64, minimum: 0}
+        overdue: {type: boolean}
+    StorageStatus:
+      type: object
+      required: [uploadAllowed, reason, maxUploadBytes, maxExpandedBytes, maxFiles]
+      properties:
+        totalBytes: {type: integer, format: int64}
+        freeBytes: {type: integer, format: int64}
+        usedPercent: {type: number, format: double}
+        maxUsedPercent: {type: integer}
+        uploadAllowed: {type: boolean}
+        reason: {type: string}
+        maxUploadBytes: {type: integer, format: int64}
+        maxExpandedBytes: {type: integer, format: int64}
+        maxFiles: {type: integer}
+        reservedUploadBytes: {type: integer, format: int64}
+    SystemStatus:
+      type: object
+      required: [cpuPercent, cpuCores, memoryTotalBytes, memoryAvailableBytes, memoryUsedPercent, uptimeSeconds, diskTotalBytes, diskFreeBytes, diskUsedPercent]
+      properties:
+        cpuPercent: {type: number, format: double}
+        cpuCores: {type: integer}
+        memoryTotalBytes: {type: integer, format: int64}
+        memoryAvailableBytes: {type: integer, format: int64}
+        memoryUsedPercent: {type: number, format: double}
+        uptimeSeconds: {type: integer, format: int64}
+        diskTotalBytes: {type: integer, format: int64}
+        diskFreeBytes: {type: integer, format: int64}
+        diskUsedPercent: {type: number, format: double}
+    ActivityEvent:
+      type: object
+      required: [id, createdAt, action, actor, archiveBytes, expandedBytes, fileCount, status, message, durationMs]
+      properties:
+        id: {type: string}
+        createdAt: {type: string, format: date-time}
+        action: {type: string, enum: [upload, update, rollback, delete, edit, export, pause, resume, draft, publish, discard, app-deploy, app-start, app-stop, app-restart, app-delete, network, app-limits, user-add, user-role]}
+        actor: {type: string}
+        actorId: {type: string}
+        projectOwnerId: {type: string}
+        slug: {type: string}
+        fileName: {type: string}
+        archiveBytes: {type: integer, format: int64}
+        expandedBytes: {type: integer, format: int64}
+        fileCount: {type: integer}
+        status: {type: string, enum: [succeeded, failed]}
+        message: {type: string}
+        durationMs: {type: integer, format: int64}
+    EmailRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+    AddUserRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [user, admin]
+          default: user
+          description: 只有超管可选择 admin，省略时添加普通用户；不允许授予超管
+        sendInvitation:
+          type: boolean
+          default: false
+          description: 只有明确为 true 时才发送邀请邮件
+    InvitationStatus:
+      type: string
+      enum: [not_requested, sent, failed]
+      description: sent 仅表示 SMTP 已接受，不保证进入收件箱；failed 时邮箱仍已添加，发送结果未能确认
+    AddUserResponse:
+      allOf:
+        - $ref: '#/components/schemas/AuthUser'
+        - type: object
+          required: [invitation]
+          properties:
+            invitation:
+              $ref: '#/components/schemas/InvitationStatus'
+    VerifyCodeRequest:
+      type: object
+      required: [email, code]
+      properties:
+        email:
+          type: string
+          format: email
+        code:
+          type: string
+          pattern: '^[0-9]{8}$'
+    AuthUser:
+      type: object
+      required: [id, email, role, createdAt]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [superadmin, admin, user]
+        createdAt:
+          type: string
+          format: date-time
+    UserListResponse:
+      type: object
+      required: [users]
+      properties:
+        invitationLoginUrl:
+          type: string
+          format: uri
+          description: 已配置的固定 HTTPS 登录地址；未配置或无效时不返回，前端禁用发送邀请
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthUser'
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, unavailable]
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+    PublishedFiles:
+      type: object
+      description: 已发布普通文件的逻辑大小和文件数；不含目录、原始压缩包、数据库、日志或临时文件。
+      required: [bytes, count]
+      properties:
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        count:
+          type: integer
+          minimum: 0
+    Deployment:
+      type: object
+      required: [id, status, fileName, createdAt]
+      properties:
+        notes: {type: string}
+        previewUrl: {type: string, format: uri, description: 保留期间有效的独立版本地址；持有链接即可访问，项目暂停时关闭}
+        files:
+          description: 实时读取此版本的文件统计；缺失表示暂不可用，不能按零计算。普通用户仅能获取自己项目的数据。
+          allOf:
+            - $ref: '#/components/schemas/PublishedFiles'
+        id:
+          type: string
+        status:
+          type: string
+          enum: [succeeded, failed, draft]
+        fileName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+        error:
+          type: string
+    Project:
+      type: object
+      required: [id, ownerId, ownerEmail, name, slug, status, siteUrl, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        ownerId:
+          type: string
+        ownerEmail:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+          pattern: '^[a-z0-9](?:[a-z0-9-]{0,50}[a-z0-9])?$'
+          maxLength: 52
+        description:
+          type: string
+        status:
+          type: string
+          enum: [online, paused, draft]
+        siteUrl:
+          type: string
+          format: uri
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        draft: {$ref: "#/components/schemas/Deployment"}
+        deployments:
+          type: array
+          maxItems: 2
+          description: 当前版在前，上一版在后；回退互换两版并保留各自编号和更新说明。
+          items:
+            $ref: '#/components/schemas/Deployment'
+    ProjectListResponse:
+      type: object
+      required: [projects]
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'

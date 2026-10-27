@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -18,18 +19,19 @@ import (
 
 // uploadStatusResponse 只返回浏览器恢复所需信息，不公开内部目录和其他用户身份。
 type uploadStatusResponse struct {
-	ID        string    `json:"id"`
-	Offset    int64     `json:"offset"`
-	Size      int64     `json:"size"`
-	ChunkSize int64     `json:"chunkSize"`
-	ExpiresAt time.Time `json:"expiresAt"`
-	Completed bool      `json:"completed"`
+	ID           string    `json:"id"`
+	Offset       int64     `json:"offset"`
+	Size         int64     `json:"size"`
+	ChunkSize    int64     `json:"chunkSize"`
+	MinChunkSize int64     `json:"minChunkSize"`
+	ExpiresAt    time.Time `json:"expiresAt"`
+	Completed    bool      `json:"completed"`
 }
 
 // writeUploadStatus 返回不可缓存的已提交分片偏移。
 func writeUploadStatus(w http.ResponseWriter, code int, value resumable.Ticket) {
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, code, uploadStatusResponse{ID: value.Request.ID, Offset: value.Offset, Size: value.Request.Size, ChunkSize: resumable.ChunkSize, ExpiresAt: value.ExpiresAt, Completed: value.ResultID != ""})
+	writeJSON(w, code, uploadStatusResponse{ID: value.Request.ID, Offset: value.Offset, Size: value.Request.Size, ChunkSize: resumable.ChunkSize, MinChunkSize: resumable.MinChunkSize, ExpiresAt: value.ExpiresAt, Completed: value.ResultID != ""})
 }
 
 // CreateUpload 创建或恢复当前用户的上传会话，在接收文件前校验目标权限和版本。
@@ -121,11 +123,19 @@ func (s *Server) AppendUpload(w http.ResponseWriter, r *http.Request, id string,
 		return
 	}
 	controller := http.NewResponseController(w)
-	_ = controller.SetReadDeadline(time.Now().Add(5 * time.Minute))
+	// 缩短单片占用接收锁的时间；弱网客户端可缩小分片后继续。
+	_ = controller.SetReadDeadline(time.Now().Add(30 * time.Second))
 	defer controller.SetReadDeadline(time.Time{})
 	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, resumable.ChunkSize))
 	if err != nil {
-		s.writeUploadError(w, r, resumable.ErrInvalid)
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, generated.ErrorResponse{Error: "单个分片超过大小上限，请刷新页面后继续"})
+			return
+		}
+		slog.Warn("upload chunk interrupted", "request_id", requestID(r), "received_bytes", len(data), "expected_bytes", r.ContentLength)
+		w.Header().Set("Retry-After", "2")
+		writeJSON(w, http.StatusRequestTimeout, generated.ErrorResponse{Error: "分片传输中断或超时，已确认的上传进度仍保留"})
 		return
 	}
 	ticket, err := s.uploads.Append(r.Context(), id, s.requestUser(r).ID, params.UploadOffset, data)

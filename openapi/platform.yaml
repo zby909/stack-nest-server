@@ -1,0 +1,64 @@
+openapi: 3.0.3
+info:
+  title: StackNest platform operations API
+  version: 1.0.0
+security:
+  - SecureSessionCookie: []
+  - SessionCookie: []
+paths:
+  /api/version:
+    get:
+      operationId: GetVersion
+      summary: 管理员读取后端编译版本；没有发布元数据时为 dev / unknown
+      responses:
+        "200":
+          description: 编译时写入的版本；禁止缓存
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BuildInfo" }
+        "401": { description: 未登录 }
+        "403": { description: 需要管理员权限 }
+  /api/system/diagnostics:
+    post:
+      operationId: RunDiagnostics
+      summary: 超管手动运行只读诊断，最多 30 秒，不发送邮件或修改服务
+      description: 需要同源会话。同一实例同时至多运行一次；检查失败仍以 200 返回报告，failed 标示是否存在失败项。不会返回原始错误、密钥或连接串。
+      responses:
+        "200":
+          description: 本次诊断结果；禁止缓存
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DiagnosticReport" }
+        "401": { description: 未登录 }
+        "403": { description: 需要超管权限及可信请求来源 }
+        "409": { description: 已有诊断正在运行 }
+        "503": { description: 诊断功能未配置 }
+        "504": { description: 诊断超时或取消 }
+components:
+  securitySchemes:
+    SecureSessionCookie:
+      { type: apiKey, in: cookie, name: __Host-stacknest_session }
+    SessionCookie: { type: apiKey, in: cookie, name: stacknest_session }
+  schemas:
+    BuildInfo:
+      type: object
+      required: [version, revision]
+      properties:
+        version: { type: string }
+        revision: { type: string }
+    DiagnosticReport:
+      type: object
+      required: [checks, failed, checkedAt, durationMs]
+      properties:
+        failed: { type: boolean }
+        checkedAt: { type: string, format: date-time }
+        durationMs: { type: integer, format: int64 }
+        checks:
+          type: array
+          items:
+            type: object
+            required: [name, status, message]
+            properties:
+              name: { type: string }
+              status: { type: string, enum: [pass, warn, fail] }
+              message: { type: string }

@@ -68,10 +68,10 @@ func (r *Report) add(name, status, message string) {
 // Inspect 使用运行中的 API 相同环境配置，仅执行读取和有时限的连接检查。
 func Inspect(ctx context.Context, cfg config.Config) Report {
 	report := Report{Checks: []Check{}}
-	if len(cfg.AuthSecret) < 32 {
-		report.add("auth", "fail", "认证密钥至少需要 32 字节")
+	if auth.ValidateSecret(cfg.AuthSecret) != nil {
+		report.add("auth", "fail", "请配置至少 32 字节随机认证密钥，不能使用公开示例值")
 	} else {
-		report.add("auth", "pass", "认证密钥长度有效，内容不会输出")
+		report.add("auth", "pass", "认证密钥通过配置检查，内容不会输出")
 	}
 	task, cancel := context.WithTimeout(ctx, 5*time.Second)
 	db, err := sql.Open("pgx", cfg.DatabaseURL)

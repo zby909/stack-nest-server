@@ -99,7 +99,7 @@ func (d *Deployer) Publish(ctx context.Context, slug, fileName string, source io
 	return stats, nil
 }
 
-// saveArchive 有界保存压缩包，并在磁盘占用变化或请求取消时停止。
+// saveArchive 有界保存上传文件，并在磁盘占用变化或请求取消时停止。
 func (d *Deployer) saveArchive(ctx context.Context, source io.Reader, path string) error {
 	output, err := os.Create(path)
 	if err != nil {
@@ -114,7 +114,7 @@ func (d *Deployer) saveArchive(ctx context.Context, source io.Reader, path strin
 		return closeErr
 	}
 	if written > storage.MaxArchiveBytes {
-		return project.NewInvalidArchiveError("压缩包不能超过 90 MiB")
+		return project.NewInvalidArchiveError("上传文件不能超过 90 MiB")
 	}
 	return nil
 }

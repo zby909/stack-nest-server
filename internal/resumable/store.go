@@ -19,6 +19,7 @@ import (
 )
 
 const ChunkSize int64 = 4 << 20
+const MinChunkSize int64 = 64 << 10
 const Lifetime = 24 * time.Hour
 
 // MetadataJSONLimit 为合法元数据最多六倍的 JSON 转义及记录字段预留有界空间。
@@ -89,8 +90,7 @@ func (s *Store) Validate(input Request) error {
 	if input.FileName == "" || len(input.FileName) > 255 || strings.ContainsAny(input.FileName, "/\\\x00\r\n") {
 		return ErrInvalid
 	}
-	extension := strings.ToLower(filepath.Ext(input.FileName))
-	if extension != ".zip" && extension != ".rar" {
+	if !project.SupportedUploadFile(input.FileName) {
 		return ErrInvalid
 	}
 	switch input.Kind {
@@ -188,7 +188,8 @@ func (s *Store) Append(ctx context.Context, id, owner string, offset int64, data
 	if ticket.ResultID != "" || ticket.Offset != offset || offset >= ticket.Request.Size {
 		return ticket, ErrConflict
 	}
-	if int64(len(data)) != min(ChunkSize, ticket.Request.Size-offset) {
+	remaining := ticket.Request.Size - offset
+	if int64(len(data)) < min(MinChunkSize, remaining) || int64(len(data)) > min(ChunkSize, remaining) {
 		return ticket, ErrInvalid
 	}
 	if err := ctx.Err(); err != nil {

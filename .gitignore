@@ -10,6 +10,9 @@ __pycache__/
 /stacknest.exe
 /stacknest-egress
 /stacknest-egress.exe
+/stacknest-setup
+/stacknest-setup.exe
+/deploy/smoke-http/smoke-http
 *.key
 pem.txt
 *.log

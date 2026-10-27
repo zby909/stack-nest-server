@@ -44,7 +44,7 @@ class PackageReleaseTests(unittest.TestCase):
 
     # build 生成真实压缩包，并返回包内文件供行为断言。
     def build(self, output="out"):
-        archive = package_release.package_release(self.source, self.base / output, self.manifest, self.binary)
+        archive = package_release.package_release(self.source, self.base / output, self.manifest, self.binary, self.binary)
         with tarfile.open(archive) as package:
             files = {member.name: package.extractfile(member).read() for member in package.getmembers()}
         return archive, files
@@ -52,7 +52,7 @@ class PackageReleaseTests(unittest.TestCase):
     # test_public_contents 校验白名单、每个文件的校验和、镜像摘要及来源记录。
     def test_public_contents(self):
         archive, files = self.build()
-        expected = set(package_release.FILES) | {".env.compose.example", "README.md", "bin/stacknest-egress", "release.json", "SHA256SUMS"}
+        expected = set(package_release.FILES) | {".env.compose.example", "README.md", "bin/stacknest-egress", "bin/stacknest-setup", "release.json", "SHA256SUMS"}
         self.assertEqual(set(files), {"server/" + name for name in expected})
         self.assertFalse(any(b"DO_NOT_SHIP_LOCAL_SECRET" in value for value in files.values()))
         self.assertEqual(json.loads(files["server/release.json"]), self.manifest)
@@ -108,6 +108,7 @@ class PackageReleaseTests(unittest.TestCase):
             target.write_bytes(value)
         folder = unpacked / "server"
         env = {key: value for key, value in os.environ.items() if not key.startswith(("STACKNEST_", "COMPOSE_"))}
+        env["STACKNEST_AUTH_SECRET"] = "package-test-only-not-for-real-use-" + "a" * 32
         for entry in ("tls", "cloudflare", "ssh", "tunnel-public"):
             command = [DOCKER, "compose", "--env-file", ".env.compose.example", "-p", "package-check",
                        "-f", "compose.release.yaml", "-f", "compose." + entry + ".yaml",

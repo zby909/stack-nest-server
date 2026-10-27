@@ -72,9 +72,12 @@ type Service struct {
 	bootstrapAdminEmail string
 }
 
-// NewService 创建认证服务并检查密钥长度。
+// NewService 创建认证服务并拒绝未配置或公开示例密钥。
 func NewService(store Store, mailer Mailer, secret string) (*Service, error) {
-	if store == nil || mailer == nil || len(secret) < 32 {
+	if err := ValidateSecret(secret); err != nil {
+		return nil, err
+	}
+	if store == nil || mailer == nil {
 		return nil, errors.New("auth store, mailer and a 32-byte secret are required")
 	}
 	return &Service{store: store, mailer: mailer, secret: []byte(secret), now: time.Now}, nil

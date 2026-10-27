@@ -22,3 +22,6 @@ stacknest.exe
 *.key
 stacknest-egress
 stacknest-egress.exe
+stacknest-setup
+stacknest-setup.exe
+/deploy/smoke-http/smoke-http

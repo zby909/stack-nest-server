@@ -11,7 +11,7 @@ import (
 	"stacknest/server/internal/storage"
 )
 
-// prepareSite 在私有临时目录完成限额检查、解压和入口校验，不触碰在线站点。
+// prepareSite 在私有临时目录完成限额检查、文件准备和入口校验，不触碰在线站点。
 func (d *Deployer) prepareSite(ctx context.Context, fileName string, source io.Reader) (root, tempDir string, stats project.PublishedFiles, resultErr error) {
 	if err := d.config.Guard.Check(storage.MaxArchiveBytes + d.config.MaxBytes + (32 << 20)); err != nil {
 		return "", "", stats, err
@@ -38,7 +38,7 @@ func (d *Deployer) prepareSite(ctx context.Context, fileName string, source io.R
 	}
 	releaseDir := filepath.Join(tempDir, "release")
 	if err := extractArchiveGuarded(ctx, d.config.Guard, archivePath, fileName, releaseDir, d.config.MaxFiles, d.config.MaxBytes); err != nil {
-		return "", tempDir, stats, fmt.Errorf("压缩包解压失败: %w", err)
+		return "", tempDir, stats, fmt.Errorf("项目文件处理失败: %w", err)
 	}
 	root, err = detectSiteRoot(releaseDir)
 	if err != nil {

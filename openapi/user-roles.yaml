@@ -28,7 +28,7 @@ paths:
           description: 角色已变更，返回更新后的用户
           content:
             application/json:
-              schema: {$ref: './openapi.yaml#/components/schemas/AuthUser'}
+              schema: {$ref: './components.yaml#/components/schemas/AuthUser'}
         '400': {description: 非法角色、没有变化、非法用户 ID 或请求体}
         '401': {description: 未登录}
         '403': {description: 非超管、受保护账户或非同源请求}

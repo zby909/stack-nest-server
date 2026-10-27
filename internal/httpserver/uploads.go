@@ -36,7 +36,7 @@ func (s *Server) receiveUpload(w http.ResponseWriter, r *http.Request, event *ac
 	r.Body = http.MaxBytesReader(w, r.Body, s.config.MaxUploadSize+(1<<20))
 	reader, err := r.MultipartReader()
 	if err != nil {
-		return nil, project.NewInvalidArchiveError("请使用包含 ZIP 或 RAR 的上传表单")
+		return nil, project.NewInvalidArchiveError("请使用包含 ZIP、RAR 或 HTML 的上传表单")
 	}
 	tempRoot := filepath.Join(s.config.Storage.Dir, "tmp")
 	if err := os.MkdirAll(tempRoot, 0o755); err != nil {
@@ -72,9 +72,8 @@ func (s *Server) receiveUpload(w http.ResponseWriter, r *http.Request, event *ac
 		if name == "file" {
 			fileName := filepath.Base(strings.ReplaceAll(part.FileName(), "\\", "/"))
 			event.FileName = fileName
-			extension := strings.ToLower(filepath.Ext(fileName))
-			if extension != ".zip" && extension != ".rar" {
-				return nil, project.NewInvalidArchiveError("仅支持 ZIP 或 RAR 静态项目")
+			if !project.SupportedUploadFile(fileName) {
+				return nil, project.NewInvalidArchiveError("仅支持 ZIP、RAR 或单个 HTML 静态项目")
 			}
 			upload.file, err = os.Create(filepath.Join(directory, "archive"))
 			if err != nil {
@@ -124,7 +123,7 @@ func (s *Server) receiveUpload(w http.ResponseWriter, r *http.Request, event *ac
 		}
 	}
 	if upload.file == nil {
-		return nil, project.NewInvalidArchiveError("请选择 ZIP 或 RAR 文件")
+		return nil, project.NewInvalidArchiveError("请选择 ZIP、RAR 或 HTML 文件")
 	}
 	return upload, nil
 }

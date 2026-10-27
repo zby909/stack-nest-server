@@ -91,7 +91,7 @@ func (d *Deployer) StageRevision(ctx context.Context, input project.RevisionInpu
 		r.stats = stats
 	} else {
 		if input.Source == nil {
-			return nil, project.NewInvalidArchiveError("请选择 ZIP 或 RAR 文件")
+			return nil, project.NewInvalidArchiveError("请选择 ZIP、RAR 或 HTML 文件")
 		}
 		prepared, tempDir, stats, err := d.prepareSite(ctx, input.FileName, input.Source)
 		if err != nil {
