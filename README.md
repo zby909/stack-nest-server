@@ -1,49 +1,82 @@
-# StackNest
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/stacknest-banner-dark.svg">
+    <img src="docs/images/stacknest-banner.svg" alt="StackNest — Your projects. Your server." width="1280">
+  </picture>
 
-在自己的服务器上管理静态站点和 Docker 应用。
+  <p><strong>静态站点与 Docker 应用，一个轻量的部署控制台。</strong></p>
+  <p>为个人开发者和小团队准备，在自己的服务器上部署、预览和管理项目。</p>
 
-面向个人开发者和小团队：上传、预览、发布、查看日志，以及换机迁移。
+  <p>
+    <a href="docs/INSTALL_RELEASE.md"><strong>开始部署 →</strong></a> ·
+    <a href="https://github.com/zby909/stack-nest-server/releases">下载版本</a> ·
+    <a href="docs/README.md">文档</a> ·
+    <a href="https://github.com/zby909/stack-nest-web">Web 仓库</a>
+  </p>
 
-[开始部署](docs/INSTALL_RELEASE.md) · [下载版本](https://github.com/zby909/stack-nest-server/releases) · [文档](docs/README.md) · [Web 仓库](https://github.com/zby909/stack-nest-web)
+  <p>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-2563eb?style=flat-square" alt="Apache-2.0 license"></a>
+    <a href="docs/INSTALL_RELEASE.md"><img src="https://img.shields.io/badge/deploy-Docker_Compose-2496ed?style=flat-square&amp;logo=docker&amp;logoColor=white" alt="Deploy with Docker Compose"></a>
+    <a href="go.mod"><img src="https://img.shields.io/badge/backend-Go-00add8?style=flat-square&amp;logo=go&amp;logoColor=white" alt="Built with Go"></a>
+    <a href="https://github.com/zby909/stack-nest-server/actions/workflows/check.yml"><img src="https://github.com/zby909/stack-nest-server/actions/workflows/check.yml/badge.svg" alt="Server checks"></a>
+  </p>
+</div>
 
-![StackNest 管理界面](https://raw.githubusercontent.com/zby909/stack-nest-web/main/docs/images/projects-desktop.png)
+## 一个地方，管理两种项目
 
-## 功能
+| 📄 静态站点 | 🐳 Docker 应用 | 🛠️ 日常管理 |
+| --- | --- | --- |
+| 上传单个 HTML、ZIP 或 RAR<br>断点续传，独立预览与确认发布<br>保留当前版与上一版，可随时回退 | 填写已有镜像地址，部署 HTTP 服务<br>配置环境变量与持久化数据目录<br>查看日志、资源用量，执行启停和重启 | 邮箱验证码登录与成员权限<br>操作日志、服务器状态与诊断<br>备份、恢复，以及整套实例迁移 |
 
-- **静态站点**：单 HTML / ZIP / RAR、断点续传、独立预览、确认发布和上一版回退。
-- **Docker 应用**：镜像部署、环境变量、数据目录、启停和运行日志。
-- **成员管理**：邮箱验证码登录，用户、管理员和超级管理员权限。
-- **资源管理**：CPU、内存和上传容量限制，可选磁盘硬配额与局域网保护。
-- **运维**：操作日志、服务器状态、备份和完整迁移。
-- **界面**：手机布局、明暗主题。
+支持手机布局和明暗主题。CPU、内存与上传容量均有限制；磁盘硬配额及局域网保护按部署环境启用。
 
-成员管理保护后台操作权限；站点、应用和预览地址默认公开。
+> 成员权限保护后台操作；静态站点、Docker 应用和独立预览地址默认公开。
 
-## 部署
+## 看看界面
 
-推荐使用 [Docker 版本部署包](docs/INSTALL_RELEASE.md)：
+**上传 → 预览 → 发布。** 静态项目集中管理，版本与空间占用一目了然。
 
-1. 从 Releases 下载部署包和校验文件。
-2. 填写域名、管理员邮箱及 SMTP 配置，准备 HTTPS 证书。
-3. 执行 `docker compose pull` 和 `docker compose up -d --wait`。
+![StackNest 静态项目管理界面，展示项目列表、发布状态和存储用量](https://raw.githubusercontent.com/zby909/stack-nest-web/main/docs/images/projects-desktop.png)
 
-部署完成后，上传 [最小示例站点](examples/README.md)体验预览与发布。
+**让应用运行起来。** Docker 应用的健康状态、资源用量和管理操作放在同一张卡片中。
 
-支持 Linux amd64，需 Docker Compose 2.24.4+、至少 2 GiB 内存。部署包含 Compose 和配置模板，无需在服务器编译代码。
+![StackNest Docker 应用管理界面，展示健康检查、CPU、内存和磁盘用量](https://raw.githubusercontent.com/zby909/stack-nest-web/main/docs/images/docker-desktop.png)
 
-没有公网 IP 的家用电脑，使用 [Cloudflare Tunnel 教程](docs/HOME_SERVER_TUNNEL.md)。
+<details>
+  <summary><strong>📱 手机布局 · 🌙 深色主题与平台诊断</strong></summary>
+  <br>
+  <p align="center"><img src="https://raw.githubusercontent.com/zby909/stack-nest-web/main/docs/images/projects-mobile.png" alt="手机上的项目列表" width="320"></p>
+  <img src="https://raw.githubusercontent.com/zby909/stack-nest-web/main/docs/images/system-desktop.png" alt="深色主题下的服务器状态与平台诊断">
+</details>
 
-## 开发
+<sub>以上为实际界面截图，使用虚构的演示数据。</sub>
 
-后端使用 Go、PostgreSQL、Ent 和 Atlas；管理端使用 React、TypeScript、Vite 和 Tailwind CSS。
+## 在自己的服务器上运行
 
-- [本地开发与测试](docs/DEVELOPMENT.md)
-- [从源码构建部署](docs/GETTING_STARTED.md)
-- [架构与工作原理](docs/ARCHITECTURE.md)
-- [发布版本](docs/RELEASING.md)
+推荐使用 [Docker 版本部署包](docs/INSTALL_RELEASE.md)，服务器无需安装 Go 或 Node.js。
 
-问题和建议请提交 [Issue](https://github.com/zby909/stack-nest-server/issues)。[参与贡献](CONTRIBUTING.md)
+1. **下载**：从 [Releases](https://github.com/zby909/stack-nest-server/releases) 获取部署包与校验文件。
+2. **配置**：准备域名、SMTP 邮箱和 HTTPS 证书，按安装教程填写配置。
+3. **启动**：运行 `docker compose pull` 和 `docker compose up -d --wait --wait-timeout 120`。
 
-## 许可
+支持 **Linux amd64**，需要 Docker Compose **2.24.4+**、至少 **2 GiB 内存**。安装完成后，可上传 [最小示例站点](examples/README.md)体验完整发布流程。
+
+🏠 没有公网 IP？另有 [家用电脑 + Cloudflare Tunnel 教程](docs/HOME_SERVER_TUNNEL.md)。
+
+## 按需阅读
+
+| 想做什么 | 从这里开始 |
+| --- | --- |
+| 使用平台、部署 Docker 应用 | [使用指南](docs/USAGE.md) · [Docker 应用](docs/DOCKER_APPS.md) |
+| 备份、升级或换服务器 | [日常运维](docs/OPERATIONS.md) · [迁移](docs/MIGRATION.md) |
+| 了解组件怎样协作 | [架构与工作原理](docs/ARCHITECTURE.md) |
+| 修改代码或参与开发 | [开发与测试](docs/DEVELOPMENT.md) · [Web 仓库](https://github.com/zby909/stack-nest-web) |
+| 从源码部署或发布版本 | [源码部署](docs/GETTING_STARTED.md) · [版本发布](docs/RELEASING.md) |
+
+后端使用 **Go · PostgreSQL · Ent · Atlas**；管理界面使用 **React · TypeScript · Vite · Tailwind CSS**。
+
+## 参与与许可
+
+欢迎通过 [Issue](https://github.com/zby909/stack-nest-server/issues)反馈问题和使用场景。提交改动前请阅读 [贡献指南](CONTRIBUTING.md)。
 
 Copyright 2026 zby909 and StackNest contributors. 使用 [Apache-2.0](LICENSE) 许可，第三方内容保留原许可，见 [NOTICE](NOTICE)。
