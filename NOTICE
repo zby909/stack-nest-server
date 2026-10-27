@@ -1,0 +1,10 @@
+StackNest
+Copyright 2026 zby909 and StackNest contributors
+
+Licensed under the Apache License, Version 2.0.
+See LICENSE for the full terms.
+
+Third-party dependencies retain their respective licenses.
+The adapted Moby seccomp profile retains its license in
+internal/dockerrunner/seccomp-LICENSE and its source attribution
+in internal/dockerrunner/dataquota.go.

@@ -47,10 +47,10 @@ Docker / containerd 应通过 `RequiresMountsFor=/data` 等待挂载，并核对
 ```dotenv
 STACKNEST_DOCKER_STORAGE_DIR=/data/docker
 STACKNEST_APP_DATA_LIMIT_MIB=1024
-COMPOSE_FILE=compose.yaml:compose.tls.yaml:compose.quota.yaml
+COMPOSE_FILE=compose.release.yaml:compose.tls.yaml:compose.quota.yaml
 ```
 
-SSH / Tunnel 使用对应入口替换 TLS；预构建模式替换基础文件。然后执行部署更新和自检：
+SSH / Tunnel 使用对应入口替换 TLS；源码部署将基础文件换为 compose.yaml。然后执行部署更新和自检：
 
 ```bash
 docker compose up -d
