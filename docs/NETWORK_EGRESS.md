@@ -52,7 +52,7 @@ docker compose exec -T stacknest /usr/local/bin/stacknest doctor
 Docker 网络的 internal 属性不能原地修改。首次启用或停用联网模式，需要在维护窗口重建本实例应用：
 
 1. 备份，停止 API，用旧 Runner 的 `apps-freeze` 冻结运行应用。
-2. 核对实例标签，移除对应应用容器及私有网络，保留镜像、数据库和 `apps/{UUID}/data`。
+2. 冻结成功后停止并移除旧 Runner 容器；它也连接着应用网络。核对实例标签，移除对应应用容器，确认网络没有剩余连接后再移除私有网络；保留镜像、数据库和 `apps/{UUID}/data`，不删除命名卷。
 3. 更新宿主保护与 Compose，启动 Runner。
 4. 执行 `apps-thaw`，验证数据、停启状态和配额，再启动 API。
 

@@ -53,13 +53,13 @@
 
 ## 在自己的服务器上运行
 
-推荐使用 [Docker 版本部署包](docs/INSTALL_RELEASE.md)，服务器无需安装 Go 或 Node.js。
+推荐使用 [Docker 版本部署包](docs/INSTALL_RELEASE.md)，服务器无需安装 Go 或 Node.js。安装以所下载版本的包内 README 为准。
 
 1. **下载**：从 [Releases](https://github.com/zby909/stack-nest-server/releases) 获取部署包与校验文件。
 2. **配置**：准备域名、SMTP 邮箱和 HTTPS 证书，按安装教程填写配置。
 3. **启动**：运行 `docker compose pull` 和 `docker compose up -d --wait --wait-timeout 120`。
 
-支持 **Linux amd64**，需要 Docker Compose **2.24.4+**、至少 **2 GiB 内存**。安装完成后，可上传 [最小示例站点](examples/README.md)体验完整发布流程。
+支持 **Linux amd64**，需要 Docker Engine **26+**、Compose **2.24.4+**、至少 **2 GiB 内存**；可选应用联网保护需要 Engine **28+**。安装完成后，可上传 [最小示例站点](examples/README.md)体验完整发布流程。
 
 🏠 没有公网 IP？另有 [家用电脑 + Cloudflare Tunnel 教程](docs/HOME_SERVER_TUNNEL.md)。
 

@@ -2,13 +2,15 @@
 
 使用已构建镜像安装 StackNest。Compose 会启动整套平台，服务器无需安装 Go 或 Node.js。[工作原理](https://github.com/zby909/stack-nest-server/blob/main/docs/ARCHITECTURE.md)另有说明。
 
-准备 Linux amd64、Docker Engine、Compose **2.24.4+**、至少 2 GiB 内存，以及域名、SMTP 邮箱和 HTTPS 证书。Docker 安装见 [官方说明](https://docs.docker.com/engine/install/ubuntu/)。
+准备 Linux amd64、Docker Engine **26+**、Compose **2.24.4+**、至少 2 GiB 内存，以及域名、SMTP 邮箱和 HTTPS 证书。启用可选应用联网保护需要 Engine **28+**。Docker 安装见 [官方说明](https://docs.docker.com/engine/install/ubuntu/)。
 
 没有公网 IP？完成第 1、2 步，再接 [家用电脑教程](https://github.com/zby909/stack-nest-server/blob/main/docs/HOME_SERVER_TUNNEL.md)。
 
 ## 1. 下载
 
 从 [Releases](https://github.com/zby909/stack-nest-server/releases) 下载同一版本的 `stacknest-…-linux-amd64.tar.gz` 和 `.sha256`。GitHub 的 Source code 压缩包是源码。
+
+部署包、镜像和文档使用同一版本。旧包按包内 README 操作，主分支展示的新增功能不一定包含在旧版本中；预发布版本的限制见其 Release 说明。
 
 在新目录执行，将 `vX.Y.Z` 换成实际版本：
 
@@ -21,6 +23,8 @@ sha256sum -c SHA256SUMS
 
 ## 2. 配置
 
+包内有 `bin/stacknest-setup` 时，在当前 `server/` 目录运行：
+
 ```bash
 ./bin/stacknest-setup
 ```
@@ -29,15 +33,19 @@ sha256sum -c SHA256SUMS
 
 镜像摘要、版本和默认入口会保留。需要手动配置或修改入口时，查看 [配置参考](https://github.com/zby909/stack-nest-server/blob/main/docs/DEPLOYMENT.md)。
 
+旧包没有向导时，复制 `.env.compose.example` 为 `.env`、设为 `chmod 600 .env`，再按 [手动配置](https://github.com/zby909/stack-nest-server/blob/main/docs/DEPLOYMENT.md#环境变量)填写域名、SMTP、随机密码和认证密钥，保留包内的镜像摘要。
+
+用 `docker info --format '{{.DockerRootDir}}'` 查看 Docker 存储目录；若不是 `/var/lib/docker`，将实际路径填写到 `.env` 的 `STACKNEST_DOCKER_STORAGE_DIR`。
+
 ## 3. 域名与证书
 
 将管理域名和 `*.example.com` 解析到服务器，开放入站 TCP 80、443。
 
-准备覆盖这些域名的完整证书链与私钥：
+在当前部署目录创建 `cert/`，放入覆盖这些域名的完整证书链与私钥：
 
 ```text
-server/cert/certificate.pem
-server/cert/private.key
+cert/certificate.pem
+cert/private.key
 ```
 
 ```bash

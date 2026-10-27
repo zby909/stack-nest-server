@@ -9,6 +9,8 @@
 - 目标有足够空间，目标目录与同名容器、数据卷尚不存在。
 - 已启用的 [配额](STORAGE_QUOTAS.md)和 [联网保护](NETWORK_EGRESS.md)先在目标准备。
 
+磁盘挂载、Docker daemon 配置、宿主联网服务和备份定时器不随业务包自动安装。导入前核对目标局域网、VPN、Docker 地址池与包内平台网段不重叠。
+
 迁移包含密码和私钥，私有保存并通过 SSH / SCP 传输。以下示例使用 `stacknest` 项目名和 root SSH，按实际用户、路径替换。
 
 ## 1. 导出
@@ -34,8 +36,12 @@
 在旧服务器：
 
 ```bash
-scp -r /opt/stacknest/migration-final root@NEW_SERVER_IP:/root/
+sudo scp -r /opt/stacknest/migration-final root@NEW_SERVER_IP:/root/
 ```
+
+导出目录归 root 所有、权限 0700，因此普通账户传输时使用 sudo。目标 SSH 用户和端口按实际情况调整。
+
+若包内启用了联网保护，**导入前**先用包内 `deploy/stacknest-egress` 安装服务并检查就绪。目标 LAN 配置按新机器确定，具体见 [应用联网](NETWORK_EGRESS.md)。
 
 在新服务器：
 
@@ -43,8 +49,6 @@ scp -r /opt/stacknest/migration-final root@NEW_SERVER_IP:/root/
 sudo python3 /root/migration-final/deploy/migrate_host.py import \
   /root/migration-final /opt/stacknest-migrated --project stacknest
 ```
-
-若包内启用了联网保护，导入前先用包内 `deploy/stacknest-egress` 安装服务并检查就绪。目标 LAN 配置按新机器确定，具体见 [应用联网](NETWORK_EGRESS.md)。
 
 成功显示 import_complete，仅开放回环预览。失败时保留数据排查，重试使用新的目标目录和项目名。
 
@@ -69,7 +73,7 @@ sudo python3 /opt/stacknest-migrated/deploy/migrate_host.py activate \
   /opt/stacknest-migrated --project stacknest
 ```
 
-普通 HTTPS 切换 DNS 并检查证书。Tunnel 另配置目标 cloudflared 后切换连接器，Token 不随业务包迁移。
+普通 HTTPS 切换 DNS 并检查证书。Tunnel 另配置目标 cloudflared 后切换连接器，Token 不随业务包迁移；只安装连接器，沿用已恢复的平台，不要再运行一套首次安装流程。
 
 新实例稳定后再处理旧服务器。新实例尚未产生写入时，可在旧实例执行 Runner 的 apps-thaw、恢复 API 和备份定时器；新实例已有写入后，先迁回最新数据再回切。
 

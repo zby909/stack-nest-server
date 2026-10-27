@@ -27,6 +27,7 @@ docker compose exec -T stacknest /usr/local/bin/stacknest doctor
 | 应用访问失败     | 失败阶段、健康检查、内存与运行日志      |
 | CSS 未更新       | Cloudflare 尊重源站标头并清理旧缓存     |
 | API 重建后 502   | 重启 Nginx，重新解析后端地址            |
+| 虚拟机重启后 502 | 本机入口、容器内部接口和网段是否重叠；见 [Hyper-V 排查](HOME_SERVER_TUNNEL.md#hyper-v-网段冲突) |
 
 提交问题时提供请求编号和脱敏日志，不附密码或完整配置。
 
@@ -72,16 +73,16 @@ full edit 中将 ExecStart 的脚本路径改为实际 server 目录。先确认
 
 ## 升级
 
-1. 在旁边解压并校验新部署包，阅读版本说明。
-2. 保留原项目名、密码、认证密钥、证书和自定义覆盖。
-3. 同步新 Compose 与 deploy 文件，对照模板整组更新三个 IMAGE 及版本，合并新增配置。
-4. 执行 `docker compose config --quiet`、`docker compose pull`，确认成功后备份。
+1. 已启用备份定时器时先暂停，等待正在执行的备份结束。在**原配置、原镜像**下执行上面的备份步骤，并另外保存原 `.env`、配置快照及证书。
+2. 在旁边解压并校验新部署包，阅读版本说明；保留原项目名、密码、认证密钥、证书和自定义覆盖。
+3. 同步新 Compose 与 deploy 文件，对照模板整组更新三个 IMAGE 及版本，合并新增配置。不要用新包的 `.env` 覆盖旧密钥。
+4. 执行 `docker compose config --quiet` 和 `docker compose pull`，确认新配置与镜像准备完成。
 5. 在维护窗口执行：
 
 ```bash
 (
   set -euo pipefail
-  docker compose stop nginx stacknest runner
+  docker compose stop -t 35 nginx stacknest runner
   docker compose rm -f migrate
   docker compose up -d --wait --wait-timeout 120
   docker compose exec -T nginx nginx -t
@@ -91,7 +92,9 @@ full edit 中将 ExecStart 的脚本路径改为实际 server 目录。先确认
 
 仅改版本号不会更新固定摘要。源码部署先 build；私有 compose.json 实例直接更新被实际使用的配置。
 
-不删除数据卷。迁移失败保持 API 停止，排查后再启动。升级后核对登录、项目和应用，并更新备份配置快照。已配置定时器时，修改配置前暂停，完成后恢复。
+不删除数据卷。迁移失败保持 API 停止，排查后再启动；切回旧镜像不会自动撤销数据库迁移。
+
+升级后核对登录、项目和应用。使用 `.env` 部署的实例重新执行 `python3 deploy/resolve_compose.py compose.resolved.json` 更新备份快照，再恢复定时器；使用私有 Compose 文件时继续沿用实际配置和同样的解析参数。
 
 ## 数据与日志
 

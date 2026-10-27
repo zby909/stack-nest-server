@@ -18,9 +18,9 @@
   stacknest_backup_dir=/实际备份目录
   (cd "$stacknest_backup_dir" && sha256sum -c SHA256SUMS)
   tar -tzf "$stacknest_backup_dir/files.tar.gz" > /dev/null
-  test "$(docker compose exec -T postgres psql -U stacknest -d stacknest -Atc 'SELECT count(*) FROM container_apps;')" = 0
   docker compose stop nginx stacknest runner
   docker compose up -d --wait postgres
+  test "$(docker compose exec -T postgres psql -U stacknest -d stacknest -Atc 'SELECT count(*) FROM container_apps;')" = 0
   docker compose exec -T postgres pg_restore -U stacknest -d stacknest \
     --clean --if-exists --no-owner --no-privileges --single-transaction \
     < "$stacknest_backup_dir/postgres.dump"

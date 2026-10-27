@@ -2,6 +2,8 @@
 
 第一次使用，从 [Docker 部署](INSTALL_RELEASE.md) 开始。
 
+仓库文档跟随 `main` 更新；安装已发布版本时，以部署包内的 README 和同名标签下的文档为准。
+
 ## 使用与部署
 
 - [Docker 部署](INSTALL_RELEASE.md) — 下载版本、配置、启动。

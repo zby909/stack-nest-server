@@ -10,6 +10,8 @@ Compose 使用部署目录的 `.env`，同名 shell 环境变量优先。[完整
 
 手动配置时，复制 `.env.compose.example` 为 `.env` 并设权限 `chmod 600 .env`；用 `openssl rand -hex 32` 生成数据库密码，`openssl rand -base64 48` 生成认证密钥，再填写下表。向导生成的文件遵循 **Compose `.env` 格式**，不要用 shell 的 `source` 加载。
 
+数据库密码同时填写到 `STACKNEST_POSTGRES_PASSWORD` 和连接串；保留原模板的入口、版本和镜像摘要。用 `docker info --format '{{.DockerRootDir}}'` 核对 Docker 实际存储路径，非默认目录需同步填写到 `STACKNEST_DOCKER_STORAGE_DIR`。
+
 | 配置                                | 说明                                             |
 | ----------------------------------- | ------------------------------------------------ |
 | `COMPOSE_PROJECT_NAME`              | 默认 `stacknest`，升级和备份保持一致             |
