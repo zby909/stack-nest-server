@@ -2,7 +2,7 @@
 
 让本机脚本、AI 或 GitHub Actions 上传 HTML / ZIP / RAR，返回预览地址；确认后再发布到原项目网址。无需 SSH、登录 Cookie 或服务器密码。
 
-本功能需要包含“自动部署”的配套后端和 Web。早期 `v1.0.0-rc.1` 不包含本功能，也没有 CLI 下载包；尚未发布新版时可按下面的方法从源码构建。
+本功能从 `v1.0.0-rc.2` 开始提供，需要配套更新后端和 Web。早期 `v1.0.0-rc.1` 不包含本功能，也没有 CLI 下载包。
 
 ## 1. 创建项目凭据
 
@@ -16,7 +16,7 @@
 
 ## 2. 准备命令行工具
 
-包含此功能的新版本会在 [Releases](https://github.com/zby909/stack-nest-server/releases) 提供 Linux、Windows、macOS 的 amd64 / arm64 CLI 与 `.sha256` 校验文件。下载匹配本机的 `stacknest-deploy-版本-系统-架构`，校验后解压即可，无需 Go 或 Docker。
+[Releases](https://github.com/zby909/stack-nest-server/releases) 已提供 Linux、Windows、macOS 的 amd64 / arm64 CLI 与 `.sha256` 校验文件。选择 `v1.0.0-rc.2` 或更新版本，下载匹配本机的 `stacknest-deploy-版本-系统-架构`，校验后解压即可，无需 Go 或 Docker。
 
 从源码构建则在 `server/` 执行（Go 版本见 `go.mod`）：
 
@@ -100,7 +100,7 @@ export STACKNEST_URL=https://stack-nest.example.com
 | 类型 | 名称 | 内容 |
 | --- | --- | --- |
 | Variable | `STACKNEST_URL` | 管理端 HTTPS 地址 |
-| Variable | `STACKNEST_CLI_VERSION` | 包含 CLI 下载包的确切版本号 |
+| Variable | `STACKNEST_CLI_VERSION` | 包含 CLI 下载包的确切版本号，例如 `v1.0.0-rc.2` |
 | Secret | `STACKNEST_DEPLOY_TOKEN` | 本项目的部署 Token |
 
 将示例中的 `site.html` 改成实际文件。Vite 等项目需要在上传前增加自己的构建步骤，再把 `dist` **目录内的内容**打包成 ZIP；平台不代为构建源码。
