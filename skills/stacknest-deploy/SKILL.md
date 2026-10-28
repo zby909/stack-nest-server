@@ -1,6 +1,6 @@
 ---
 name: stacknest-deploy
-description: "通过 StackNest CLI 将 HTML、HTM、ZIP 或 RAR 上传到已有静态项目，生成预览、续传失败的上传、查询版本或发布指定草稿。用户要求把生成的 HTML 或静态网站部署到 StackNest 时使用；不用于 Docker 应用部署或安装 StackNest 平台。"
+description: "引导首次配置 StackNest 部署客户端，将 HTML、HTM、ZIP 或 RAR 上传到已有静态项目，生成预览、续传失败的上传、查询版本或发布指定草稿。用户要求配置本 Skill 或把 HTML、静态网站部署到 StackNest 时使用；不用于 Docker 应用部署或安装 StackNest 平台。"
 ---
 
 # StackNest 部署
@@ -15,13 +15,25 @@ description: "通过 StackNest CLI 将 HTML、HTM、ZIP 或 RAR 上传到已有�
 - “发布刚才那个预览”：使用该次上传回执中的 `draftId`、`expectedId`，不要重新上传文件或盲目发布最新草稿。没有回执且无法确定用户指定的版本时，先澄清目标。
 - 查询项目或版本时执行 `status`，不产生上传或发布。
 
-## 准备目标和文件
+## 首次配置或配置失效
 
-1. 读取 [本机配置](references/local-config.md)。本次用户指定优先；其次使用用户项目中明确的配置，再使用本机默认值。明确 CLI 路径、管理端 URL、项目对应的 Token 文件路径或已注入的 `STACKNEST_DEPLOY_TOKEN`。缺少信息时只询问缺少的项，不搜索其他项目的凭据。
-2. 使用 `version` / `--help` 确认 CLI 可执行。需要 `v1.0.0-rc.2` 或更新的兼容版本。CLI 缺失时按用户的环境获取匹配系统和架构的 [发布包](https://github.com/zby909/stack-nest-server/releases)，校验配套 SHA-256 后使用。
-3. 凭据通过 `--token-file` 或已有环境变量传入，让 CLI 读取。不要输出 Token、把它拼进命令行或存入 Skill、源码、Git 和聊天。远程地址使用 HTTPS；HTTP 仅用于本机回环隧道。
-4. 用同一份配置执行 `status`，核对返回的项目 `id` / `slug` 与用户意图一致。一个 Token 仅绑定一个已有项目。新项目或新 Token 要由用户在后台创建，不能借用其他项目的凭据。
-5. 确认上传的是用户指定的成品。支持 HTML / HTM / ZIP / RAR，单文件不超过 90 MiB。单个 HTML 名称不限，会作为 `index.html`；依赖本地 CSS、JS、图片时应将相关资源连同 `index.html` 打包。前端源码项目须先执行它自身的构建步骤，再打包输出目录内容；不把源码、`.env`、凭据或整个工作目录打包。
+首次使用时由 AI 引导配置，不要求用户先手动编辑 Markdown。已配置的项目直接复用有效设置，只询问缺失或失效的项。
+
+1. 读取 [本机配置](references/local-config.md)。优先级为本次用户指定、用户项目的明确配置、本机默认值。也可使用已提供的 `STACKNEST_URL` 和 `STACKNEST_DEPLOY_TOKEN`；检查凭据环境变量是否存在即可，不打印其值。不搜索其他项目的凭据。
+2. 检查已配置的 CLI 路径；缺失或已失效时，先在 PATH 中查找 `stacknest-deploy` / `stacknest-deploy.exe`，不要遍历整台电脑。使用 `version` / `--help` 确认可执行，需要 `v1.0.0-rc.2` 或更新的兼容版本。
+3. 将仍缺少的信息合并为一次简短询问。下面是完整缺省时的示例；实际删去已知项：
+
+   > 首次连接 StackNest，请提供管理端完整地址、这次要部署的项目及其 Token 文件路径。CLI 如果已经安装，请提供路径；尚未安装可以回复“帮我安装”。只需要凭据文件路径，不要发送 Token 内容。
+
+4. 用户需要协助安装 CLI 时，识别当前系统和 CPU 架构，从 [发布页](https://github.com/zby909/stack-nest-server/releases) 选择兼容版本，校验配套 SHA-256，解压到用户可写的本地工具目录，记录绝对路径，不强制修改系统 PATH 或覆盖已有工具。用户尚未创建 Token 时，引导其在“项目详情 → 设置 → 自动部署”创建并保存到仓库外文件；需要正式发布时勾选相应权限。未拿到对应配置前可以准备文件，不能上传到猜测的目标。
+5. 凭据通过 `--token-file` 或已有环境变量传入，让 CLI 读取。不要输出 Token、把它拼进命令行或存入 Skill、源码、Git 和聊天。远程地址使用 HTTPS；HTTP 仅用于本机回环隧道。执行 `status`，核对返回的项目 `id` / `slug` 与用户意图一致。一个 Token 仅绑定一个已有项目；新项目要由用户在后台创建。
+6. 验证通过后，默认在用户私有安装副本的 `references/local-config.md` 记住 CLI 路径、管理端 URL，以及按管理端和项目 ID 区分的项目名称、Token 文件路径或“使用环境变量”。只保存路径及身份信息，不保存 Token 原文；告诉用户保存位置。保留其他项目配置，不能把一个项目的 Token 当作所有项目的默认值。用户要求仅本次使用时不保存。Skill 位于受 Git 跟踪的目录或只读目录时，使用用户另行指定的私有配置位置；没有此位置则仅本次使用并说明，不改共享模板，也不阻断已经授权的部署。
+
+换电脑后路径不存在、Token 到期或被撤销时，只修复对应配置，不让用户重填全部信息。仅要求配置 Skill 时，以 `status` 验证成功作为完成条件，不自动上传或发布。
+
+## 准备文件
+
+确认上传的是用户指定的成品。支持 HTML / HTM / ZIP / RAR，单文件不超过 90 MiB。单个 HTML 名称不限，会作为 `index.html`；依赖本地 CSS、JS、图片时应将相关资源连同 `index.html` 打包。前端源码项目须先执行它自身的构建步骤，再打包输出目录内容；不把源码、`.env`、凭据或整个工作目录打包。
 
 本 Skill 只处理现有静态项目的部署；创建、删除、回退、丢弃草稿、管理 Token 和 Docker 应用仍走平台对应功能。
 

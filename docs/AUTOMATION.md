@@ -117,12 +117,14 @@ GitHub 托管 Runner 必须能访问管理端地址。模板不在 Pull Request 
 
 之后可以直接说“改完行程，给我一个新预览”。
 
-也可以使用仓库附带的 [stacknest-deploy Skill](../skills/stacknest-deploy/SKILL.md)。将 `skills/stacknest-deploy` 整个目录复制到你的 AI 工具支持的 Skill 目录；Codex 默认使用 `~/.codex/skills/`（配置了 `CODEX_HOME` 时使用其中的 `skills/`）。在安装后的 `references/local-config.md` 记录 CLI 路径和管理端地址，项目 Token 仍单独保存，只提供文件路径。重新加载 Skill 后可以这样说：
+也可以使用仓库附带的 [stacknest-deploy Skill](../skills/stacknest-deploy/SKILL.md)。将 `skills/stacknest-deploy` 整个目录复制到你的 AI 工具支持的 Skill 目录；Codex 默认使用 `~/.codex/skills/`（配置了 `CODEX_HOME` 时使用其中的 `skills/`）。首次使用时，AI 会先检查现有配置和 PATH，只询问缺少的管理端地址、CLI 路径、目标项目与 Token 文件路径；未安装 CLI 可以让它协助下载。不需要先手动编辑配置文件。重新加载 Skill 后可以这样说：
 
 ```text
 使用 $stacknest-deploy 上传当前 HTML，给我预览。
 使用 $stacknest-deploy 将当前 HTML 直接发布到我指定的项目，返回正式链接。
 ```
+
+连接验证通过后，AI 会在私有安装副本的 `references/local-config.md` 记住路径、地址和项目对应关系，后续复用；不保存 Token 原文，也不修改仓库里的通用模板。换电脑或凭据过期时只补充失效项。可以要求仅本次使用、不保存配置。
 
 Skill 默认生成预览；明确要求正式上线时，会使用本次上传返回的版本编号发布，不重复询问。已有其他草稿或版本冲突时停止。它复用 CLI，不需要另外安装上传脚本。
 
