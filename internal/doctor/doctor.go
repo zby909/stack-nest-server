@@ -82,7 +82,7 @@ func Inspect(ctx context.Context, cfg config.Config) Report {
 		report.add("database", "fail", "无法连接数据库，请检查数据库地址、凭据和服务状态")
 	} else {
 		var valid bool
-		err = db.QueryRowContext(task, `SELECT to_regclass('auth_users') IS NOT NULL AND to_regclass('projects') IS NOT NULL AND to_regclass('container_apps') IS NOT NULL AND to_regclass('app_limits') IS NOT NULL`).Scan(&valid)
+		err = db.QueryRowContext(task, `SELECT to_regclass('auth_users') IS NOT NULL AND to_regclass('projects') IS NOT NULL AND to_regclass('container_apps') IS NOT NULL AND to_regclass('app_limits') IS NOT NULL AND to_regclass('deploy_tokens') IS NOT NULL`).Scan(&valid)
 		if err != nil || !valid {
 			report.add("schema", "fail", "缺少必要数据库表，请先执行迁移")
 		} else {

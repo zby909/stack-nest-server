@@ -111,8 +111,9 @@ type Store interface {
 
 // Actor 是执行项目操作的已认证用户。
 type Actor struct {
-	ID      string
-	IsAdmin bool
+	ID        string
+	IsAdmin   bool
+	ProjectID string // 部署凭据绑定不可变项目 ID，阻止同名项目删除重建后复用。
 }
 
 // Publisher 定义静态项目文件的发布能力。

@@ -1,0 +1,223 @@
+openapi: 3.0.3
+info:
+  title: StackNest static deployment automation
+  version: 1.0.0
+  description: >-
+    Static projects only. Remote requests require HTTPS (loopback HTTP is allowed for SSH forwarding).
+    Bearer authentication is only accepted under /api/deploy/v1/ and never grants management API access.
+    Every response is no-store. Token expiry, project ownership and creator permissions are checked per request.
+security:
+  - DeployToken: []
+paths:
+  /api/deploy/v1/project:
+    get:
+      summary: Get the single project bound to the Token
+      responses:
+        '200':
+          description: Project with current/previous deployments, optional draft and preview URLs
+          content:
+            application/json:
+              schema: { $ref: './components.yaml#/components/schemas/Project' }
+        '401': { description: Invalid, expired, revoked or no longer authorized Token }
+  /api/deploy/v1/uploads:
+    post:
+      summary: Create or resume an idempotent upload, always as a preview
+      description: >-
+        id is a client-generated canonical UUID. kind must be update, slug must match the Token,
+        preview must be true and expectedId must match the current version (empty before first publication).
+        Repeating the same id and metadata resumes the same upload. Different Tokens and browser sessions cannot share uploads.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Upload' }
+      responses:
+        '201': { $ref: '#/components/responses/UploadStatus' }
+        '400': { description: Invalid metadata, filename, checksum or size }
+        '403': { description: Attempt to upload to another project or directly publish }
+        '409': { description: Existing draft, version conflict or changed upload metadata }
+        '429': { description: Upload limit reached }
+        '507': { description: Insufficient disk space }
+  /api/deploy/v1/uploads/{id}:
+    parameters:
+      - $ref: '#/components/parameters/UploadID'
+    get:
+      summary: Query confirmed offset
+      responses:
+        '200': { $ref: '#/components/responses/UploadStatus' }
+        '404': { description: Not found, expired or belongs to another credential }
+    patch:
+      summary: Append one binary chunk at the confirmed offset
+      parameters:
+        - in: header
+          name: Upload-Offset
+          required: true
+          schema: { type: integer, format: int64, minimum: 0 }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        '200': { $ref: '#/components/responses/UploadStatus' }
+        '400': { description: Invalid offset or chunk (64 KiB minimum except final chunk) }
+        '408': { description: Incomplete chunk or read timeout; query confirmed offset before retry }
+        '409': { description: Offset conflict; query confirmed offset before retry }
+        '413': { description: Chunk exceeds 4 MiB }
+        '429': { description: Another chunk is being received; bounded retry allowed }
+    delete:
+      summary: Abandon this credential's temporary upload without deleting published versions
+      responses:
+        '204': { description: Deleted or already absent }
+  /api/deploy/v1/uploads/{id}/complete:
+    parameters:
+      - $ref: '#/components/parameters/UploadID'
+    post:
+      summary: Verify SHA-256 and create preview using a fixed deployment ID
+      description: Safe to repeat after response loss. Already started processing may continue after disconnection or Token revocation.
+      responses:
+        '200':
+          description: Project; verify the returned draft/current ID equals dep-{upload-id}
+          content:
+            application/json:
+              schema: { $ref: './components.yaml#/components/schemas/Project' }
+        '409': { description: Incomplete upload, another draft exists or baseline changed }
+        '422': { description: Checksum mismatch }
+        '429': { description: Another completion is processing }
+  /api/deploy/v1/publish:
+    post:
+      summary: Explicitly publish one exact draft; requires canPublish
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [draftId, expectedId]
+              properties:
+                draftId: { type: string }
+                expectedId: { type: string, description: Current production version, or empty before first publication }
+      responses:
+        '200':
+          description: Project after publication; repeating the current version is idempotent
+          content:
+            application/json:
+              schema: { $ref: './components.yaml#/components/schemas/Project' }
+        '403': { description: Preview-only Token }
+        '409': { description: Draft or current version changed }
+  /api/projects/{slug}/deploy-tokens:
+    parameters:
+      - $ref: '#/components/parameters/Slug'
+    get:
+      security: [{ SecureSessionCookie: [] }, { SessionCookie: [] }]
+      summary: Project manager lists metadata (never secret or hash)
+      responses:
+        '200':
+          description: Token metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tokens]
+                properties:
+                  tokens: { type: array, items: { $ref: '#/components/schemas/Token' } }
+    post:
+      security: [{ SecureSessionCookie: [] }, { SessionCookie: [] }]
+      summary: Project manager creates a Token with same-origin Cookie authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              additionalProperties: false
+              properties:
+                name: { type: string, minLength: 1, maxLength: 60 }
+                expiresInDays: { type: integer, minimum: 1, maximum: 365, default: 30 }
+                canPublish: { type: boolean, default: false }
+      responses:
+        '201':
+          description: Secret shown exactly once; do not log the body
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, secret]
+                properties:
+                  token: { $ref: '#/components/schemas/Token' }
+                  secret: { type: string }
+        '409': { description: Ten stored Tokens reached; revoke unused ones first }
+  /api/projects/{slug}/deploy-tokens/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Slug'
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      security: [{ SecureSessionCookie: [] }, { SessionCookie: [] }]
+      summary: Revoke a Token with same-origin Cookie authentication
+      responses:
+        '204': { description: Revoked or already absent; existing sites unchanged }
+components:
+  securitySchemes:
+    DeployToken: { type: http, scheme: bearer, bearerFormat: snd_ plus 256-bit random base64url }
+    SecureSessionCookie: { type: apiKey, in: cookie, name: __Host-stacknest_session }
+    SessionCookie: { type: apiKey, in: cookie, name: stacknest_session }
+  parameters:
+    Slug:
+      in: path
+      name: slug
+      required: true
+      schema: { type: string }
+    UploadID:
+      in: path
+      name: id
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    UploadStatus:
+      description: Confirmed upload offset; uploads expire after 24 hours
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [id, offset, size, chunkSize, minChunkSize, expiresAt, completed]
+            properties:
+              id: { type: string, format: uuid }
+              offset: { type: integer, format: int64 }
+              size: { type: integer, format: int64 }
+              chunkSize: { type: integer, example: 4194304 }
+              minChunkSize: { type: integer, example: 65536 }
+              expiresAt: { type: string, format: date-time }
+              completed: { type: boolean }
+  schemas:
+    Token:
+      type: object
+      required: [id, name, canPublish, createdAt, expiresAt, lastUsedAt, createdBy]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        canPublish: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        lastUsedAt: { type: string, format: date-time, nullable: true }
+        createdBy: { type: string, format: email }
+    Upload:
+      type: object
+      additionalProperties: false
+      required: [id, kind, slug, expectedId, preview, fileName, size, sha256]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [update] }
+        slug: { type: string }
+        expectedId: { type: string }
+        preview: { type: boolean, enum: [true] }
+        fileName: { type: string, maxLength: 255 }
+        size: { type: integer, format: int64, minimum: 1, maximum: 94371840 }
+        sha256: { type: string, pattern: '^[a-f0-9]{64}$' }
+        notes: { type: string, description: At most 4096 UTF-8 bytes }
+        name: { type: string, enum: [''] }
+        description: { type: string, enum: [''] }

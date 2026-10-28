@@ -1,0 +1,120 @@
+# 自动部署静态项目
+
+让本机脚本、AI 或 GitHub Actions 上传 HTML / ZIP / RAR，返回预览地址；确认后再发布到原项目网址。无需 SSH、登录 Cookie 或服务器密码。
+
+本功能需要包含“自动部署”的配套后端和 Web。早期 `v1.0.0-rc.1` 不包含本功能，也没有 CLI 下载包；尚未发布新版时可按下面的方法从源码构建。
+
+## 1. 创建项目凭据
+
+先在平台创建一个静态项目，然后进入 **项目详情 → 设置 → 自动部署 → 创建部署 Token**。
+
+- 默认有效期 30 天、**仅预览**。这适合让 AI 上传后由你确认。
+- 需要脚本直接上线时，勾选 **允许正式发布**；调用方仍须明确执行发布命令。
+- 原文只显示一次，保存在本机私有文件或 GitHub Secret。每个项目最多保留 10 个 Token，不用的或过期的可以撤销。
+
+一个 Token 绑定一个已有项目。它不能创建或删除项目、管理邮箱、操作 Docker 应用，也不能访问其他项目或接管其他 Token / 浏览器的上传。项目删除、Token 撤销或过期、创建者删除或失去权限后，后续请求被拒绝。项目归属与签发时不一致也会失效。已开始处理的发布可能继续完成。
+
+## 2. 准备命令行工具
+
+包含此功能的新版本会在 [Releases](https://github.com/zby909/stack-nest-server/releases) 提供 Linux、Windows、macOS 的 amd64 / arm64 CLI 与 `.sha256` 校验文件。下载匹配本机的 `stacknest-deploy-版本-系统-架构`，校验后解压即可，无需 Go 或 Docker。
+
+从源码构建则在 `server/` 执行（Go 版本见 `go.mod`）：
+
+```bash
+go build -o stacknest-deploy ./cmd/stacknest-deploy
+./stacknest-deploy --help
+```
+
+Windows 使用 `go build -o stacknest-deploy.exe ./cmd/stacknest-deploy`。
+
+## 3. 上传预览
+
+把 Token 单独保存到仓库外的文件，例如 `~/.config/stacknest/travel.token`，文件内容只有 Token。Linux / macOS 将文件权限设为 `600`；Windows 放在仅自己账号可读的目录。不要把真实 Token 复制进命令历史或聊天。
+
+**PowerShell：**
+
+```powershell
+$env:STACKNEST_URL = 'https://stack-nest.example.com'
+.\stacknest-deploy.exe upload --file '.\旅行攻略.html' --token-file "$HOME\.config\stacknest\travel.token" --notes '补充第二天行程'
+```
+
+**Bash：**
+
+```bash
+export STACKNEST_URL=https://stack-nest.example.com
+./stacknest-deploy upload --file ./旅行攻略.html --token-file "$HOME/.config/stacknest/travel.token" --notes '补充第二天行程'
+```
+
+也可通过环境变量 `STACKNEST_DEPLOY_TOKEN` 注入凭据，适合 CI 的 Secret。`--url` 可覆盖 URL 环境变量。远程连接必须使用 HTTPS；SSH 隧道可用 `http://localhost:18080`。
+
+标准输出是 JSON，进度在标准错误输出：
+
+```json
+{
+  "projectId": "prj-example",
+  "slug": "travel",
+  "draftId": "dep-new-version",
+  "expectedId": "dep-current-version",
+  "previewUrl": "https://预览地址/",
+  "siteUrl": "https://stack-nest-travel.example.com/",
+  "status": "preview"
+}
+```
+
+单个 HTML / HTM 的名称不限，会作为 `index.html` 发布；配套资源须内嵌或使用外部 URL。ZIP / RAR 的内容仍须包含 `index.html`。文件不超过 90 MiB，沿用平台原有解压和磁盘检查。
+
+**预览默认公开，持有地址即可访问。** 上传预览不会更新正式站点。项目同时只保留一个草稿；如果已有其他草稿，命令明确失败，请先在后台发布或丢弃，不会自动覆盖。
+
+## 4. 确认发布
+
+可以直接在后台“版本”页确认。使用具备发布权限的 Token 时，也可以执行：
+
+```bash
+./stacknest-deploy publish --token-file "$HOME/.config/stacknest/travel.token" --draft-id dep-new-version --expected-id dep-current-version
+```
+
+两个编号都来自上一步返回值；首次正式发布的 `expectedId` 为空时，参数填 `--expected-id none`。不要让脚本重新查询“最新草稿”后直接发布，否则可能发布到别人的新修改。
+
+版本已变化时返回 409，不覆盖新内容。重复确认同一个已正式发布的版本会返回成功。正式站点 URL 保持不变，继续保留当前版与上一版。
+
+## 断点续传与重试
+
+默认在当前目录写 `.stacknest-upload-文件标识.json`，文件名由目标、文件、参数及凭据的摘要决定。新文件自动使用新记录，只保存上传编号、文件摘要、目标、版本和 Token 指纹，不保存凭据原文。失败后使用**同一文件和同一组参数**重跑，会从服务端确认偏移继续，临时上传保留 24 小时。
+
+连续失败最多尝试四次，不会无限重试。同一续传记录的文件内容、Token 或参数改变时拒绝继续；上传过程中不要修改本地文件。成功后的状态文件作为幂等收据保留，重复运行仍确认同一次上传，不生成新版本。
+
+如果手动指定了固定的 `--state`，下一次文件更新要换一个状态文件。记录过期、版本被丢弃，或确实需要重新部署相同内容时，可以删除对应的状态文件再执行。旧收据可按需清理。不要把状态文件、Token 或本机配置提交到 Git；项目 `.gitignore` 建议加入：
+
+```gitignore
+.stacknest-upload*.json
+*.token.local
+.env.stacknest.local
+```
+
+## GitHub Actions
+
+复制 [示例工作流](../examples/github-actions/deploy-static.yml)到**你的站点源码仓库**的 `.github/workflows/deploy-static.yml`。它不是 StackNest 自身的镜像发布工作流。
+
+在该仓库的 **Settings → Secrets and variables → Actions** 配置：
+
+| 类型 | 名称 | 内容 |
+| --- | --- | --- |
+| Variable | `STACKNEST_URL` | 管理端 HTTPS 地址 |
+| Variable | `STACKNEST_CLI_VERSION` | 包含 CLI 下载包的确切版本号 |
+| Secret | `STACKNEST_DEPLOY_TOKEN` | 本项目的部署 Token |
+
+将示例中的 `site.html` 改成实际文件。Vite 等项目需要在上传前增加自己的构建步骤，再把 `dist` **目录内的内容**打包成 ZIP；平台不代为构建源码。
+
+推送 `main` 默认只上传预览，链接出现在 Actions 的运行摘要中。手动运行工作流并勾选 `publish`，才会上传并正式发布本次版本；Token 也必须有发布权限。同一工作流串行执行，不会自动覆盖已有草稿。已有预览可直接在后台确认，手动重跑工作流不会跳过这项保护。
+
+GitHub 托管 Runner 必须能访问管理端地址。模板不在 Pull Request 事件中使用部署 Secret；不要把 Secret 暴露给外部贡献者提交的代码。失败的整次工作流重跑会使用新的临时状态文件；如果上次已经生成草稿，先到后台核实，不要自动删除。
+
+## 让 AI 使用
+
+可以把下面的说明放进旅游攻略等**用户项目**的 `AGENTS.md`，只写路径和规则：
+
+> 修改完成后，调用 stacknest-deploy 上传单个 HTML 并返回预览链接。管理端地址为我的 StackNest URL，凭据从指定的私有 Token 文件读取，不输出其内容。使用默认状态文件，失败时用相同文件和参数续传。默认只生成预览，只有我明确确认某个预览后，才允许发布该确切版本。不得擅自覆盖或丢弃已有草稿。
+
+之后可以直接说“改完行程，给我一个新预览”。Skill 可以以后再封装，底层仍是同一个 CLI 和 HTTPS API。
+
+协议见 [自动部署 API](../openapi/automation.yaml)。Bearer 只在 `/api/deploy/v1/` 生效；正常管理 API 继续使用会话 Cookie 和同源校验。文件分片、校验、预览和发布复用现有业务流程，数据库只保存 Token 的 SHA-256 摘要。

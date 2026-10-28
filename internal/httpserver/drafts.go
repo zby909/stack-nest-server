@@ -32,8 +32,7 @@ func (s *Server) PublishDraft(w http.ResponseWriter, r *http.Request, slug gener
 	event := newActivity(r, "publish")
 	event.Slug = slug
 	defer s.finishActivity(r, event)
-	user := s.requestUser(r)
-	result, err := s.projects.PublishDraftAs(ctx, slug, project.Actor{ID: user.ID, IsAdmin: auth.IsAdmin(user.Role)}, *input.DraftID, *input.ExpectedID)
+	result, err := s.projects.PublishDraftAs(ctx, slug, s.deploymentActor(r), *input.DraftID, *input.ExpectedID)
 	if err != nil {
 		event.Message = s.writeProjectError(w, r, err)
 		return

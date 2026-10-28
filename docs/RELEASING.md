@@ -43,6 +43,7 @@ git push origin v1.0.0
 | `stacknest-migrate`                 | 数据库迁移              |
 | `stacknest-版本-linux-amd64.tar.gz` | Compose、模板和维护工具 |
 | 同名 `.sha256`                      | 校验文件                |
+| `stacknest-deploy-版本-系统-架构` | 独立部署 CLI，支持 Linux / Windows / macOS 的 amd64 / arm64，附校验文件 |
 
 镜像路径为 `ghcr.io/账号/stacknest-组件:版本`。部署包固定镜像摘要，不自动跟随 latest。
 

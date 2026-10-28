@@ -12,6 +12,7 @@ import (
 	"stacknest/server/internal/activity"
 	"stacknest/server/internal/auth"
 	"stacknest/server/internal/containerapp"
+	"stacknest/server/internal/deploytoken"
 	"stacknest/server/internal/doctor"
 	"stacknest/server/internal/generated"
 	"stacknest/server/internal/project"
@@ -22,6 +23,7 @@ import (
 
 // Config 定义 HTTP Server 所需配置。
 type Config struct {
+	DeployTokens        deploytoken.Store
 	Apps                *containerapp.Service
 	Network             NetworkControl
 	Addr                string
@@ -102,12 +104,15 @@ func New(config Config, projects ProjectService, authService *auth.Service) *Ser
 	mux.HandleFunc("PUT /api/apps/limits", server.UpdateAppLimits)
 	mux.HandleFunc("GET /api/network", server.GetNetwork)
 	mux.HandleFunc("PUT /api/network", server.UpdateNetwork)
+	mux.HandleFunc("GET /api/projects/{slug}/deploy-tokens", server.ListDeployTokens)
+	mux.HandleFunc("POST /api/projects/{slug}/deploy-tokens", server.CreateDeployToken)
+	mux.HandleFunc("DELETE /api/projects/{slug}/deploy-tokens/{id}", server.DeleteDeployToken)
 	mux.HandleFunc("/sites/", server.serveSite)
 	mux.HandleFunc("/", server.serveWeb)
 
 	server.http = &http.Server{
 		Addr:              config.Addr,
-		Handler:           logging(server.appBoundary(server.previewBoundary(server.protect(mux)))),
+		Handler:           logging(server.appBoundary(server.previewBoundary(server.automationBoundary(server.protect(mux))))),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	return server

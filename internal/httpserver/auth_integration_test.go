@@ -86,6 +86,7 @@ func TestEmailAuthIntegration(t *testing.T) {
 	server := New(Config{Addr: ":0", WebDir: filepath.Join(dataDir, "web"), SitesDir: filepath.Join(dataDir, "sites"), MaxUploadSize: 100 * 1024 * 1024, Activity: activityLog, CheckDatabase: store.Ping, ReadSystem: func(context.Context) (systeminfo.Usage, error) {
 		return systeminfo.Usage{CPUPercent: 12.5, CPUCores: 4, MemoryTotalBytes: 1024, MemoryAvailableBytes: 512, MemoryUsedPercent: 50, UptimeSeconds: 120}, nil
 	}}, projects, service)
+	server.config.DeployTokens = store
 	healthRequest(t, server, http.StatusOK, "ok")
 
 	// 调用带同源 Origin 的管理 API，并可选择附加会话 Cookie。
@@ -259,6 +260,7 @@ func TestEmailAuthIntegration(t *testing.T) {
 	if got := call(http.MethodDelete, "/api/projects/ordinary-site", "", otherCookie).Code; got != http.StatusNotFound {
 		t.Fatalf("second user deleted another user's project: %d", got)
 	}
+	checkTokenManagement(t, server, userCookie, otherCookie)
 	var ownEvents, otherEvents, allEvents struct {
 		Events []activity.Event `json:"events"`
 	}

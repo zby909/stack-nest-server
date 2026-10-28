@@ -9,6 +9,7 @@
 - [Docker 部署](INSTALL_RELEASE.md) — 下载版本、配置、启动。
 - [家用电脑部署](HOME_SERVER_TUNNEL.md) — 无公网 IP 时使用 Cloudflare Tunnel。
 - [静态站点与成员](USAGE.md) — 上传、预览、发布和权限。
+- [自动部署](AUTOMATION.md) — 项目 Token、命令行、AI 与 GitHub Actions。
 - [Docker 应用](DOCKER_APPS.md) — 镜像、数据目录和资源限制。
 
 ## 运维与可选配置

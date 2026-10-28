@@ -25,7 +25,7 @@ func (s *Service) RollbackAs(ctx context.Context, slug string, actor Actor, expe
 func (s *Service) revise(ctx context.Context, slug string, actor Actor, input UpdateInput, revert bool, draftID string) (CreatedProject, error) {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-	value, err := s.store.Get(ctx, slug)
+	value, err := s.GetAs(ctx, slug, actor)
 	if err != nil {
 		return CreatedProject{}, err
 	}

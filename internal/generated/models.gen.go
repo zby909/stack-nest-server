@@ -11,26 +11,28 @@ import (
 
 // Defines values for ActivityEventAction.
 const (
-	ActivityEventActionAppDelete  ActivityEventAction = "app-delete"
-	ActivityEventActionAppDeploy  ActivityEventAction = "app-deploy"
-	ActivityEventActionAppLimits  ActivityEventAction = "app-limits"
-	ActivityEventActionAppRestart ActivityEventAction = "app-restart"
-	ActivityEventActionAppStart   ActivityEventAction = "app-start"
-	ActivityEventActionAppStop    ActivityEventAction = "app-stop"
-	ActivityEventActionDelete     ActivityEventAction = "delete"
-	ActivityEventActionDiscard    ActivityEventAction = "discard"
-	ActivityEventActionDraft      ActivityEventAction = "draft"
-	ActivityEventActionEdit       ActivityEventAction = "edit"
-	ActivityEventActionExport     ActivityEventAction = "export"
-	ActivityEventActionNetwork    ActivityEventAction = "network"
-	ActivityEventActionPause      ActivityEventAction = "pause"
-	ActivityEventActionPublish    ActivityEventAction = "publish"
-	ActivityEventActionResume     ActivityEventAction = "resume"
-	ActivityEventActionRollback   ActivityEventAction = "rollback"
-	ActivityEventActionUpdate     ActivityEventAction = "update"
-	ActivityEventActionUpload     ActivityEventAction = "upload"
-	ActivityEventActionUserAdd    ActivityEventAction = "user-add"
-	ActivityEventActionUserRole   ActivityEventAction = "user-role"
+	ActivityEventActionAppDelete   ActivityEventAction = "app-delete"
+	ActivityEventActionAppDeploy   ActivityEventAction = "app-deploy"
+	ActivityEventActionAppLimits   ActivityEventAction = "app-limits"
+	ActivityEventActionAppRestart  ActivityEventAction = "app-restart"
+	ActivityEventActionAppStart    ActivityEventAction = "app-start"
+	ActivityEventActionAppStop     ActivityEventAction = "app-stop"
+	ActivityEventActionDelete      ActivityEventAction = "delete"
+	ActivityEventActionDiscard     ActivityEventAction = "discard"
+	ActivityEventActionDraft       ActivityEventAction = "draft"
+	ActivityEventActionEdit        ActivityEventAction = "edit"
+	ActivityEventActionExport      ActivityEventAction = "export"
+	ActivityEventActionNetwork     ActivityEventAction = "network"
+	ActivityEventActionPause       ActivityEventAction = "pause"
+	ActivityEventActionPublish     ActivityEventAction = "publish"
+	ActivityEventActionResume      ActivityEventAction = "resume"
+	ActivityEventActionRollback    ActivityEventAction = "rollback"
+	ActivityEventActionTokenCreate ActivityEventAction = "token-create"
+	ActivityEventActionTokenRevoke ActivityEventAction = "token-revoke"
+	ActivityEventActionUpdate      ActivityEventAction = "update"
+	ActivityEventActionUpload      ActivityEventAction = "upload"
+	ActivityEventActionUserAdd     ActivityEventAction = "user-add"
+	ActivityEventActionUserRole    ActivityEventAction = "user-role"
 )
 
 // Valid indicates whether the value is a known member of the ActivityEventAction enum.
@@ -67,6 +69,10 @@ func (e ActivityEventAction) Valid() bool {
 	case ActivityEventActionResume:
 		return true
 	case ActivityEventActionRollback:
+		return true
+	case ActivityEventActionTokenCreate:
+		return true
+	case ActivityEventActionTokenRevoke:
 		return true
 	case ActivityEventActionUpdate:
 		return true
@@ -370,6 +376,8 @@ type ActivityEvent struct {
 	ProjectOwnerId *string             `json:"projectOwnerId,omitempty"`
 	Slug           *string             `json:"slug,omitempty"`
 	Status         ActivityEventStatus `json:"status"`
+	TokenId        *string             `json:"tokenId,omitempty"`
+	TokenName      *string             `json:"tokenName,omitempty"`
 }
 
 // ActivityEventAction defines model for ActivityEvent.Action.

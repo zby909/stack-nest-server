@@ -18,6 +18,9 @@ func (s *Service) GetAs(ctx context.Context, slug string, actor Actor) (Project,
 	if !actor.IsAdmin && (actor.ID == "" || value.OwnerID != actor.ID) {
 		return Project{}, ErrNotFound
 	}
+	if actor.ProjectID != "" && value.ID != actor.ProjectID {
+		return Project{}, ErrNotFound
+	}
 	return value, nil
 }
 

@@ -138,6 +138,7 @@ func run() error {
 	inspect := func(ctx context.Context) doctor.Report { return doctor.Inspect(ctx, cfg) }
 	apps := containerapp.New(store, containerapp.NewClient(cfg.RunnerSocket), cfg.AuthSecret, guard, activityLog)
 	server := httpserver.New(httpserver.Config{
+		DeployTokens:       store,
 		Apps:               apps,
 		Network:            egress.NewClient(cfg.EgressSocket),
 		Addr:               cfg.Addr,

@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"stacknest/server/internal/auth"
 	"stacknest/server/internal/generated"
 	"stacknest/server/internal/project"
 	"stacknest/server/internal/resumable"
@@ -53,7 +52,11 @@ func (s *Server) CreateUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := s.requestUser(r)
-	if _, err := s.uploads.Get(input.ID, user.ID); errors.Is(err, resumable.ErrNotFound) {
+	if grant, ok := deploymentGrant(r); ok && (input.Kind != "update" || input.Slug != grant.Slug || !input.Preview) {
+		writeJSON(w, 403, generated.ErrorResponse{Error: "部署 Token 只能为绑定的项目上传预览"})
+		return
+	}
+	if _, err := s.uploads.Get(input.ID, s.uploadOwner(r)); errors.Is(err, resumable.ErrNotFound) {
 		target := input.Slug
 		if target == "" {
 			target = project.Slugify(input.Name)
@@ -62,6 +65,9 @@ func (s *Server) CreateUpload(w http.ResponseWriter, r *http.Request) {
 			target = "project-" + input.ID
 		}
 		value, err := s.projects.Get(r.Context(), target)
+		if grant, ok := deploymentGrant(r); ok && err == nil && (value.ID != grant.ProjectID || value.OwnerID != grant.OwnerID) {
+			err = project.ErrNotFound
+		}
 		if input.Kind == "update" {
 			if err == nil && !canManageProject(user, value) {
 				err = project.ErrNotFound
@@ -84,7 +90,7 @@ func (s *Server) CreateUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	ticket, err := s.uploads.Create(user.ID, input)
+	ticket, err := s.uploads.Create(s.uploadOwner(r), input)
 	if err != nil {
 		s.writeUploadError(w, r, err)
 		return
@@ -94,7 +100,7 @@ func (s *Server) CreateUpload(w http.ResponseWriter, r *http.Request) {
 
 // GetUpload 每次恢复先查询服务端偏移，客户端不能自行宣称已上传字节。
 func (s *Server) GetUpload(w http.ResponseWriter, r *http.Request, id string) {
-	ticket, err := s.uploads.Get(id, s.requestUser(r).ID)
+	ticket, err := s.uploads.Get(id, s.uploadOwner(r))
 	if err != nil {
 		s.writeUploadError(w, r, err)
 		return
@@ -104,7 +110,7 @@ func (s *Server) GetUpload(w http.ResponseWriter, r *http.Request, id string) {
 
 // AppendUpload 有界接收一个分片，完整收到后才推进进度，限制并发缓冲区占用。
 func (s *Server) AppendUpload(w http.ResponseWriter, r *http.Request, id string, params generated.AppendUploadParams) {
-	if _, err := s.uploads.Get(id, s.requestUser(r).ID); err != nil {
+	if _, err := s.uploads.Get(id, s.uploadOwner(r)); err != nil {
 		s.writeUploadError(w, r, err)
 		return
 	}
@@ -138,7 +144,7 @@ func (s *Server) AppendUpload(w http.ResponseWriter, r *http.Request, id string,
 		writeJSON(w, http.StatusRequestTimeout, generated.ErrorResponse{Error: "分片传输中断或超时，已确认的上传进度仍保留"})
 		return
 	}
-	ticket, err := s.uploads.Append(r.Context(), id, s.requestUser(r).ID, params.UploadOffset, data)
+	ticket, err := s.uploads.Append(r.Context(), id, s.uploadOwner(r), params.UploadOffset, data)
 	if err != nil {
 		s.writeUploadError(w, r, err)
 		return
@@ -148,7 +154,7 @@ func (s *Server) AppendUpload(w http.ResponseWriter, r *http.Request, id string,
 
 // DeleteUpload 放弃临时上传，完成过的发布不受影响。
 func (s *Server) DeleteUpload(w http.ResponseWriter, r *http.Request, id string) {
-	if err := s.uploads.Delete(id, s.requestUser(r).ID); err != nil && !errors.Is(err, resumable.ErrNotFound) {
+	if err := s.uploads.Delete(id, s.uploadOwner(r)); err != nil && !errors.Is(err, resumable.ErrNotFound) {
 		s.writeUploadError(w, r, err)
 		return
 	}
@@ -158,7 +164,7 @@ func (s *Server) DeleteUpload(w http.ResponseWriter, r *http.Request, id string)
 // CompleteUpload 使用固定部署编号确认发布结果，连接断开后仍完成已开始的事务。
 func (s *Server) CompleteUpload(w http.ResponseWriter, r *http.Request, id string) {
 	user := s.requestUser(r)
-	if _, err := s.uploads.Get(id, user.ID); err != nil {
+	if _, err := s.uploads.Get(id, s.uploadOwner(r)); err != nil {
 		s.writeUploadError(w, r, err)
 		return
 	}
@@ -170,7 +176,7 @@ func (s *Server) CompleteUpload(w http.ResponseWriter, r *http.Request, id strin
 	defer s.uploadMu.Unlock()
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Minute)
 	defer cancel()
-	ticket, err := s.uploads.Publish(ctx, id, user.ID, func(ticket resumable.Ticket, source io.Reader) (string, error) {
+	ticket, err := s.uploads.Publish(ctx, id, s.uploadOwner(r), func(ticket resumable.Ticket, source io.Reader) (string, error) {
 		input := ticket.Request
 		action := "upload"
 		if input.Kind == "update" {
@@ -185,7 +191,7 @@ func (s *Server) CompleteUpload(w http.ResponseWriter, r *http.Request, id strin
 		var result project.CreatedProject
 		var err error
 		if input.Kind == "update" {
-			result, err = s.projects.UpdateAs(ctx, ticket.TargetSlug, project.Actor{ID: user.ID, IsAdmin: auth.IsAdmin(user.Role)}, project.UpdateInput{Preview: input.Preview, Notes: input.Notes, DeploymentID: "dep-" + id, ExpectedID: input.ExpectedID, FileName: input.FileName, Source: source})
+			result, err = s.projects.UpdateAs(ctx, ticket.TargetSlug, s.deploymentActor(r), project.UpdateInput{Preview: input.Preview, Notes: input.Notes, DeploymentID: "dep-" + id, ExpectedID: input.ExpectedID, FileName: input.FileName, Source: source})
 		} else {
 			result, err = s.projects.Create(ctx, project.CreateInput{Preview: input.Preview, Notes: input.Notes, DeploymentID: "dep-" + id, OwnerID: user.ID, OwnerEmail: user.Email, Name: input.Name, Description: input.Description, Slug: ticket.TargetSlug, FileName: input.FileName, Source: source})
 		}
@@ -218,6 +224,9 @@ func (s *Server) CompleteUpload(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 	value, err := s.projects.Get(ctx, ticket.TargetSlug)
+	if grant, ok := deploymentGrant(r); ok && err == nil && (value.ID != grant.ProjectID || value.OwnerID != grant.OwnerID) {
+		err = project.ErrNotFound
+	}
 	if err == nil && (value.ID != ticket.ResultID || !canManageProject(user, value)) {
 		err = project.ErrNotFound
 	}

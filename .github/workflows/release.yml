@@ -217,6 +217,9 @@ jobs:
             --app-image "$APP_IMAGE" --web-image "$WEB_IMAGE" --migrate-image "$MIGRATE_IMAGE" \
             --egress-binary "$RUNNER_TEMP/stacknest-egress" --setup-binary "$RUNNER_TEMP/stacknest-setup" \
             --output "$RUNNER_TEMP/stacknest-release"
+      - name: Package deployment CLI for Linux, Windows and macOS
+        working-directory: server
+        run: python3 deploy/package_cli.py --version "$VERSION" --revision "$SERVER_SHA" --output "$RUNNER_TEMP/stacknest-release"
       - name: Publish the complete release
         env:
           GH_TOKEN: ${{ github.token }}

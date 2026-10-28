@@ -292,8 +292,10 @@ components:
       properties:
         id: {type: string}
         createdAt: {type: string, format: date-time}
-        action: {type: string, enum: [upload, update, rollback, delete, edit, export, pause, resume, draft, publish, discard, app-deploy, app-start, app-stop, app-restart, app-delete, network, app-limits, user-add, user-role]}
+        action: {type: string, enum: [upload, update, rollback, delete, edit, export, pause, resume, draft, publish, discard, app-deploy, app-start, app-stop, app-restart, app-delete, network, app-limits, user-add, user-role, token-create, token-revoke]}
         actor: {type: string}
+        tokenName: {type: string}
+        tokenId: {type: string}
         actorId: {type: string}
         projectOwnerId: {type: string}
         slug: {type: string}

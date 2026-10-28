@@ -16,6 +16,8 @@ const segmentLimit = 1 << 20
 
 // Event 保存可展示的操作结果；不记录请求体、验证码、Cookie 或授权码。
 type Event struct {
+	TokenName      string    `json:"tokenName,omitempty"`
+	TokenID        string    `json:"tokenId,omitempty"`
 	ID             string    `json:"id"`
 	CreatedAt      time.Time `json:"createdAt"`
 	Action         string    `json:"action"`

@@ -32,7 +32,7 @@ func (q Query) Validate() error {
 		return ErrInvalidQuery
 	}
 	switch q.Action {
-	case "", "upload", "update", "rollback", "delete", "edit", "export", "pause", "resume", "draft", "publish", "discard", "app-deploy", "app-start", "app-stop", "app-restart", "app-delete", "network", "app-limits", "user-add", "user-role":
+	case "", "upload", "update", "rollback", "delete", "edit", "export", "pause", "resume", "draft", "publish", "discard", "app-deploy", "app-start", "app-stop", "app-restart", "app-delete", "network", "app-limits", "user-add", "user-role", "token-create", "token-revoke":
 	default:
 		return ErrInvalidQuery
 	}

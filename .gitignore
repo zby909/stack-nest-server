@@ -12,6 +12,10 @@ __pycache__/
 /stacknest-egress.exe
 /stacknest-setup
 /stacknest-setup.exe
+/stacknest-deploy
+/stacknest-deploy.exe
+.stacknest-upload*.json
+*.token.local
 /deploy/smoke-http/smoke-http
 *.key
 pem.txt

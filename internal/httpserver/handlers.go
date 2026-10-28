@@ -94,7 +94,8 @@ func (s *Server) GetProject(w http.ResponseWriter, r *http.Request, slug generat
 		s.writeProjectError(w, r, err)
 		return
 	}
-	if !canManageProject(s.requestUser(r), value) {
+	grant, automation := deploymentGrant(r)
+	if !canManageProject(s.requestUser(r), value) || automation && (value.ID != grant.ProjectID || value.OwnerID != grant.OwnerID) {
 		s.writeProjectError(w, r, project.ErrNotFound)
 		return
 	}

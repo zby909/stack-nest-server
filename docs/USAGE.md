@@ -59,4 +59,4 @@
 
 **站点、应用和预览链接默认公开。** 邮箱登录保护后台管理操作。
 
-[Docker 应用](DOCKER_APPS.md) · [排障](OPERATIONS.md#状态与排障)
+[自动部署（CLI / AI / GitHub Actions）](AUTOMATION.md) · [Docker 应用](DOCKER_APPS.md) · [排障](OPERATIONS.md#状态与排障)

@@ -1,0 +1,58 @@
+name: Deploy to StackNest
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Upload and publish this version (requires a publish-enabled Token)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stacknest-static-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Install the pinned CLI
+        env:
+          CLI_VERSION: ${{ vars.STACKNEST_CLI_VERSION }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$CLI_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo 'Set STACKNEST_CLI_VERSION to a release containing the CLI'; exit 1; }
+          mkdir -p "$RUNNER_TEMP/stacknest-cli"
+          cd "$RUNNER_TEMP/stacknest-cli"
+          asset="stacknest-deploy-$CLI_VERSION-linux-amd64.tar.gz"
+          gh release download "$CLI_VERSION" --repo zby909/stack-nest-server --pattern "$asset" --pattern "$asset.sha256"
+          sha256sum --check "$asset.sha256"
+          tar -xzf "$asset"
+      # For a bundled frontend, add your build step and zip the CONTENTS of dist (index.html at its root).
+      - name: Upload preview
+        env:
+          STACKNEST_URL: ${{ vars.STACKNEST_URL }}
+          STACKNEST_DEPLOY_TOKEN: ${{ secrets.STACKNEST_DEPLOY_TOKEN }}
+        run: |
+          "$RUNNER_TEMP/stacknest-cli/stacknest-deploy" upload --file site.html \
+            --notes "GitHub commit $GITHUB_SHA" --state "$RUNNER_TEMP/upload.json" > "$RUNNER_TEMP/deployment.json"
+          preview=$(jq -r '.previewUrl' "$RUNNER_TEMP/deployment.json")
+          printf 'Preview: %s\n' "$preview" >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish the exact uploaded version
+        if: github.event_name == 'workflow_dispatch' && inputs.publish
+        env:
+          STACKNEST_URL: ${{ vars.STACKNEST_URL }}
+          STACKNEST_DEPLOY_TOKEN: ${{ secrets.STACKNEST_DEPLOY_TOKEN }}
+        run: |
+          draft=$(jq -r '.draftId' "$RUNNER_TEMP/deployment.json")
+          expected=$(jq -r 'if .expectedId == "" then "none" else .expectedId end' "$RUNNER_TEMP/deployment.json")
+          "$RUNNER_TEMP/stacknest-cli/stacknest-deploy" publish --draft-id "$draft" --expected-id "$expected"

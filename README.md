@@ -68,6 +68,7 @@
 | 想做什么 | 从这里开始 |
 | --- | --- |
 | 使用平台、部署 Docker 应用 | [使用指南](docs/USAGE.md) · [Docker 应用](docs/DOCKER_APPS.md) |
+| 用 AI 或 GitHub Actions 更新静态站点 | [项目 Token 与自动部署](docs/AUTOMATION.md) |
 | 备份、升级或换服务器 | [日常运维](docs/OPERATIONS.md) · [迁移](docs/MIGRATION.md) |
 | 了解组件怎样协作 | [架构与工作原理](docs/ARCHITECTURE.md) |
 | 修改代码或参与开发 | [开发与测试](docs/DEVELOPMENT.md) · [Web 仓库](https://github.com/zby909/stack-nest-web) |

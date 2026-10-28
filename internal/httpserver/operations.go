@@ -14,7 +14,12 @@ import (
 // newActivity 初始化只包含业务信息的操作记录。
 func newActivity(r *http.Request, action string) *activity.Event {
 	user, _ := r.Context().Value(authContextKey{}).(auth.User)
-	return &activity.Event{ID: requestID(r), CreatedAt: time.Now().UTC(), Action: action, Actor: user.Email, ActorID: user.ID, Status: "failed", Message: "请求未完成"}
+	event := &activity.Event{ID: requestID(r), CreatedAt: time.Now().UTC(), Action: action, Actor: user.Email, ActorID: user.ID, Status: "failed", Message: "请求未完成"}
+	if grant, ok := deploymentGrant(r); ok {
+		event.TokenName = grant.Name
+		event.TokenID = grant.ID
+	}
+	return event
 }
 
 // finishActivity 即使客户端断开也保存结果；日志写入失败会记录到进程日志。
