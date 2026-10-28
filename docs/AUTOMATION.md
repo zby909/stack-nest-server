@@ -117,7 +117,7 @@ GitHub 托管 Runner 必须能访问管理端地址。模板不在 Pull Request 
 
 之后可以直接说“改完行程，给我一个新预览”。
 
-也可以使用仓库附带的 [stacknest-deploy Skill](../skills/stacknest-deploy/SKILL.md)。将 `skills/stacknest-deploy` 整个目录复制到你的 AI 工具支持的 Skill 目录；Codex 默认使用 `~/.codex/skills/`（配置了 `CODEX_HOME` 时使用其中的 `skills/`）。首次使用时，AI 会先检查现有配置和 PATH，只询问缺少的管理端地址、CLI 路径、目标项目与 Token 文件路径；未安装 CLI 可以让它协助下载。不需要先手动编辑配置文件。重新加载 Skill 后可以这样说：
+也可以使用仓库附带的 [stacknest-deploy Skill](../skills/stacknest-deploy/SKILL.md)。将 `skills/stacknest-deploy` 整个目录复制到你的 AI 工具支持的 Skill 目录；Codex 默认使用 `~/.codex/skills/`（配置了 `CODEX_HOME` 时使用其中的 `skills/`）。首次使用时，AI 会先检查现有配置和 PATH，只询问缺少的管理端地址、CLI 路径和 Token 文件路径；项目由 Token 自动查询识别，不用填写项目名或 slug。未安装 CLI 可以让它协助下载。不需要先手动编辑配置文件。重新加载 Skill 后可以这样说：
 
 ```text
 使用 $stacknest-deploy 上传当前 HTML，给我预览。

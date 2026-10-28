@@ -6,8 +6,8 @@
 
 - CLI：`stacknest-deploy` / `stacknest-deploy.exe` 的可执行文件路径，或已配置的 PATH 命令。
 - 管理端：用户自己的 StackNest HTTPS 地址，也可通过 `STACKNEST_URL` 提供。
-- 项目：按管理端 URL 和项目 ID 分别记录 `slug`、Token 文件路径，或注明使用已有的 `STACKNEST_DEPLOY_TOKEN` 环境变量。不记录 Token 原文。
+- 项目：通过 `status` 自动获得 `id`、`slug`、`siteUrl`，按管理端 URL 和项目 ID 记录对应 Token 文件路径，或注明使用已有的 `STACKNEST_DEPLOY_TOKEN` 环境变量。不要求用户填写项目名或 slug，不记录 Token 原文。
 
-如果有多个站点或凭据，先明确用户要部署的目标，再调用 `status` 核对绑定项目。不要为一个新项目自动选用上次使用的 Token。已有有效配置不重复询问；换电脑后的无效路径或失效凭据只更新对应项。
+用户为本次任务提供一个 Token 时，直接调用 `status` 识别绑定项目；只有它与明确目标或已保存的项目不一致，或多个可用凭据无法选择时才询问。不要为一个新项目自动选用上次使用的 Token。已有有效配置不重复询问；换电脑后的无效路径或失效凭据只更新对应项。
 
 只修改用户私有配置，不把本机路径或项目配置写回受 Git 跟踪的通用模板。用户要求仅本次使用时不持久保存。
