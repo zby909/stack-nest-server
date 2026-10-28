@@ -67,7 +67,7 @@ export STACKNEST_URL=https://stack-nest.example.com
 
 ### 更新已有待发布版
 
-后端和 CLI 均升级至 `v1.0.0-rc.3` 或更新版本后，可明确替换某个草稿：
+后端和 CLI 均升级至 `v1.0.0-rc.4` 或更新版本后，可明确替换某个草稿：
 
 ```bash
 ./stacknest-deploy upload --file ./guide.html --token-file "$HOME/.config/stacknest/travel.token" --replace-draft dep-要替换的草稿编号 --notes '调整第二天行程'
