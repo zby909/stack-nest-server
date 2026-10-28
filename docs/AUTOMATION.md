@@ -115,6 +115,15 @@ GitHub 托管 Runner 必须能访问管理端地址。模板不在 Pull Request 
 
 > 修改完成后，调用 stacknest-deploy 上传单个 HTML 并返回预览链接。管理端地址为我的 StackNest URL，凭据从指定的私有 Token 文件读取，不输出其内容。使用默认状态文件，失败时用相同文件和参数续传。默认只生成预览，只有我明确确认某个预览后，才允许发布该确切版本。不得擅自覆盖或丢弃已有草稿。
 
-之后可以直接说“改完行程，给我一个新预览”。Skill 可以以后再封装，底层仍是同一个 CLI 和 HTTPS API。
+之后可以直接说“改完行程，给我一个新预览”。
+
+也可以使用仓库附带的 [stacknest-deploy Skill](../skills/stacknest-deploy/SKILL.md)。将 `skills/stacknest-deploy` 整个目录复制到你的 AI 工具支持的 Skill 目录；Codex 默认使用 `~/.codex/skills/`（配置了 `CODEX_HOME` 时使用其中的 `skills/`）。在安装后的 `references/local-config.md` 记录 CLI 路径和管理端地址，项目 Token 仍单独保存，只提供文件路径。重新加载 Skill 后可以这样说：
+
+```text
+使用 $stacknest-deploy 上传当前 HTML，给我预览。
+使用 $stacknest-deploy 将当前 HTML 直接发布到我指定的项目，返回正式链接。
+```
+
+Skill 默认生成预览；明确要求正式上线时，会使用本次上传返回的版本编号发布，不重复询问。已有其他草稿或版本冲突时停止。它复用 CLI，不需要另外安装上传脚本。
 
 协议见 [自动部署 API](../openapi/automation.yaml)。Bearer 只在 `/api/deploy/v1/` 生效；正常管理 API 继续使用会话 Cookie 和同源校验。文件分片、校验、预览和发布复用现有业务流程，数据库只保存 Token 的 SHA-256 摘要。

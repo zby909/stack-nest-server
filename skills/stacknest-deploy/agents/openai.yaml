@@ -1,0 +1,4 @@
+interface:
+  display_name: "StackNest 部署"
+  short_description: "通过 StackNest 上传静态项目、恢复中断上传并发布指定预览版本"
+  default_prompt: "使用 $stacknest-deploy 将我指定的 HTML 或压缩包部署到 StackNest，按我的要求生成预览或正式发布，并返回访问链接。"
