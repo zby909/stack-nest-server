@@ -9,6 +9,18 @@ info:
 security:
   - DeployToken: []
 paths:
+  /api/deploy-tools/skill:
+    get:
+      security: [{ SecureSessionCookie: [] }, { SessionCookie: [] }]
+      summary: Download the generic deployment Skill bundled with this platform version
+      description: Contains public instructions and license files only. No instance settings, project data or credentials.
+      responses:
+        '200':
+          description: ZIP containing the stacknest-deploy directory, served as an attachment with no-store
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        '401': { description: Management session required; a deployment Token cannot download this package }
   /api/deploy/v1/project:
     get:
       summary: Get the single project bound to the Token

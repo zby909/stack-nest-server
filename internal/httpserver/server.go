@@ -104,6 +104,7 @@ func New(config Config, projects ProjectService, authService *auth.Service) *Ser
 	mux.HandleFunc("PUT /api/apps/limits", server.UpdateAppLimits)
 	mux.HandleFunc("GET /api/network", server.GetNetwork)
 	mux.HandleFunc("PUT /api/network", server.UpdateNetwork)
+	mux.HandleFunc("GET /api/deploy-tools/skill", server.DownloadDeploySkill)
 	mux.HandleFunc("GET /api/projects/{slug}/deploy-tokens", server.ListDeployTokens)
 	mux.HandleFunc("POST /api/projects/{slug}/deploy-tokens", server.CreateDeployToken)
 	mux.HandleFunc("DELETE /api/projects/{slug}/deploy-tokens/{id}", server.DeleteDeployToken)
