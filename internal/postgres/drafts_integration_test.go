@@ -46,13 +46,13 @@ func TestDraftStoreIntegration(t *testing.T) {
 		current := project.CurrentID(got)
 		if i > 0 {
 			draft.ID, draft.CreatedAt, draft.FinishedAt = "dep-"+uuid.NewString(), now.Add(time.Duration(i)*time.Second), now.Add(time.Duration(i)*time.Second)
-			if err := s.SaveDraft(ctx, value.Slug, owner.ID, "stale", draft); !errors.Is(err, project.ErrVersionConflict) {
+			if err := s.SaveDraft(ctx, value.Slug, owner.ID, "stale", "", draft); !errors.Is(err, project.ErrVersionConflict) {
 				t.Fatalf("stale draft accepted: %v", err)
 			}
-			if err := s.SaveDraft(ctx, value.Slug, owner.ID, current, draft); err != nil {
+			if err := s.SaveDraft(ctx, value.Slug, owner.ID, current, "", draft); err != nil {
 				t.Fatal(err)
 			}
-			if err := s.SaveDraft(ctx, value.Slug, owner.ID, current, draft); !errors.Is(err, project.ErrDraftExists) {
+			if err := s.SaveDraft(ctx, value.Slug, owner.ID, current, "", draft); !errors.Is(err, project.ErrDraftExists) {
 				t.Fatalf("duplicate draft accepted: %v", err)
 			}
 			got, err = s.Get(ctx, value.Slug)
@@ -85,7 +85,7 @@ func TestDraftStoreIntegration(t *testing.T) {
 		t.Fatalf("rollback identity: %+v %v", got, err)
 	}
 	draft.ID, draft.CreatedAt = "dep-"+uuid.NewString(), old.CreatedAt.Add(time.Second)
-	if err := s.SaveDraft(ctx, value.Slug, owner.ID, old.ID, draft); err != nil {
+	if err := s.SaveDraft(ctx, value.Slug, owner.ID, old.ID, "", draft); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.DeleteDraft(ctx, value.Slug, "other", draft.ID); !errors.Is(err, project.ErrNotFound) {

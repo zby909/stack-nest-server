@@ -72,11 +72,8 @@ func (s *Server) CreateUpload(w http.ResponseWriter, r *http.Request) {
 			if err == nil && !canManageProject(user, value) {
 				err = project.ErrNotFound
 			}
-			if err == nil && (project.CurrentID(value) != input.ExpectedID) {
-				err = project.ErrVersionConflict
-			}
-			if err == nil && value.Draft != nil {
-				err = project.ErrDraftExists
+			if err == nil {
+				err = project.CheckDraftTarget(value, input.ExpectedID, input.ReplaceDraftID)
 			}
 		} else {
 			if err == nil {
@@ -191,7 +188,7 @@ func (s *Server) CompleteUpload(w http.ResponseWriter, r *http.Request, id strin
 		var result project.CreatedProject
 		var err error
 		if input.Kind == "update" {
-			result, err = s.projects.UpdateAs(ctx, ticket.TargetSlug, s.deploymentActor(r), project.UpdateInput{Preview: input.Preview, Notes: input.Notes, DeploymentID: "dep-" + id, ExpectedID: input.ExpectedID, FileName: input.FileName, Source: source})
+			result, err = s.projects.UpdateAs(ctx, ticket.TargetSlug, s.deploymentActor(r), project.UpdateInput{ReplaceDraftID: input.ReplaceDraftID, Preview: input.Preview, Notes: input.Notes, DeploymentID: "dep-" + id, ExpectedID: input.ExpectedID, FileName: input.FileName, Source: source})
 		} else {
 			result, err = s.projects.Create(ctx, project.CreateInput{Preview: input.Preview, Notes: input.Notes, DeploymentID: "dep-" + id, OwnerID: user.ID, OwnerEmail: user.Email, Name: input.Name, Description: input.Description, Slug: ticket.TargetSlug, FileName: input.FileName, Source: source})
 		}
@@ -215,6 +212,9 @@ func (s *Server) CompleteUpload(w http.ResponseWriter, r *http.Request, id strin
 		event.Status, event.Message = "succeeded", "续传文件发布成功"
 		if input.Preview {
 			event.Message = "待发布版本已创建，预览确认后可正式发布"
+			if input.ReplaceDraftID != "" {
+				event.Message = "待发布版本已更新，旧预览地址已失效"
+			}
 		}
 		event.ProjectOwnerID, event.ExpandedBytes, event.FileCount = result.Project.OwnerID, result.Files.Bytes, result.Files.Count
 		return result.Project.ID, nil

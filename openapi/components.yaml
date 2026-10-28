@@ -185,6 +185,7 @@ components:
         id: {type: string, description: 客户端 UUID 幂等键，重试必须保持不变}
         kind: {type: string, enum: [create, update]}
         preview: {type: boolean, default: false, description: 为 true 时只创建待发布版，不改变正式站点；旧客户端默认直接发布}
+        replaceDraftId: {type: string, description: 仅限 update 且 preview=true；明确替换的旧草稿编号，缺省时禁止覆盖，不能填本次上传对应编号}
         notes: {type: string, maxLength: 4096, description: 更新说明，UTF-8 最多 4096 字节}
         name: {type: string, maxLength: 256}
         description: {type: string, maxLength: 4096}

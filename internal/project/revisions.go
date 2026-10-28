@@ -13,6 +13,9 @@ func (s *Service) UpdateAs(ctx context.Context, slug string, actor Actor, input 
 	if input.Preview {
 		return s.stageDraft(ctx, slug, actor, input)
 	}
+	if input.ReplaceDraftID != "" {
+		return CreatedProject{}, ErrVersionConflict
+	}
 	return s.revise(ctx, slug, actor, input, false, "")
 }
 

@@ -32,6 +32,21 @@ func CurrentID(value Project) string {
 	return value.Deployments[0].ID
 }
 
+// CheckDraftTarget 同时核对正式版和明确指定的旧草稿，未指定时继续禁止覆盖。
+func CheckDraftTarget(value Project, expectedID, replaceDraftID string) error {
+	if CurrentID(value) != expectedID {
+		return ErrVersionConflict
+	}
+	if replaceDraftID != "" {
+		if value.Draft == nil || value.Draft.ID != replaceDraftID {
+			return ErrVersionConflict
+		}
+	} else if value.Draft != nil {
+		return ErrDraftExists
+	}
+	return nil
+}
+
 // stageDraft 验证单一草稿和归属，持久化失败时仅清理可确认未提交的文件。
 func (s *Service) stageDraft(ctx context.Context, slug string, actor Actor, input UpdateInput) (CreatedProject, error) {
 	s.writeMu.Lock()
@@ -40,14 +55,14 @@ func (s *Service) stageDraft(ctx context.Context, slug string, actor Actor, inpu
 	if err != nil {
 		return CreatedProject{}, err
 	}
+	if input.ReplaceDraftID != "" && input.ReplaceDraftID == input.DeploymentID {
+		return CreatedProject{}, ErrVersionConflict
+	}
 	if containsDeployment(value, input.DeploymentID) {
 		return CreatedProject{Project: value}, nil
 	}
-	if value.Draft != nil {
-		return CreatedProject{}, ErrDraftExists
-	}
-	if CurrentID(value) != input.ExpectedID {
-		return CreatedProject{}, ErrVersionConflict
+	if err := CheckDraftTarget(value, input.ExpectedID, input.ReplaceDraftID); err != nil {
+		return CreatedProject{}, err
 	}
 	if len(input.Notes) > 4096 {
 		return CreatedProject{}, ErrInvalidNotes
@@ -65,21 +80,28 @@ func (s *Service) stageDraft(ctx context.Context, slug string, actor Actor, inpu
 	if err != nil {
 		return CreatedProject{}, err
 	}
-	if err := s.store.SaveDraft(ctx, slug, value.OwnerID, input.ExpectedID, next); err != nil {
+	if err := s.store.SaveDraft(ctx, slug, value.OwnerID, input.ExpectedID, input.ReplaceDraftID, next); err != nil {
 		check, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		stored, lookupErr := s.store.Get(check, slug)
 		cancel()
 		if lookupErr != nil || stored.ID != value.ID {
 			return CreatedProject{}, fmt.Errorf("draft outcome unknown; preserve files for recovery: %w", err)
 		}
-		if stored.Draft == nil || stored.Draft.ID != id {
+		if !containsDeployment(stored, id) {
 			if cleanupErr := s.publisher.RemoveDraft(slug, id); cleanupErr != nil {
 				return CreatedProject{}, fmt.Errorf("save draft: %w; cleanup: %v", err, cleanupErr)
 			}
 			return CreatedProject{}, err
 		}
+		value = stored
+	} else {
+		value.Draft, value.UpdatedAt = &next, now
 	}
-	value.Draft, value.UpdatedAt = &next, now
+	if oldID := input.ReplaceDraftID; oldID != "" && !containsDeployment(value, oldID) {
+		if err := s.publisher.RemoveDraft(slug, oldID); err != nil {
+			slog.WarnContext(ctx, "replaced draft cleanup deferred", "slug", slug, "error", err)
+		}
+	}
 	return CreatedProject{Project: value, Files: files}, nil
 }
 

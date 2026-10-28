@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,9 +29,10 @@ type UploadState struct {
 }
 
 // prepareState 新建状态使用独占写入，已有状态必须与文件及目标完全一致才能继续。
-func (c *Client) prepareState(path string, p Project, name, hash, notes string, size int64) (UploadState, error) {
+func (c *Client) prepareState(path string, p Project, name, hash, notes string, size int64, replaceDraftID string) (UploadState, error) {
 	fingerprint := sha256.Sum256([]byte(c.Token))
 	state := UploadState{Format: 1, BaseURL: c.BaseURL, ProjectID: p.ID, TokenHash: hex.EncodeToString(fingerprint[:16]), Request: resumable.Request{ID: uuid.NewString(), Kind: "update", Slug: p.Slug, ExpectedID: currentID(p), Preview: true, Notes: notes, FileName: name, Size: size, SHA256: hash}}
+	state.Request.ReplaceDraftID = replaceDraftID
 	if input, err := os.Open(path); err == nil {
 		defer input.Close()
 		data, err := io.ReadAll(io.LimitReader(input, (128<<10)+1))
@@ -38,7 +40,7 @@ func (c *Client) prepareState(path string, p Project, name, hash, notes string, 
 			return state, err
 		}
 		var previous UploadState
-		if len(data) > 128<<10 || json.Unmarshal(data, &previous) != nil || previous.Format != 1 || previous.BaseURL != state.BaseURL || previous.ProjectID != p.ID || previous.TokenHash != state.TokenHash || previous.Request.Kind != "update" || !previous.Request.Preview || previous.Request.Slug != p.Slug || previous.Request.FileName != name || previous.Request.Size != size || previous.Request.SHA256 != hash || previous.Request.Notes != notes {
+		if len(data) > 128<<10 || json.Unmarshal(data, &previous) != nil || previous.Format != 1 || previous.BaseURL != state.BaseURL || previous.ProjectID != p.ID || previous.TokenHash != state.TokenHash || previous.Request.Kind != "update" || !previous.Request.Preview || previous.Request.Slug != p.Slug || previous.Request.FileName != name || previous.Request.Size != size || previous.Request.SHA256 != hash || previous.Request.Notes != notes || previous.Request.ReplaceDraftID != replaceDraftID {
 			return state, errors.New("续传状态与文件、Token 或目标不一致；请用原文件和参数继续，或指定另一个 --state 文件")
 		}
 		if _, err := uuid.Parse(previous.Request.ID); err != nil {
@@ -48,8 +50,11 @@ func (c *Client) prepareState(path string, p Project, name, hash, notes string, 
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return state, err
 	}
-	if p.Draft != nil {
-		return state, errors.New("项目已有待发布版本，请先在后台发布或丢弃；不会自动覆盖已有草稿")
+	if replaceDraftID != "" && (p.Draft == nil || p.Draft.ID != replaceDraftID) {
+		return state, errors.New("待发布版本已变化，请核实原预览；不会自动改为替换最新草稿")
+	}
+	if replaceDraftID == "" && p.Draft != nil {
+		return state, errors.New("项目已有待发布版本；更新它请明确使用 --replace-draft 草稿编号，或先在后台发布、丢弃")
 	}
 	data, _ := json.MarshalIndent(state, "", "  ")
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
@@ -69,6 +74,18 @@ func (c *Client) prepareState(path string, p Project, name, hash, notes string, 
 
 // Upload 在失败时保留状态，重复执行只续传原文件；完成后输出指定草稿的地址。
 func (c *Client) Upload(ctx context.Context, file, statePath, notes string, progress io.Writer) (Result, error) {
+	return c.UploadReplacing(ctx, file, statePath, notes, "", progress)
+}
+
+// UploadReplacing 把替换目标固定在续传收据中，重试时不能改接另一草稿。
+func (c *Client) UploadReplacing(ctx context.Context, file, statePath, notes, replaceDraftID string, progress io.Writer) (Result, error) {
+	if replaceDraftID != "" {
+		id := strings.TrimPrefix(replaceDraftID, "dep-")
+		parsed, err := uuid.Parse(id)
+		if !strings.HasPrefix(replaceDraftID, "dep-") || err != nil || parsed.String() != id {
+			return Result{}, errors.New("--replace-draft 必须是要替换的完整草稿编号 dep-UUID")
+		}
+	}
 	f, err := os.Open(file)
 	if err != nil {
 		return Result{}, err
@@ -90,13 +107,17 @@ func (c *Client) Upload(ctx context.Context, file, statePath, notes string, prog
 		return Result{}, err
 	}
 	if statePath == "" {
-		key := sha256.Sum256([]byte(c.BaseURL + "\x00" + p.ID + "\x00" + c.Token + "\x00" + filepath.Base(file) + "\x00" + hex.EncodeToString(hasher.Sum(nil)) + "\x00" + notes))
+		identity := c.BaseURL + "\x00" + p.ID + "\x00" + c.Token + "\x00" + filepath.Base(file) + "\x00" + hex.EncodeToString(hasher.Sum(nil)) + "\x00" + notes
+		if replaceDraftID != "" {
+			identity += "\x00" + replaceDraftID
+		}
+		key := sha256.Sum256([]byte(identity))
 		statePath = fmt.Sprintf(".stacknest-upload-%x.json", key[:12])
 	}
 	if progress != nil {
 		fmt.Fprintln(progress, "续传收据："+statePath)
 	}
-	state, err := c.prepareState(statePath, p, filepath.Base(file), hex.EncodeToString(hasher.Sum(nil)), notes, info.Size())
+	state, err := c.prepareState(statePath, p, filepath.Base(file), hex.EncodeToString(hasher.Sum(nil)), notes, info.Size(), replaceDraftID)
 	if err != nil {
 		return Result{}, err
 	}

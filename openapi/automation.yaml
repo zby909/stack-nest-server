@@ -38,6 +38,8 @@ paths:
         id is a client-generated canonical UUID. kind must be update, slug must match the Token,
         preview must be true and expectedId must match the current version (empty before first publication).
         Repeating the same id and metadata resumes the same upload. Different Tokens and browser sessions cannot share uploads.
+        Optional replaceDraftId replaces only that exact draft after validation; the production baseline must still match.
+        The old draft remains on failure, and is retired after a successful replacement with a new preview URL.
       requestBody:
         required: true
         content:
@@ -226,6 +228,7 @@ components:
         kind: { type: string, enum: [update] }
         slug: { type: string }
         expectedId: { type: string }
+        replaceDraftId: { type: string, description: 'Exact old draft ID to replace, only for an explicitly requested update; cannot equal dep-{upload-id}' }
         preview: { type: boolean, enum: [true] }
         fileName: { type: string, maxLength: 255 }
         size: { type: integer, format: int64, minimum: 1, maximum: 94371840 }

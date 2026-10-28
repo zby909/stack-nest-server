@@ -385,7 +385,7 @@ func previewRequest(slug string) *http.Request {
 }
 
 // SaveDraft 模拟待发布版本事务。
-func (s *memoryStore) SaveDraft(ctx context.Context, slug, ownerID, expectedID string, next project.Deployment) error {
+func (s *memoryStore) SaveDraft(ctx context.Context, slug, ownerID, expectedID, replaceDraftID string, next project.Deployment) error {
 	value, err := s.Get(ctx, slug)
 	if err != nil {
 		return err
@@ -393,11 +393,8 @@ func (s *memoryStore) SaveDraft(ctx context.Context, slug, ownerID, expectedID s
 	if value.OwnerID != ownerID {
 		return project.ErrNotFound
 	}
-	if project.CurrentID(value) != expectedID {
-		return project.ErrVersionConflict
-	}
-	if value.Draft != nil {
-		return project.ErrDraftExists
+	if err := project.CheckDraftTarget(value, expectedID, replaceDraftID); err != nil {
+		return err
 	}
 	value.Draft, value.UpdatedAt = &next, next.CreatedAt
 	s.projects[slug] = value

@@ -8,8 +8,8 @@ import (
 	"stacknest/server/internal/project"
 )
 
-// SaveDraft 在项目行锁内检查正式版和唯一草稿，避免并发上传覆盖预览。
-func (s *Store) SaveDraft(ctx context.Context, slug, ownerID, expectedID string, next project.Deployment) error {
+// SaveDraft 在项目行锁内核对正式版和指定旧草稿，删除与插入在同一事务中完成。
+func (s *Store) SaveDraft(ctx context.Context, slug, ownerID, expectedID, replaceDraftID string, next project.Deployment) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -31,12 +31,21 @@ func (s *Store) SaveDraft(ctx context.Context, slug, ownerID, expectedID string,
 	if current != expectedID {
 		return project.ErrVersionConflict
 	}
-	var hasDraft bool
-	if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM deployments WHERE project_id=$1 AND status='draft')", id).Scan(&hasDraft); err != nil {
+	var draftID string
+	err = tx.QueryRowContext(ctx, "SELECT id FROM deployments WHERE project_id=$1 AND status='draft'", id).Scan(&draftID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
-	if hasDraft {
+	if replaceDraftID != "" && (draftID != replaceDraftID || next.ID == replaceDraftID) {
+		return project.ErrVersionConflict
+	}
+	if replaceDraftID == "" && draftID != "" {
 		return project.ErrDraftExists
+	}
+	if replaceDraftID != "" {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM deployments WHERE project_id=$1 AND id=$2 AND status='draft'", id, replaceDraftID); err != nil {
+			return err
+		}
 	}
 	if _, err := tx.ExecContext(ctx, "INSERT INTO deployments (id,project_id,status,file_name,created_at,finished_at,error,notes) VALUES ($1,$2,'draft',$3,$4,$4,'',$5)", next.ID, id, next.FileName, next.CreatedAt, next.Notes); err != nil {
 		return err

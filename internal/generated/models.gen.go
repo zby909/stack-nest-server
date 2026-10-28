@@ -601,10 +601,13 @@ type UploadRequest struct {
 	Notes *string `json:"notes,omitempty"`
 
 	// Preview 为 true 时只创建待发布版，不改变正式站点；旧客户端默认直接发布
-	Preview *bool   `json:"preview,omitempty"`
-	Sha256  string  `json:"sha256"`
-	Size    int64   `json:"size"`
-	Slug    *string `json:"slug,omitempty"`
+	Preview *bool `json:"preview,omitempty"`
+
+	// ReplaceDraftId 仅限 update 且 preview=true；明确替换的旧草稿编号，缺省时禁止覆盖，不能填本次上传对应编号
+	ReplaceDraftId *string `json:"replaceDraftId,omitempty"`
+	Sha256         string  `json:"sha256"`
+	Size           int64   `json:"size"`
+	Slug           *string `json:"slug,omitempty"`
 }
 
 // UploadRequestKind defines model for UploadRequest.Kind.

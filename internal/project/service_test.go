@@ -16,13 +16,15 @@ import (
 )
 
 type testStore struct {
-	values       map[string]project.Project
-	createErr    error
-	deleteErr    error
-	deleteCalls  int
-	beforeDelete func()
-	updateErr    error
-	beforeUpdate func()
+	draftErr          error
+	committedDraftErr error
+	values            map[string]project.Project
+	createErr         error
+	deleteErr         error
+	deleteCalls       int
+	beforeDelete      func()
+	updateErr         error
+	beforeUpdate      func()
 }
 
 // UpdateMetadata 模拟归属与过期版本保护，同时支持存储故障注入。
@@ -338,7 +340,10 @@ func TestCleanupFailureRecoversOnRestart(t *testing.T) {
 }
 
 // SaveDraft 模拟待发布版本事务。
-func (s *testStore) SaveDraft(ctx context.Context, slug, ownerID, expectedID string, next project.Deployment) error {
+func (s *testStore) SaveDraft(ctx context.Context, slug, ownerID, expectedID, replaceDraftID string, next project.Deployment) error {
+	if s.draftErr != nil {
+		return s.draftErr
+	}
 	value, err := s.Get(ctx, slug)
 	if err != nil {
 		return err
@@ -346,15 +351,12 @@ func (s *testStore) SaveDraft(ctx context.Context, slug, ownerID, expectedID str
 	if value.OwnerID != ownerID {
 		return project.ErrNotFound
 	}
-	if project.CurrentID(value) != expectedID {
-		return project.ErrVersionConflict
-	}
-	if value.Draft != nil {
-		return project.ErrDraftExists
+	if err := project.CheckDraftTarget(value, expectedID, replaceDraftID); err != nil {
+		return err
 	}
 	value.Draft, value.UpdatedAt = &next, next.CreatedAt
 	s.values[slug] = value
-	return nil
+	return s.committedDraftErr
 }
 
 // DeleteDraft 模拟按草稿编号删除，正式版不会被误删。

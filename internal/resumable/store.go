@@ -35,17 +35,18 @@ var (
 
 // Request 固定一次续传的文件和目标，客户端编号仅作幂等键，不作为权限凭据。
 type Request struct {
-	Preview     bool   `json:"preview,omitempty"`
-	Notes       string `json:"notes,omitempty"`
-	ID          string `json:"id"`
-	Kind        string `json:"kind"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Slug        string `json:"slug"`
-	ExpectedID  string `json:"expectedId"`
-	FileName    string `json:"fileName"`
-	Size        int64  `json:"size"`
-	SHA256      string `json:"sha256"`
+	ReplaceDraftID string `json:"replaceDraftId,omitempty"`
+	Preview        bool   `json:"preview,omitempty"`
+	Notes          string `json:"notes,omitempty"`
+	ID             string `json:"id"`
+	Kind           string `json:"kind"`
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	Slug           string `json:"slug"`
+	ExpectedID     string `json:"expectedId"`
+	FileName       string `json:"fileName"`
+	Size           int64  `json:"size"`
+	SHA256         string `json:"sha256"`
 }
 
 // Ticket 在数据卷持久化偏移与发布收据，服务重启后可以继续。
@@ -91,6 +92,10 @@ func (s *Store) Validate(input Request) error {
 		return ErrInvalid
 	}
 	if !project.SupportedUploadFile(input.FileName) {
+		return ErrInvalid
+	}
+	if input.ReplaceDraftID != "" && (input.Kind != "update" || !input.Preview ||
+		!strings.HasPrefix(input.ReplaceDraftID, "dep-") || !validID(strings.TrimPrefix(input.ReplaceDraftID, "dep-")) || input.ReplaceDraftID == "dep-"+input.ID) {
 		return ErrInvalid
 	}
 	switch input.Kind {

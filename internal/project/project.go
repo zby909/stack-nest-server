@@ -103,7 +103,7 @@ type Store interface {
 	Get(ctx context.Context, slug string) (Project, error)
 	Create(ctx context.Context, project Project) error
 	ReplaceDeployment(ctx context.Context, slug, ownerID, expectedID string, deployment Deployment) error
-	SaveDraft(ctx context.Context, slug, ownerID, expectedID string, deployment Deployment) error
+	SaveDraft(ctx context.Context, slug, ownerID, expectedID, replaceDraftID string, deployment Deployment) error
 	DeleteDraft(ctx context.Context, slug, ownerID, draftID string) error
 	UpdateMetadata(ctx context.Context, value Project, expectedAt time.Time) error
 	Delete(ctx context.Context, slug, ownerID string) error
@@ -158,12 +158,13 @@ type ExportedProject struct {
 
 // UpdateInput 只替换文件，保留项目身份、归属、地址和说明。
 type UpdateInput struct {
-	Preview      bool
-	Notes        string
-	DeploymentID string // 同一续传记录始终使用相同部署编号。
-	ExpectedID   string
-	FileName     string
-	Source       io.Reader
+	ReplaceDraftID string // 非空时仅替换这个待发布版，不能跟随最新草稿。
+	Preview        bool
+	Notes          string
+	DeploymentID   string // 同一续传记录始终使用相同部署编号。
+	ExpectedID     string
+	FileName       string
+	Source         io.Reader
 }
 
 // RevisionInput 将文件事务与数据库中的前后部署编号对应起来。
