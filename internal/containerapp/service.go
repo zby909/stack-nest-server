@@ -265,8 +265,12 @@ func (s *Service) execute(ctx context.Context, a App) {
 		var limits LimitsView
 		limits, err = s.Limits(ctx)
 		if err == nil {
-			task, cancel := context.WithTimeout(ctx, 10*time.Minute)
+			// 运行器先结束任务，额外一分钟用于恢复旧容器并返回明确错误。
+			task, cancel := context.WithTimeoutCause(ctx, OperationTimeout(a.Action)+time.Minute, ErrOperationTimeout)
 			result, err = s.runtime.Operate(task, Operation{ID: a.ID, Generation: a.Generation, Action: a.Action, Spec: spec, ImageID: a.ImageID, Limits: &limits.Limits})
+			if cause := context.Cause(task); cause != nil {
+				err = cause
+			}
 			cancel()
 		}
 	}

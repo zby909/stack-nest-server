@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"stacknest/server/internal/containerapp"
 	"strings"
-	"time"
 )
 
 // imageInfo 只读取大小、平台及镜像声明的卷。
@@ -21,9 +20,8 @@ type imageInfo struct {
 }
 
 // pull 在拉取期间持续检查 Docker 文件系统，错误消息不携带仓库凭据。
-func (r *Runner) pull(ctx context.Context, spec containerapp.Spec, pinned string) (imageInfo, error) {
+func (r *Runner) pull(ctx context.Context, spec containerapp.Spec, pinned string) (value imageInfo, pullErr error) {
 	r.stage(ctx, "pulling")
-	var value imageInfo
 	if pinned != "" && strings.HasPrefix(pinned, "sha256:") && len(pinned) == 71 {
 		if err := r.engine.call(ctx, "GET", "/images/"+url.PathEscape(pinned)+"/json", nil, &value); err == nil {
 			r.stage(ctx, "verifying")
@@ -31,24 +29,14 @@ func (r *Runner) pull(ctx context.Context, spec containerapp.Spec, pinned string
 		}
 	}
 	if err := r.guard.Check(2 * containerapp.MaxImageBytes); err != nil {
-		return value, errors.New("Docker 磁盘空间不足，已暂停拉取镜像")
+		return value, errPullDisk
 	}
-	task, cancel := context.WithCancel(ctx)
-	defer cancel()
-	go func() {
-		ticker := time.NewTicker(time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-task.Done():
-				return
-			case <-ticker.C:
-				if r.guard.Check(128<<20) != nil {
-					cancel()
-					return
-				}
-			}
+	task, progress, cancel := watchPull(ctx, func() error { return r.guard.Check(128 << 20) })
+	defer func() {
+		if cause := context.Cause(task); cause != nil {
+			pullErr = cause
 		}
+		cancel()
 	}()
 	headers := map[string]string{}
 	if spec.Registry != nil {
@@ -67,12 +55,16 @@ func (r *Runner) pull(ctx context.Context, spec containerapp.Spec, pinned string
 	defer response.Body.Close()
 	decoder := json.NewDecoder(response.Body)
 	layers := map[string]pullLayer{}
+	activity := pullActivity{}
 	for {
 		var event pullEvent
 		if err = decoder.Decode(&event); err == io.EOF {
 			break
 		} else if err != nil {
-			return value, errors.New("镜像拉取中断或磁盘不足")
+			return value, errors.New("镜像拉取中断，请检查仓库连接后重试")
+		}
+		if activity.observe(event) {
+			progress()
 		}
 		current, total := recordPull(layers, event)
 		r.download(ctx, current, total)
@@ -81,7 +73,7 @@ func (r *Runner) pull(ctx context.Context, spec containerapp.Spec, pinned string
 		}
 	}
 	r.stage(ctx, "verifying")
-	if err = r.engine.call(ctx, "GET", "/images/"+url.PathEscape(spec.Image)+"/json", nil, &value); err != nil {
+	if err = r.engine.call(task, "GET", "/images/"+url.PathEscape(spec.Image)+"/json", nil, &value); err != nil {
 		return value, err
 	}
 	return value, r.validateImage(value, spec)

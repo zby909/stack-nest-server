@@ -48,6 +48,9 @@ func (c *Client) call(ctx context.Context, method, path string, input, target an
 	req.Header.Set("Content-Type", "application/json")
 	response, err := c.client.Do(req)
 	if err != nil {
+		if cause := context.Cause(ctx); cause != nil {
+			return cause
+		}
 		return ErrUnavailable
 	}
 	defer response.Body.Close()
@@ -105,6 +108,9 @@ func (c *Client) Progress(ctx context.Context, id string, generation int64) (Pro
 func (c *Client) Operate(ctx context.Context, op Operation) (Result, error) {
 	var result Result
 	err := c.call(ctx, "POST", "/operation", op, &result)
+	if errors.Is(err, context.DeadlineExceeded) {
+		err = ErrOperationTimeout
+	}
 	return result, err
 }
 

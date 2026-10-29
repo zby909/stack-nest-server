@@ -39,8 +39,15 @@ func (r *Runner) current(ctx context.Context, id string) (inspection, error) {
 
 // operate 仅对本应用执行操作，启动失败尽力恢复旧容器。
 func (r *Runner) operate(ctx context.Context, op containerapp.Operation) (output result, operationErr error) {
+	ctx, cancel := context.WithTimeoutCause(ctx, containerapp.OperationTimeout(op.Action), containerapp.ErrOperationTimeout)
+	defer cancel()
 	ctx = r.beginProgress(ctx, op)
-	defer func() { r.finishProgress(ctx, operationErr) }()
+	defer func() {
+		if cause := context.Cause(ctx); cause != nil {
+			operationErr = cause
+		}
+		r.finishProgress(ctx, operationErr)
+	}()
 	if op.Action == "deploy" || op.Action == "start" || op.Action == "restart" {
 		if err := r.checkEgress(); err != nil {
 			return result{}, err
