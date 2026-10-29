@@ -234,6 +234,11 @@ func (s *Server) CompleteUpload(w http.ResponseWriter, r *http.Request, id strin
 		s.writeProjectError(w, r, err)
 		return
 	}
+	// 完成收据可能比草稿保留更久，不能把后来上传的版本当作本次结果返回。
+	if _, retained := project.VersionSlot(value, "dep-"+id); !retained {
+		writeJSON(w, http.StatusConflict, generated.ErrorResponse{Error: "本次上传的版本已被替换、丢弃或清理，请查看项目版本记录"})
+		return
+	}
 	writeJSON(w, http.StatusOK, s.toProjectResponse(r.WithContext(ctx), value))
 }
 

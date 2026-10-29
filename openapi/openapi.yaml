@@ -243,7 +243,7 @@ paths:
         '200': {description: 已发布，重复请求不会再次切换版本, content: {application/json: {schema: {$ref: './components.yaml#/components/schemas/Project'}}}}
         '400': {description: 归档无效}
         '404': {description: 上传或项目不存在}
-        '409': {description: 文件未传完或项目版本变化}
+        '409': {description: 文件未传完、项目版本变化或本次上传的版本已不再保留}
         '422': {description: SHA-256 校验失败}
         '429': {description: 另一个发布正在处理}
   /api/projects/{slug}/files:

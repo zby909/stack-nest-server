@@ -91,11 +91,11 @@ paths:
       description: Safe to repeat after response loss. Already started processing may continue after disconnection or Token revocation.
       responses:
         '200':
-          description: Project; verify the returned draft/current ID equals dep-{upload-id}
+          description: Project containing dep-{upload-id} as a retained draft or deployment; verify its status before publishing
           content:
             application/json:
               schema: { $ref: './components.yaml#/components/schemas/Project' }
-        '409': { description: Incomplete upload, another draft exists or baseline changed }
+        '409': { description: Incomplete upload, another draft exists, baseline changed or the uploaded version is no longer retained }
         '422': { description: Checksum mismatch }
         '429': { description: Another completion is processing }
   /api/deploy/v1/publish:
