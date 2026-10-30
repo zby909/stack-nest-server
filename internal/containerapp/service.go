@@ -34,6 +34,7 @@ func (s *Service) Runtime() Runtime { return s.runtime }
 
 // view 从密文填充可公开字段，永不返回环境变量值和仓库密码。
 func (s *Service) view(a App) (App, error) {
+	a.Canceled = a.Error == ErrDeployCanceled.Error()
 	spec, err := open(s.secret, a.ID, a.Sealed)
 	if err != nil {
 		return a, err
@@ -149,6 +150,9 @@ func (s *Service) Save(ctx context.Context, id string, actor Actor, input Input,
 
 // Queue 检查持久化代次并排队，不把长操作交给浏览器连接。
 func (s *Service) Queue(ctx context.Context, id string, actor Actor, action string, generation int64) (App, error) {
+	if action == "cancel" {
+		return s.Cancel(ctx, id, actor, generation)
+	}
 	switch action {
 	case "start", "stop", "restart", "delete":
 	default:

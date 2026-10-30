@@ -24,6 +24,9 @@ type appTestRuntime struct{}
 // Health 提供仅测试使用的可用状态。
 func (appTestRuntime) Health(context.Context) error { return nil }
 
+// Cancel 仅模拟控制接口，不访问 Docker 或宿主网络。
+func (appTestRuntime) Cancel(context.Context, string, int64) error { return nil }
+
 // Operate 不访问 Docker daemon。
 func (appTestRuntime) Operate(context.Context, containerapp.Operation) (containerapp.Result, error) {
 	return containerapp.Result{State: "running", ContainerID: "aaaaaaaaaaaa", ImageID: "test-image"}, nil
@@ -160,9 +163,50 @@ func TestContainerAppsIntegration(t *testing.T) {
 	if listing.Code != 200 || strings.Contains(listing.Body.String(), id) {
 		t.Fatal("foreign list leaked application")
 	}
+	// 取消同样校验会话、同源、所有权与代次；结束排队后立即释放编辑权限。
+	cancelInput := strings.ReplaceAll(input, `"slug":"first"`, `"slug":"cancel-test"`)
+	cancelCreated := call("POST", "/api/apps", cancelInput, ownerCookie, "http://localhost:8080")
+	var cancelResponse struct{ App containerapp.App }
+	if cancelCreated.Code != 202 || json.Unmarshal(cancelCreated.Body.Bytes(), &cancelResponse) != nil {
+		t.Fatal(cancelCreated.Body.String())
+	}
+	cancelPath := "/api/apps/" + cancelResponse.App.ID + "/actions"
+	for _, attempt := range []struct {
+		cookie       *http.Cookie
+		origin, body string
+		want         int
+	}{
+		{nil, "http://localhost:8080", `{"action":"cancel","generation":1}`, 401},
+		{ownerCookie, "https://attacker.example", `{"action":"cancel","generation":1}`, 403},
+		{foreignCookie, "http://localhost:8080", `{"action":"cancel","generation":1}`, 404},
+		{ownerCookie, "http://localhost:8080", `{"action":"cancel","generation":2}`, 409},
+		{ownerCookie, "http://localhost:8080", `{"action":"cancel","generation":1}`, 202},
+	} {
+		out := call("POST", cancelPath, attempt.body, attempt.cookie, attempt.origin)
+		if out.Code != attempt.want {
+			t.Fatalf("cancel permission/version: %d %s", out.Code, out.Body.String())
+		}
+	}
+	cancelled, err := apps.Get(ctx, cancelResponse.App.ID, containerapp.Actor{ID: owner.ID})
+	if err != nil || !cancelled.Canceled || cancelled.Status != "error" || cancelled.Action != "" || cancelled.Generation != 1 {
+		t.Fatal("pending cancellation did not finish", cancelled, err)
+	}
+	if _, err = db.Exec("DELETE FROM container_apps WHERE id=$1", cancelled.ID); err != nil {
+		t.Fatal(err)
+	}
 	claimed, err := store.ClaimApp(ctx)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if claimed.ID != id {
+		t.Fatal("cancelled task was claimed")
+	}
+	if err = store.CancelPendingApp(ctx, claimed); err != nil {
+		t.Fatal(err)
+	}
+	stillClaimed, err := store.App(ctx, id, containerapp.Actor{ID: owner.ID})
+	if err != nil || stillClaimed.Status != "deploying" {
+		t.Fatal("pending cancel overwrote claimed task", err)
 	}
 	claimed.ActiveSealed = claimed.Sealed
 	if err = store.CompleteApp(ctx, claimed, containerapp.Result{ContainerID: "aaaaaaaaaaaa", ImageID: "test", State: "running"}, ""); err != nil {

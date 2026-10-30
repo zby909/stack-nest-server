@@ -72,6 +72,9 @@ func (r *Runner) pull(ctx context.Context, spec containerapp.Spec, pinned string
 			return value, errors.New("镜像拉取失败，请确认 Linux 镜像、服务器架构和仓库权限")
 		}
 	}
+	if cause := context.Cause(task); cause != nil {
+		return value, cause
+	}
 	r.stage(ctx, "verifying")
 	if err = r.engine.call(task, "GET", "/images/"+url.PathEscape(spec.Image)+"/json", nil, &value); err != nil {
 		return value, err

@@ -124,6 +124,12 @@ func (s *Store) RecoverApps(ctx context.Context) error {
 	return err
 }
 
+// CancelPendingApp 只结束仍在排队的同一部署；已领取或已完成的任务不被覆盖。
+func (s *Store) CancelPendingApp(ctx context.Context, a containerapp.App) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE container_apps SET status='error',action='',error=$3,sealed=$4,memory_mib=$5,updated_at=now() WHERE id=$1 AND generation=$2 AND status='pending' AND action='deploy'`, a.ID, a.Generation, containerapp.ErrDeployCanceled.Error(), a.Sealed, a.MemoryMiB)
+	return err
+}
+
 // ClaimApp 原子领取一个任务，不将长时间拉镜像放在数据库事务里。
 func (s *Store) ClaimApp(ctx context.Context) (containerapp.App, error) {
 	return scanApp(s.db.QueryRowContext(ctx, `WITH picked AS (SELECT id FROM container_apps WHERE status='pending' ORDER BY updated_at FOR UPDATE SKIP LOCKED LIMIT 1), updated AS (UPDATE container_apps SET status='deploying' WHERE id IN (SELECT id FROM picked) RETURNING *) SELECT `+appColumns+` FROM updated a JOIN auth_users u ON u.id=a.owner_user_id`))

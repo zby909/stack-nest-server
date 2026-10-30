@@ -117,6 +117,15 @@ func (s *testStore) CompleteApp(_ context.Context, a App, result Result, message
 	return nil
 }
 
+// CancelPendingApp 模拟只结束排队中的当前部署。
+func (s *testStore) CancelPendingApp(_ context.Context, a App) error {
+	if s.value.Generation == a.Generation && s.value.Status == "pending" && s.value.Action == "deploy" {
+		s.value.Sealed, s.value.MemoryMiB = a.Sealed, a.MemoryMiB
+		s.value.Status, s.value.Action, s.value.Error = "error", "", ErrDeployCanceled.Error()
+	}
+	return nil
+}
+
 type testRuntime struct {
 	fail   bool
 	calls  int
@@ -125,6 +134,9 @@ type testRuntime struct {
 
 // Health 模拟可用运行器。
 func (r *testRuntime) Health(context.Context) error { return nil }
+
+// Cancel 模拟运行器确认取消指定任务。
+func (r *testRuntime) Cancel(context.Context, string, int64) error { return nil }
 
 // Operate 模拟成功、失败和进程中断。
 func (r *testRuntime) Operate(context.Context, Operation) (Result, error) {

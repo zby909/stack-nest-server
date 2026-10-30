@@ -30,7 +30,7 @@ type ServerInterface interface {
 	// UpdateApp 以 generation 防止并发覆盖，拉取后切换版本
 	// (PUT /api/apps/{id})
 	UpdateApp(w http.ResponseWriter, r *http.Request, id string)
-	// OperateApp 排队启动、停止、重启或永久删除应用及数据
+	// OperateApp 启停、重启、删除应用，或取消尚未开始容器切换的本次部署
 	// (POST /api/apps/{id}/actions)
 	OperateApp(w http.ResponseWriter, r *http.Request, id string)
 	// GetAppLogs 最近 200 行日志，最大 256 KiB，遮盖保存的环境变量值

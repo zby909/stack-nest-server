@@ -42,12 +42,17 @@ func (r *Runner) operate(ctx context.Context, op containerapp.Operation) (output
 	ctx, cancel := context.WithTimeoutCause(ctx, containerapp.OperationTimeout(op.Action), containerapp.ErrOperationTimeout)
 	defer cancel()
 	ctx = r.beginProgress(ctx, op)
+	ctx, finish, beginErr := r.beginOperation(ctx, op)
+	defer finish()
 	defer func() {
 		if cause := context.Cause(ctx); cause != nil {
 			operationErr = cause
 		}
 		r.finishProgress(ctx, operationErr)
 	}()
+	if beginErr != nil {
+		return result{}, beginErr
+	}
 	if op.Action == "deploy" || op.Action == "start" || op.Action == "restart" {
 		if err := r.checkEgress(); err != nil {
 			return result{}, err
@@ -198,6 +203,9 @@ func (r *Runner) deploy(ctx context.Context, op containerapp.Operation, old insp
 	}
 	candidate, err := r.engine.inspect(ctx, r.candidateName(op.ID, op.Generation))
 	if err == nil {
+		if err = r.sealOperation(ctx); err != nil {
+			return fallback, err
+		}
 		if _, err = r.owned(ctx, op.ID, candidate.ID); err != nil {
 			return fallback, errors.New("候选容器归属异常")
 		}
@@ -220,6 +228,9 @@ func (r *Runner) deploy(ctx context.Context, op containerapp.Operation, old insp
 	}
 	image, err := r.pull(ctx, op.Spec, pinned)
 	if err != nil {
+		return fallback, err
+	}
+	if err = r.sealOperation(ctx); err != nil {
 		return fallback, err
 	}
 	r.stage(ctx, "creating")

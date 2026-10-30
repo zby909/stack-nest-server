@@ -11,6 +11,7 @@ import (
 
 // Defines values for OperateAppJSONBodyAction.
 const (
+	Cancel  OperateAppJSONBodyAction = "cancel"
 	Delete  OperateAppJSONBodyAction = "delete"
 	Restart OperateAppJSONBodyAction = "restart"
 	Start   OperateAppJSONBodyAction = "start"
@@ -20,6 +21,8 @@ const (
 // Valid indicates whether the value is a known member of the OperateAppJSONBodyAction enum.
 func (e OperateAppJSONBodyAction) Valid() bool {
 	switch e {
+	case Cancel:
+		return true
 	case Delete:
 		return true
 	case Restart:

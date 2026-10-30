@@ -17,12 +17,14 @@ import (
 )
 
 var (
-	ErrInvalid     = errors.New("应用输入无效")
-	ErrNotFound    = errors.New("应用不存在或无权访问")
-	ErrBusy        = errors.New("应用正在执行操作，请稍后重试")
-	ErrQuota       = errors.New("应用数量或内存总配额不足")
-	ErrConflict    = errors.New("资源配置已被更新，请刷新后重试")
-	ErrUnavailable = errors.New("Docker 运行器暂时不可用")
+	ErrInvalid        = errors.New("应用输入无效")
+	ErrNotFound       = errors.New("应用不存在或无权访问")
+	ErrBusy           = errors.New("应用正在执行操作，请稍后重试")
+	ErrQuota          = errors.New("应用数量或内存总配额不足")
+	ErrConflict       = errors.New("资源配置已被更新，请刷新后重试")
+	ErrUnavailable    = errors.New("Docker 运行器暂时不可用")
+	ErrDeployCanceled = errors.New("已取消本次部署")
+	ErrCancelTooLate  = errors.New("部署已进入容器切换阶段，无法取消，请等待完成")
 )
 
 const MaxApps = 3
@@ -84,6 +86,7 @@ type App struct {
 	Status       string    `json:"status"`
 	Action       string    `json:"action,omitempty"`
 	Error        string    `json:"error,omitempty"`
+	Canceled     bool      `json:"canceled,omitempty"`
 	Generation   int64     `json:"generation"`
 	ContainerID  string    `json:"-"`
 	ImageID      string    `json:"imageId,omitempty"`
@@ -140,6 +143,7 @@ type Runtime interface {
 	Capacity(context.Context) (Capacity, error)
 	Progress(context.Context, string, int64) (Progress, error)
 	Operate(context.Context, Operation) (Result, error)
+	Cancel(context.Context, string, int64) error
 	State(context.Context, string, string) (Result, error)
 	Logs(context.Context, string, string) (string, error)
 	Proxy(http.ResponseWriter, *http.Request, string, string)
@@ -156,6 +160,7 @@ type Store interface {
 	RecoverApps(context.Context) error
 	ClaimApp(context.Context) (App, error)
 	CompleteApp(context.Context, App, Result, string) error
+	CancelPendingApp(context.Context, App) error
 }
 
 // ValidID 拒绝非规范 UUID，避免路径与 Docker 名称注入。

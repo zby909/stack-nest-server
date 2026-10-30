@@ -2,6 +2,7 @@ package dockerrunner
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"stacknest/server/internal/containerapp"
 	"strconv"
@@ -37,7 +38,7 @@ func (r *Runner) beginProgress(ctx context.Context, op containerapp.Operation) c
 		}
 		delete(r.progress, oldest)
 	}
-	r.progress[op.ID] = containerapp.Progress{Generation: op.Generation, Stage: "preparing", UpdatedAt: now}
+	r.progress[op.ID] = containerapp.Progress{Generation: op.Generation, Stage: "preparing", CanCancel: op.Action == "deploy", UpdatedAt: now}
 	return context.WithValue(ctx, progressKey{}, progressTask{op.ID, op.Generation})
 }
 
@@ -88,7 +89,10 @@ func (r *Runner) finishProgress(ctx context.Context, err error) {
 	if p.Generation != task.Generation {
 		return
 	}
-	if err != nil {
+	p.CanCancel = false
+	if errors.Is(err, containerapp.ErrDeployCanceled) {
+		p.Stage, p.FailedStage = "cancelled", ""
+	} else if err != nil {
 		if p.FailedStage == "" {
 			p.FailedStage = p.Stage
 		}

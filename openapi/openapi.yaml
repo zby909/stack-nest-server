@@ -85,7 +85,7 @@ paths:
     post:
       tags: [Apps]
       operationId: operateApp
-      summary: 排队启动、停止、重启或永久删除应用及数据
+      summary: 启停、重启、删除应用，或取消尚未开始容器切换的本次部署
       requestBody:
         required: true
         content:
@@ -94,11 +94,11 @@ paths:
               type: object
               required: [action, generation]
               properties:
-                action: {type: string, enum: [start, stop, restart, delete]}
+                action: {type: string, enum: [start, stop, restart, delete, cancel]}
                 generation: {type: integer, format: int64}
       responses:
         '202':
-          description: 已排队
+          description: 操作已接收；取消仅针对传入代次，不增加代次，执行中的任务安全收尾后解除占用
           content:
             application/json:
               schema: {$ref: './components.yaml#/components/schemas/AppView'}

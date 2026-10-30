@@ -50,7 +50,7 @@ func (s *Server) appResponse(r *http.Request, value containerapp.App) map[string
 	response := map[string]any{"app": value}
 	// 先读取独立的进度快照，容器状态采样变慢时仍保留阶段反馈。
 	if value.Status == "pending" {
-		response["progress"] = containerapp.Progress{Generation: value.Generation, Stage: "queued", UpdatedAt: value.UpdatedAt}
+		response["progress"] = containerapp.Progress{Generation: value.Generation, Stage: "queued", CanCancel: value.Action == "deploy", UpdatedAt: value.UpdatedAt}
 	} else if value.Status == "deploying" || value.Status == "error" {
 		if progress, progressErr := s.config.Apps.Runtime().Progress(ctx, value.ID, value.Generation); progressErr == nil && progress.Generation == value.Generation {
 			response["progress"] = progress
@@ -182,7 +182,7 @@ func (s *Server) writeAppError(w http.ResponseWriter, r *http.Request, err error
 	switch {
 	case errors.Is(err, containerapp.ErrNotFound):
 		status, message = 404, err.Error()
-	case errors.Is(err, containerapp.ErrBusy), errors.Is(err, containerapp.ErrQuota), errors.Is(err, containerapp.ErrConflict):
+	case errors.Is(err, containerapp.ErrBusy), errors.Is(err, containerapp.ErrQuota), errors.Is(err, containerapp.ErrConflict), errors.Is(err, containerapp.ErrCancelTooLate):
 		status, message = 409, err.Error()
 	case errors.Is(err, containerapp.ErrUnavailable):
 		status, message = 503, err.Error()

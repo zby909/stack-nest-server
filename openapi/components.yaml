@@ -88,6 +88,7 @@ components:
         status: {type: string, enum: [pending, deploying, ready, stopped, error]}
         action: {type: string}
         error: {type: string}
+        canceled: {type: boolean, description: 最近一次部署由用户取消；可更新配置重新部署}
         imageId: {type: string}
         createdAt: {type: string, format: date-time}
         updatedAt: {type: string, format: date-time}
@@ -145,7 +146,8 @@ components:
       description: 当前代次的瞬时快照，刷新页面仍可查询；运行器重启后由持久化队列重试，历史快照不作为日志保存
       properties:
         generation: {type: integer, format: int64}
-        stage: {type: string, enum: [queued, preparing, pulling, verifying, creating, stopping, starting, healthchecking, cleaning, restoring, deleting, completed, failed]}
+        stage: {type: string, enum: [queued, preparing, pulling, verifying, creating, stopping, starting, healthchecking, cleaning, restoring, deleting, completed, failed, cancelling, cancelled]}
+        canCancel: {type: boolean, description: 仅本次部署在排队、准备、拉取和校验镜像期间可取消；容器切换后关闭}
         failedStage: {type: string}
         downloadedBytes: {type: integer, format: int64, minimum: 0}
         totalBytes: {type: integer, format: int64, minimum: 0, description: 当前已发现镜像层的下载总量，可能随新层发现变化，不是整个部署进度}

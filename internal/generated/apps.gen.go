@@ -29,6 +29,8 @@ func (e AppDiskAreaSource) Valid() bool {
 
 // Defines values for AppProgressStage.
 const (
+	AppProgressStageCancelled      AppProgressStage = "cancelled"
+	AppProgressStageCancelling     AppProgressStage = "cancelling"
 	AppProgressStageCleaning       AppProgressStage = "cleaning"
 	AppProgressStageCompleted      AppProgressStage = "completed"
 	AppProgressStageCreating       AppProgressStage = "creating"
@@ -47,6 +49,10 @@ const (
 // Valid indicates whether the value is a known member of the AppProgressStage enum.
 func (e AppProgressStage) Valid() bool {
 	switch e {
+	case AppProgressStageCancelled:
+		return true
+	case AppProgressStageCancelling:
+		return true
 	case AppProgressStageCleaning:
 		return true
 	case AppProgressStageCompleted:
@@ -231,6 +237,8 @@ type AppList struct {
 
 // AppProgress 当前代次的瞬时快照，刷新页面仍可查询；运行器重启后由持久化队列重试，历史快照不作为日志保存
 type AppProgress struct {
+	// CanCancel 仅本次部署在排队、准备、拉取和校验镜像期间可取消；容器切换后关闭
+	CanCancel       *bool            `json:"canCancel,omitempty"`
 	DownloadedBytes *int64           `json:"downloadedBytes,omitempty"`
 	FailedStage     *string          `json:"failedStage,omitempty"`
 	Generation      int64            `json:"generation"`
@@ -292,7 +300,10 @@ type AppView struct {
 
 // ContainerApp defines model for ContainerApp.
 type ContainerApp struct {
-	Action      *string            `json:"action,omitempty"`
+	Action *string `json:"action,omitempty"`
+
+	// Canceled 最近一次部署由用户取消；可更新配置重新部署
+	Canceled    *bool              `json:"canceled,omitempty"`
 	Cpus        float32            `json:"cpus"`
 	CreatedAt   time.Time          `json:"createdAt"`
 	DataPath    string             `json:"dataPath"`

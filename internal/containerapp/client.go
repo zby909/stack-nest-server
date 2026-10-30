@@ -108,6 +108,9 @@ func (c *Client) Progress(ctx context.Context, id string, generation int64) (Pro
 func (c *Client) Operate(ctx context.Context, op Operation) (Result, error) {
 	var result Result
 	err := c.call(ctx, "POST", "/operation", op, &result)
+	if err != nil && err.Error() == ErrDeployCanceled.Error() {
+		err = ErrDeployCanceled
+	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		err = ErrOperationTimeout
 	}

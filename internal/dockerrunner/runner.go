@@ -38,6 +38,8 @@ type Runner struct {
 	maxTotalMemoryMiB                 int
 	progressMu                        sync.Mutex
 	progress                          map[string]containerapp.Progress
+	operationMu                       sync.Mutex
+	activeOperation                   *activeOperation
 	dockerRoot                        string
 	diskMu                            sync.Mutex
 	disk                              map[string]*diskSample
@@ -159,6 +161,7 @@ func (r *Runner) Serve(ctx context.Context, socket string) error {
 	mux.HandleFunc("GET /capacity", r.capacity)
 	mux.HandleFunc("GET /progress/{id}/{generation}", r.readProgress)
 	mux.HandleFunc("POST /operation", r.operation)
+	mux.HandleFunc("POST /cancel", r.cancelOperation)
 	mux.HandleFunc("GET /state/{id}/{container}", r.state)
 	mux.HandleFunc("GET /logs/{id}/{container}", r.logs)
 	mux.HandleFunc("/proxy/{id}/{container}/{path...}", r.proxy)
