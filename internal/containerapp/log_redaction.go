@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-// redactLog 优先匹配完整长值并仅扫描一次，防止重叠凭据和替换标记二次改写。
-func redactLog(text string, specs ...Spec) string {
+// RedactLog 优先匹配完整长值并仅扫描一次，供返回日志和保存失败快照共同使用。
+func RedactLog(text string, specs ...Spec) string {
 	secrets := map[string]bool{}
 	for _, spec := range specs {
 		for _, value := range spec.Env {

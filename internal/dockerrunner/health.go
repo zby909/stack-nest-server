@@ -3,6 +3,7 @@ package dockerrunner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -37,7 +38,10 @@ func probeAddress(ctx context.Context, address, healthPath string) error {
 		if err == nil {
 			conn.Close()
 		}
-		return err
+		if err != nil {
+			return errors.New("TCP 健康检查连接失败")
+		}
+		return nil
 	}
 	target := (&url.URL{Scheme: "http", Host: address, Path: healthPath}).String()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
@@ -50,7 +54,7 @@ func probeAddress(ctx context.Context, address, healthPath string) error {
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return errors.New("HTTP 健康检查未返回 2xx")
+		return fmt.Errorf("HTTP 健康检查返回 %d", response.StatusCode)
 	}
 	return nil
 }

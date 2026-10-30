@@ -42,6 +42,11 @@ func (appTestRuntime) Logs(context.Context, string, string) (string, error) {
 	return "secret-app-value", nil
 }
 
+// DeploymentLogs 返回测试启动错误，供鉴权和脱敏检查。
+func (appTestRuntime) DeploymentLogs(context.Context, string, int64) (string, error) {
+	return "startup failed: secret-app-value", nil
+}
+
 // Proxy 识别应用自己的 API 路径。
 func (appTestRuntime) Proxy(w http.ResponseWriter, r *http.Request, _, _ string) {
 	_, _ = w.Write([]byte("application:" + r.URL.Path))
@@ -151,13 +156,20 @@ func TestContainerAppsIntegration(t *testing.T) {
 	if strings.Contains(sealed, "secret-app-value") || strings.Contains(created.Body.String(), "secret-app-value") {
 		t.Fatal("secret leaked")
 	}
-	for _, path := range []string{"/api/apps/" + id, "/api/apps/" + id + "/logs"} {
+	for _, path := range []string{"/api/apps/" + id, "/api/apps/" + id + "/logs", "/api/apps/" + id + "/deployment-logs"} {
 		if got := call("GET", path, "", foreignCookie, "").Code; got != 404 {
 			t.Fatalf("foreign access: %d", got)
 		}
 		if got := call("GET", path, "", adminCookie, "").Code; got != 200 {
 			t.Fatalf("admin access: %d", got)
 		}
+	}
+	details := call("GET", "/api/apps/"+id+"/deployment-logs?generation=1", "", ownerCookie, "")
+	if details.Code != 200 || strings.Contains(details.Body.String(), "secret-app-value") || !strings.Contains(details.Body.String(), "[已隐藏]") {
+		t.Fatal("failure logs leaked", details.Body.String())
+	}
+	if got := call("GET", "/api/apps/"+id+"/deployment-logs?generation=2", "", ownerCookie, "").Code; got != 409 {
+		t.Fatal("stale failure generation accepted", got)
 	}
 	listing := call("GET", "/api/apps", "", foreignCookie, "")
 	if listing.Code != 200 || strings.Contains(listing.Body.String(), id) {

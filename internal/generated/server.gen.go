@@ -33,6 +33,9 @@ type ServerInterface interface {
 	// OperateApp 启停、重启、删除应用，或取消尚未开始容器切换的本次部署
 	// (POST /api/apps/{id}/actions)
 	OperateApp(w http.ResponseWriter, r *http.Request, id string)
+	// GetAppDeploymentLogs 查看当前代次的脱敏部署失败快照，候选容器清理后仍可读取
+	// (GET /api/apps/{id}/deployment-logs)
+	GetAppDeploymentLogs(w http.ResponseWriter, r *http.Request, id string, params GetAppDeploymentLogsParams)
 	// GetAppLogs 最近 200 行日志，最大 256 KiB，遮盖保存的环境变量值
 	// (GET /api/apps/{id}/logs)
 	GetAppLogs(w http.ResponseWriter, r *http.Request, id string)
@@ -917,6 +920,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/apps/{id}", wrapper.GetApp)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/api/apps/{id}", wrapper.UpdateApp)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/apps/{id}/actions", wrapper.OperateApp)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/apps/{id}/deployment-logs", wrapper.GetAppDeploymentLogs)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/apps/{id}/logs", wrapper.GetAppLogs)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/projects/{slug}/changes", wrapper.ListProjectChanges)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/projects/{slug}/draft/publish", wrapper.PublishDraft)

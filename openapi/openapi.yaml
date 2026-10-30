@@ -104,6 +104,28 @@ paths:
               schema: {$ref: './components.yaml#/components/schemas/AppView'}
         '404': {description: 不存在或无权访问}
         '409': {description: 正在操作或版本冲突}
+  /api/apps/{id}/deployment-logs:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Apps]
+      operationId: getAppDeploymentLogs
+      summary: 查看当前代次的脱敏部署失败快照，候选容器清理后仍可读取
+      parameters:
+        - {name: generation, in: query, schema: {type: integer, format: int64}, description: 可选的预期任务代次，不一致时返回 409}
+      responses:
+        '200':
+          description: 每应用仅保留最近一次失败的状态和最多 200 行启动日志；无快照时说明原因
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [text]
+                properties:
+                  text: {type: string}
+        '401': {description: 未登录}
+        '404': {description: 应用不存在或无权访问}
+        '409': {description: 任务代次已更新}
   /api/apps/{id}/logs:
     parameters:
       - {name: id, in: path, required: true, schema: {type: string}}

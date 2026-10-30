@@ -164,6 +164,7 @@ func (r *Runner) Serve(ctx context.Context, socket string) error {
 	mux.HandleFunc("POST /cancel", r.cancelOperation)
 	mux.HandleFunc("GET /state/{id}/{container}", r.state)
 	mux.HandleFunc("GET /logs/{id}/{container}", r.logs)
+	mux.HandleFunc("GET /deployment-logs/{id}/{generation}", r.deploymentLogs)
 	mux.HandleFunc("/proxy/{id}/{container}/{path...}", r.proxy)
 	mux.HandleFunc("POST /maintenance", r.maintenance)
 	server := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}

@@ -82,8 +82,9 @@ var errMissing = errors.New("Docker resource missing")
 
 // inspection 只读取运行器需要的字段，完整 inspect 不跨越私有 socket。
 type inspection struct {
-	ID          string `json:"Id"`
-	GraphDriver struct {
+	ID           string `json:"Id"`
+	RestartCount int
+	GraphDriver  struct {
 		Name string
 		Data map[string]string
 	}
@@ -104,6 +105,7 @@ type inspection struct {
 		Status    string
 		OOMKilled bool
 		ExitCode  int
+		Error     string
 	}
 	NetworkSettings struct {
 		Networks map[string]struct{ IPAddress string }

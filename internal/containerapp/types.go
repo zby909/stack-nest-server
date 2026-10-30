@@ -146,6 +146,7 @@ type Runtime interface {
 	Cancel(context.Context, string, int64) error
 	State(context.Context, string, string) (Result, error)
 	Logs(context.Context, string, string) (string, error)
+	DeploymentLogs(context.Context, string, int64) (string, error)
 	Proxy(http.ResponseWriter, *http.Request, string, string)
 }
 

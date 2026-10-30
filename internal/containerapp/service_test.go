@@ -160,6 +160,11 @@ func (r *testRuntime) Logs(context.Context, string, string) (string, error) {
 	return "value=hidden-test-value", nil
 }
 
+// DeploymentLogs 默认模拟没有历史失败快照。
+func (r *testRuntime) DeploymentLogs(context.Context, string, int64) (string, error) {
+	return "", ErrNotFound
+}
+
 // Proxy 模拟应用响应。
 func (r *testRuntime) Proxy(http.ResponseWriter, *http.Request, string, string) {}
 

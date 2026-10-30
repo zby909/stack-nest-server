@@ -11,6 +11,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -74,7 +75,12 @@ func (c *Client) call(ctx context.Context, method, path string, input, target an
 		return errors.New(failure.Error)
 	}
 	if target != nil {
-		return json.NewDecoder(io.LimitReader(response.Body, 300<<10)).Decode(target)
+		limit := int64(300 << 10)
+		// 最多 256 KiB 的日志经 JSON 字符转义后可能膨胀六倍。
+		if strings.HasPrefix(path, "/logs/") || strings.HasPrefix(path, "/deployment-logs/") {
+			limit = 2 << 20
+		}
+		return json.NewDecoder(io.LimitReader(response.Body, limit)).Decode(target)
 	}
 	return nil
 }

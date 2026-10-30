@@ -255,13 +255,16 @@ func (r *Runner) deploy(ctx context.Context, op containerapp.Operation, old insp
 		r.stage(ctx, "restoring")
 		recoverCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
+		detailCtx, detailCancel := context.WithTimeout(recoverCtx, 5*time.Second)
+		reason := r.captureDeploymentFailure(detailCtx, op, cid, err)
+		detailCancel()
 		_ = r.remove(recoverCtx, cid)
 		if old.ID != "" && old.State.Running {
 			if restoreErr := r.start(recoverCtx, old.ID); restoreErr != nil {
 				return result{ContainerID: old.ID, ImageID: old.Image, State: "exited"}, errors.New("新版本启动失败，旧容器恢复失败，请检查日志")
 			}
 		}
-		return fallback, errors.New("容器在 60 秒内未通过就绪检查，已尝试恢复原有容器（如有）；持久化数据不随容器恢复")
+		return fallback, fmt.Errorf("%s；已尝试恢复原有容器（如有）；持久化数据不随容器恢复", reason)
 	}
 	value, err := r.owned(ctx, op.ID, cid)
 	if err != nil {
@@ -277,21 +280,28 @@ func (r *Runner) ready(ctx context.Context, id, cid string) error {
 	r.stage(ctx, "healthchecking")
 	task, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
+	var lastProbe error
 	for {
 		value, err := r.owned(task, id, cid)
 		if err != nil {
+			if task.Err() != nil && ctx.Err() == nil && lastProbe != nil {
+				return fmt.Errorf("60 秒内未就绪：%w", lastProbe)
+			}
 			return err
 		}
 		if value.State.OOMKilled || value.State.Status == "dead" {
 			return errors.New("容器被终止")
 		}
 		if value.State.Running {
-			if r.probe(task, value, id) == nil {
+			if lastProbe = r.probe(task, value, id); lastProbe == nil {
 				return nil
 			}
 		}
 		select {
 		case <-task.Done():
+			if lastProbe != nil && ctx.Err() == nil {
+				return fmt.Errorf("60 秒内未就绪：%w", lastProbe)
+			}
 			return task.Err()
 		case <-time.After(500 * time.Millisecond):
 		}

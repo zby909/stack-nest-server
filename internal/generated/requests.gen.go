@@ -62,6 +62,12 @@ type OperateAppJSONBody struct {
 // OperateAppJSONBodyAction defines parameters for OperateApp.
 type OperateAppJSONBodyAction string
 
+// GetAppDeploymentLogsParams defines parameters for GetAppDeploymentLogs.
+type GetAppDeploymentLogsParams struct {
+	// Generation 可选的预期任务代次，不一致时返回 409
+	Generation *int64 `form:"generation,omitempty" json:"generation,omitempty"`
+}
+
 // CreateProjectMultipartBody defines parameters for CreateProject.
 type CreateProjectMultipartBody struct {
 	// Description UTF-8 编码最多 4096 字节

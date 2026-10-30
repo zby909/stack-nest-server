@@ -23,6 +23,9 @@ func TestHTTPHealthChecksServiceNotJustPort(t *testing.T) {
 		if (err == nil) != (status >= 200 && status < 300) {
 			t.Fatalf("status %d: %v", status, err)
 		}
+		if status == 404 && !strings.Contains(err.Error(), "404") {
+			t.Fatal("HTTP failure status was hidden", err)
+		}
 		if err := probeAddress(context.Background(), address, ""); err != nil {
 			t.Fatal("compatible TCP check failed", err)
 		}

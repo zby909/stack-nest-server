@@ -195,7 +195,7 @@ func (s *Service) Logs(ctx context.Context, a App) (string, error) {
 		}
 		specs = append(specs, active)
 	}
-	return redactLog(text, specs...), nil
+	return RedactLog(text, specs...), nil
 }
 
 // Resolve 为公开应用域名查询目标，结果不经过后台会话鉴权。
