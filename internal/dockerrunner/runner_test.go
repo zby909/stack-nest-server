@@ -123,9 +123,15 @@ func TestRejectExtraVolumes(t *testing.T) {
 		t.Fatal("anonymous volume accepted")
 	}
 	value.Config.Volumes = nil
+	for _, size := range []int64{1<<30 + 1, 2 << 30} {
+		value.Size = size
+		if err := r.validateImage(value, spec); err != nil {
+			t.Fatal("image within 2 GiB rejected", size, err)
+		}
+	}
 	value.Size = containerapp.MaxImageBytes + 1
-	if err := r.validateImage(value, spec); err == nil {
-		t.Fatal("large image accepted")
+	if err := r.validateImage(value, spec); err == nil || err.Error() != "镜像解压后超过 2 GiB，暂不部署" {
+		t.Fatal("oversized image not rejected with current limit", err)
 	}
 }
 

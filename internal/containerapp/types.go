@@ -30,7 +30,7 @@ var (
 const MaxApps = 3
 const MaxMemoryMiB = 1024
 const TotalMemoryMiB = 768
-const MaxImageBytes int64 = 1 << 30
+const MaxImageBytes int64 = 2 << 30
 const HostPrefix = "stack-nest--app-"
 
 // ConfigJSONLimit 为合法字段的六倍 JSON 转义留足空间，后台和运行器保持同一上限。

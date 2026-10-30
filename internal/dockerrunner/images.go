@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/url"
 	"stacknest/server/internal/containerapp"
@@ -85,7 +86,7 @@ func (r *Runner) pull(ctx context.Context, spec containerapp.Spec, pinned string
 // validateImage 禁止多个隐式匿名数据卷，并限制拉取后的镜像体积。
 func (r *Runner) validateImage(value imageInfo, spec containerapp.Spec) error {
 	if value.Size > containerapp.MaxImageBytes {
-		return errors.New("镜像解压后超过 1 GiB，暂不部署")
+		return fmt.Errorf("镜像解压后超过 %d GiB，暂不部署", containerapp.MaxImageBytes>>30)
 	}
 	if value.Os != "linux" || value.Architecture != "amd64" {
 		return errors.New("当前服务器需要 Linux amd64 镜像")
