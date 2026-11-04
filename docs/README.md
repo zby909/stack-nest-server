@@ -23,6 +23,7 @@
 
 ## 开发与原理
 
+- [开发入口与约定](../AGENTS.md)
 - [开发与测试](DEVELOPMENT.md)
 - [源码 Docker 部署](GETTING_STARTED.md)
 - [架构与工作原理](ARCHITECTURE.md)
@@ -30,4 +31,4 @@
 - [版本发布](RELEASING.md)
 - [Web 开发](https://github.com/zby909/stack-nest-web)
 
-安装命令默认在 Linux Bash、`server/` 执行。实例私有路径可记在 [台账模板](INSTANCE.example.md)中。
+安装命令默认在 Linux Bash、`server/` 执行。服务器实际配置另记在本地 `docs/INSTANCE.md`，见 [私有部署记录模板](INSTANCE.example.md)。

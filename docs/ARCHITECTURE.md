@@ -135,6 +135,7 @@ GitHub Actions 按两仓库同名标签固定提交，检查、构建并实际�
 | `internal/resumable`、`internal/storage`         | 续传与空间保护              |
 | `internal/containerapp`、`internal/dockerrunner` | 应用任务、Docker 操作与代理 |
 | `internal/egress`                                | 宿主网络保护                |
+| `cmd/stacknest-deploy`、`internal/deployclient`、`internal/deploytoken`、`skills/stacknest-deploy` | 自动部署 CLI、项目凭据与 AI Skill |
 | `openapi`、`migrations`                          | 接口契约、数据库迁移        |
 | `deploy`                                         | 入口、备份、迁移和部署工具  |
 
