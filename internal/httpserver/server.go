@@ -24,6 +24,7 @@ import (
 // Config 定义 HTTP Server 所需配置。
 type Config struct {
 	DeployTokens        deploytoken.Store
+	AppDeployTokens     deploytoken.AppStore
 	Apps                *containerapp.Service
 	Network             NetworkControl
 	Addr                string
@@ -108,12 +109,15 @@ func New(config Config, projects ProjectService, authService *auth.Service) *Ser
 	mux.HandleFunc("GET /api/projects/{slug}/deploy-tokens", server.ListDeployTokens)
 	mux.HandleFunc("POST /api/projects/{slug}/deploy-tokens", server.CreateDeployToken)
 	mux.HandleFunc("DELETE /api/projects/{slug}/deploy-tokens/{id}", server.DeleteDeployToken)
+	mux.HandleFunc("GET /api/apps/{id}/deploy-tokens", server.ListAppDeployTokens)
+	mux.HandleFunc("POST /api/apps/{id}/deploy-tokens", server.CreateAppDeployToken)
+	mux.HandleFunc("DELETE /api/apps/{id}/deploy-tokens/{tokenId}", server.DeleteAppDeployToken)
 	mux.HandleFunc("/sites/", server.serveSite)
 	mux.HandleFunc("/", server.serveWeb)
 
 	server.http = &http.Server{
 		Addr:              config.Addr,
-		Handler:           logging(server.appBoundary(server.previewBoundary(server.automationBoundary(server.protect(mux))))),
+		Handler:           logging(server.appBoundary(server.previewBoundary(server.appAutomationBoundary(server.automationBoundary(server.protect(mux)))))),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	return server

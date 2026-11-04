@@ -283,7 +283,7 @@ func (s *Service) execute(ctx context.Context, a App) {
 	}
 	message := ""
 	if err != nil {
-		message = fmt.Sprint(err)
+		message = RedactLog(fmt.Sprint(err), spec)
 		if result.ContainerID == "" {
 			result.ContainerID = a.ContainerID
 			result.ImageID = a.ImageID

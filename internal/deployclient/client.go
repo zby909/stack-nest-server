@@ -99,7 +99,12 @@ func wait(ctx context.Context, d time.Duration) error {
 
 // request 单次发送固定来源请求；响应大小与错误文本均有上限。
 func (c *Client) request(ctx context.Context, method, path string, body []byte, offset *int64, out any) error {
-	r, err := http.NewRequestWithContext(ctx, method, c.BaseURL+apiPrefix+path, bytes.NewReader(body))
+	return c.requestEndpoint(ctx, method, apiPrefix+path, body, offset, out)
+}
+
+// requestEndpoint 共用固定来源、有界响应与禁止重定向的传输，路径只由内部协议选择。
+func (c *Client) requestEndpoint(ctx context.Context, method, path string, body []byte, offset *int64, out any) error {
+	r, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

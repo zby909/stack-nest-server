@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"stacknest/server/internal/deploytoken"
 )
 
 var (
@@ -157,6 +158,7 @@ type Store interface {
 	Apps(context.Context, Actor) ([]App, error)
 	App(context.Context, string, Actor) (App, error)
 	SaveApp(context.Context, App, Actor, bool) error
+	SaveAppImage(context.Context, App, deploytoken.Grant, ImageUpdate) (int64, error)
 	QueueApp(context.Context, string, Actor, string, int64) (App, error)
 	RecoverApps(context.Context) error
 	ClaimApp(context.Context) (App, error)

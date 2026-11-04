@@ -13,12 +13,18 @@ import (
 	"stacknest/server/internal/buildinfo"
 )
 
-const help = `StackNest 静态项目自动部署
+const help = `StackNest 项目自动部署
 
+静态项目：
   stacknest-deploy upload --file guide.html [--notes "更新行程"] [--state .stacknest-upload.json]
   stacknest-deploy upload --file guide.html --replace-draft dep-旧草稿编号
   stacknest-deploy publish --draft-id dep-... --expected-id dep-...
   stacknest-deploy status
+
+Docker 应用（使用应用专属 Token）：
+  stacknest-deploy app status
+  stacknest-deploy app deploy --image ghcr.io/用户名/镜像@sha256:摘要
+  stacknest-deploy app wait --generation 任务代次
 
 配置：STACKNEST_URL=https://管理端域名
 凭据：STACKNEST_DEPLOY_TOKEN，或 --token-file 指向只含 Token 的本机文件。
@@ -29,8 +35,11 @@ upload 只创建预览。publish 必须明确指定版本；首次发布的 expe
 标准输出为 JSON，进度写入标准错误；请勿将 Token、状态文件提交到仓库。
 `
 
-// Main 统一解析本机和 CI 命令，只有明确 publish 子命令才能正式发布。
+// Main 统一解析本机和 CI 命令，静态发布与应用部署使用各自明确的子命令。
 func Main(ctx context.Context, args []string, out, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "app" {
+		return appMain(ctx, args[1:], out, stderr)
+	}
 	if len(args) == 1 && (args[0] == "version" || args[0] == "--version") {
 		if err := json.NewEncoder(out).Encode(buildinfo.Current()); err != nil {
 			return 1
@@ -70,22 +79,7 @@ func Main(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "不接受未命名参数")
 		return 2
 	}
-	token := strings.TrimSpace(os.Getenv("STACKNEST_DEPLOY_TOKEN"))
-	if *tokenFile != "" {
-		f, err := os.Open(*tokenFile)
-		if err != nil {
-			fmt.Fprintln(stderr, "无法读取 Token 文件")
-			return 2
-		}
-		data, err := io.ReadAll(io.LimitReader(f, 1025))
-		f.Close()
-		if err != nil || len(data) > 1024 {
-			fmt.Fprintln(stderr, "Token 文件无效或过大")
-			return 2
-		}
-		token = strings.TrimSpace(string(data))
-	}
-	c, err := New(*base, token)
+	c, err := configuredClient(*base, *tokenFile)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
@@ -111,7 +105,7 @@ func Main(ctx context.Context, args []string, out, stderr io.Writer) int {
 		result, err = c.Project(ctx)
 	}
 	if err != nil {
-		fmt.Fprintln(stderr, strings.ReplaceAll(err.Error(), token, "[redacted]"))
+		fmt.Fprintln(stderr, strings.ReplaceAll(err.Error(), c.Token, "[redacted]"))
 		return 1
 	}
 	encoder := json.NewEncoder(out)

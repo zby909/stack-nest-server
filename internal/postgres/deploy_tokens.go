@@ -95,11 +95,11 @@ func (s *Store) DeleteDeployToken(ctx context.Context, projectID, id string, act
 // AuthenticateDeployToken 每次检查过期、归属及创建者现有权限，使用时间最多每分钟写一次。
 func (s *Store) AuthenticateDeployToken(ctx context.Context, hash string) (deploytoken.Grant, error) {
 	var g deploytoken.Grant
-	err := s.db.QueryRowContext(ctx, `SELECT t.id,t.name,t.can_publish,t.project_id,t.owner_user_id,p.slug,u.id,u.email,u.role,u.created_at
-		FROM deploy_tokens t JOIN projects p ON p.id=t.project_id JOIN auth_users u ON u.id=t.creator_user_id
-		WHERE t.token_hash=$1 AND t.expires_at>now() AND p.owner_user_id=t.owner_user_id
-		AND (u.id=p.owner_user_id OR u.role IN ('admin','superadmin'))`, hash).
-		Scan(&g.ID, &g.Name, &g.CanPublish, &g.ProjectID, &g.OwnerID, &g.Slug, &g.User.ID, &g.User.Email, &g.User.Role, &g.User.CreatedAt)
+	err := s.db.QueryRowContext(ctx, `SELECT t.id,t.name,t.can_publish,COALESCE(t.project_id,''),COALESCE(t.app_id,''),t.owner_user_id,COALESCE(p.slug,a.slug),u.id,u.email,u.role,u.created_at
+		FROM deploy_tokens t LEFT JOIN projects p ON p.id=t.project_id LEFT JOIN container_apps a ON a.id=t.app_id JOIN auth_users u ON u.id=t.creator_user_id
+		WHERE t.token_hash=$1 AND t.expires_at>now() AND COALESCE(p.owner_user_id,a.owner_user_id)=t.owner_user_id
+		AND (u.id=t.owner_user_id OR u.role IN ('admin','superadmin'))`, hash).
+		Scan(&g.ID, &g.Name, &g.CanPublish, &g.ProjectID, &g.AppID, &g.OwnerID, &g.Slug, &g.User.ID, &g.User.Email, &g.User.Role, &g.User.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return g, deploytoken.ErrInvalid
 	}

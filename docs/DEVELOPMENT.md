@@ -54,6 +54,7 @@ Docker 应用联调使用 [Compose 环境](GETTING_STARTED.md)。停止开发库
 - 修改 Ent schema 后执行 `go generate ./internal/ent`，再用 `atlas migrate diff 变更名 --env local` 生成并审查迁移。
 - 手写 SQL 使用 `atlas migrate hash --dir file://migrations` 更新校验。已应用的迁移不改写。
 - 自动部署凭据使用手写 SQL 与 [独立协议](../openapi/automation.yaml)，命令行入口为 `cmd/stacknest-deploy`；测试覆盖 Token 权限、真实分片上传与发布事务。
+- Docker 自动部署复用同一凭据存储，使用[独立入口](../openapi/app-automation.yaml)；`internal/containerapp/automation.go` 只改镜像，`internal/postgres/app_deployment.go` 原子核对授权、基线和最近回执。
 - 同时修改 API、前端和数据库时，作为配套版本维护。
 
 ## 检查与测试

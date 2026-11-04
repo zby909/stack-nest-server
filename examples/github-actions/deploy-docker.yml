@@ -1,0 +1,71 @@
+name: Deploy Docker application to StackNest
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: stacknest-docker-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Select the image repository
+        run: printf 'IMAGE_NAME=ghcr.io/%s\n' "${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Build and push this revision
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+      - name: Install the pinned CLI
+        env:
+          CLI_VERSION: ${{ vars.STACKNEST_CLI_VERSION }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$CLI_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo 'Set STACKNEST_CLI_VERSION to rc.10 or newer'; exit 1; }
+          mkdir -p "$RUNNER_TEMP/stacknest-cli"
+          cd "$RUNNER_TEMP/stacknest-cli"
+          asset="stacknest-deploy-$CLI_VERSION-linux-amd64.tar.gz"
+          gh release download "$CLI_VERSION" --repo zby909/stack-nest-server --pattern "$asset" --pattern "$asset.sha256"
+          sha256sum --check "$asset.sha256"
+          tar -xzf "$asset"
+      - name: Deploy the exact image and wait for readiness
+        env:
+          STACKNEST_URL: ${{ vars.STACKNEST_URL }}
+          STACKNEST_DEPLOY_TOKEN: ${{ secrets.STACKNEST_DEPLOY_TOKEN }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE_PREFIX: ${{ vars.STACKNEST_IMAGE_PREFIX }}
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/stacknest-cli/stacknest-deploy" app deploy \
+            --image "${IMAGE_PREFIX}${IMAGE_NAME}@${IMAGE_DIGEST}" --timeout 75m \
+            | tee "$RUNNER_TEMP/stacknest-deployment.json"
+      - name: Record the deployment receipt
+        if: always()
+        run: |
+          if [[ -s "$RUNNER_TEMP/stacknest-deployment.json" ]]; then
+            printf '### StackNest deployment\n\n```json\n' >> "$GITHUB_STEP_SUMMARY"
+            cat "$RUNNER_TEMP/stacknest-deployment.json" >> "$GITHUB_STEP_SUMMARY"
+            printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+          fi

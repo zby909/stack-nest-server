@@ -2,8 +2,6 @@ package httpserver
 
 import (
 	"context"
-	"errors"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -78,33 +76,12 @@ func (s *Server) automationBoundary(next http.Handler) http.Handler {
 			writeJSON(w, 503, generated.ErrorResponse{Error: "自动部署尚未启用"})
 			return
 		}
-		if requestScheme(r) != "https" && !isLoopbackHost(r.Host) {
-			writeJSON(w, 403, generated.ErrorResponse{Error: "自动部署必须通过 HTTPS 或本机隧道访问"})
+		g, ok := s.authenticateDeployment(w, r, s.config.DeployTokens)
+		if !ok {
 			return
 		}
-		values := r.Header.Values("Authorization")
-		if len(values) != 1 {
+		if g.ProjectID == "" || g.AppID != "" {
 			s.deploymentUnauthorized(w)
-			return
-		}
-		parts := strings.Fields(values[0])
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			s.deploymentUnauthorized(w)
-			return
-		}
-		hash, err := deploytoken.Hash(parts[1])
-		if err != nil {
-			s.deploymentUnauthorized(w)
-			return
-		}
-		g, err := s.config.DeployTokens.AuthenticateDeployToken(r.Context(), hash)
-		if errors.Is(err, deploytoken.ErrInvalid) {
-			s.deploymentUnauthorized(w)
-			return
-		}
-		if err != nil {
-			slog.ErrorContext(r.Context(), "authenticate deployment token", "request_id", requestID(r), "error", err)
-			writeJSON(w, 503, generated.ErrorResponse{Error: "暂时无法验证部署凭据"})
 			return
 		}
 		ctx := context.WithValue(r.Context(), deployContextKey{}, g)

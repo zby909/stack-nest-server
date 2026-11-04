@@ -1,4 +1,4 @@
-h1:88316QrvftE99AS6t61zowCypgCh+EvtDpvdMFsc9pM=
+h1:rvDrwdbmQCDWY0X8n48txwKpIk4BIxuDY20xqTK30cA=
 20260922150000_initial.sql h1:d6wuFEEwvu7npp77mMGTKpj0TqMCNSCKRY4Z9qOHIzI=
 20260928075537_email_auth.sql h1:3r/f5KPaXueXn+oftiNRqSR84xBqCou1LglTzwF/4Ao=
 20260929090000_project_owner.sql h1:BWtgdDYy1rE4i1+eq83NZCG7IOAPD+1dr0n9Uz/jq2g=
@@ -7,3 +7,4 @@ h1:88316QrvftE99AS6t61zowCypgCh+EvtDpvdMFsc9pM=
 20261011170000_app_limits.sql h1:XQ81upIJNyMLX4HN4aTTq8qAXKeBa9vUYbmQq1+JVko=
 20261011193000_app_memory_limit.sql h1:ylnX89ASTDeNrhEhDxE2g4Lx96WSxq8dqAzgimuD0vg=
 20261028090000_deploy_tokens.sql h1:XlKXJ2PYOlcASNSmYyfkqCnevlhPbBn6sZ7wZG8Ld9A=
+20261104090000_app_deploy_tokens.sql h1:A1x/qF0WzY73fHnK8hdfiAG2zbgiCcU42R5d/Ai9o2w=

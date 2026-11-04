@@ -139,6 +139,7 @@ func run() error {
 	apps := containerapp.New(store, containerapp.NewClient(cfg.RunnerSocket), cfg.AuthSecret, guard, activityLog)
 	server := httpserver.New(httpserver.Config{
 		DeployTokens:       store,
+		AppDeployTokens:    store,
 		Apps:               apps,
 		Network:            egress.NewClient(cfg.EgressSocket),
 		Addr:               cfg.Addr,

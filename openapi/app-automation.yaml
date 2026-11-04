@@ -1,0 +1,146 @@
+openapi: 3.0.3
+info:
+  title: StackNest Docker application automation
+  version: 1.0.0
+  description: >-
+    A Token is bound to one existing application. Only its image version can change.
+    Remote requests require HTTPS; loopback HTTP is allowed. Every response is no-store.
+    Each request checks expiry, revocation, ownership and the creator's current permissions.
+    This Token cannot use static deployment or management APIs. Accepted tasks survive disconnection or revocation.
+security:
+  - AppDeployToken: []
+paths:
+  /api/app-deploy/v1/app:
+    get:
+      summary: Get the bound application's deployment status
+      parameters:
+        - in: query
+          name: generation
+          schema: { type: integer, format: int64, minimum: 1 }
+          description: Reject with 409 if the current generation differs.
+      responses:
+        '200':
+          description: Deployment status; ready means that the queued operation passed its configured readiness check.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '401': { description: Invalid or wrong-resource Token }
+        '409': { description: The requested generation is no longer current }
+  /api/app-deploy/v1/deploy:
+    post:
+      summary: Deploy a new version from the same image repository
+      description: >-
+        Keeps all existing configuration and credentials. A tag or SHA256 digest is required.
+        Atomically rechecks the grant and generation before queuing. The same requestId,
+        Token, image and expectedGeneration return the original generation without queuing again.
+        Only the most recent automation receipt is retained; stale replays conflict.
+        A successful HTTP response means accepted, not ready. Failure recovery does not revert application data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [image, expectedGeneration, requestId]
+              properties:
+                image: { type: string, maxLength: 256 }
+                expectedGeneration: { type: integer, format: int64, minimum: 1 }
+                requestId: { type: string, format: uuid }
+      responses:
+        '202':
+          description: Accepted or the same request was already accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '400': { description: Invalid body or image repository change }
+        '401': { description: Token invalid, expired, revoked or no longer authorized }
+        '409': { description: Busy application, changed generation or incompatible request replay }
+        '503': { description: Runner or authorization storage unavailable }
+  /api/apps/{id}/deploy-tokens:
+    parameters:
+      - { $ref: '#/components/parameters/AppID' }
+    get:
+      security: [{ SecureSessionCookie: [] }, { SessionCookie: [] }]
+      summary: Application manager lists Token metadata
+      responses:
+        '200':
+          description: Bounded metadata list without hashes or secrets
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tokens]
+                properties:
+                  tokens:
+                    type: array
+                    maxItems: 10
+                    items: { $ref: './automation.yaml#/components/schemas/Token' }
+        '404': { description: Application missing or owned by another user }
+    post:
+      security: [{ SecureSessionCookie: [] }, { SessionCookie: [] }]
+      summary: Application manager grants direct deployment permission
+      description: Requires a same-origin management session. The secret is shown once.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 60 }
+                expiresInDays: { type: integer, minimum: 1, maximum: 365, default: 30 }
+      responses:
+        '201':
+          description: Created; canPublish is false because this is an application credential
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, secret]
+                properties:
+                  token: { $ref: './automation.yaml#/components/schemas/Token' }
+                  secret: { type: string, readOnly: true }
+        '409': { description: Ten Tokens already exist }
+  /api/apps/{id}/deploy-tokens/{tokenId}:
+    parameters:
+      - { $ref: '#/components/parameters/AppID' }
+      - in: path
+        name: tokenId
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      security: [{ SecureSessionCookie: [] }, { SessionCookie: [] }]
+      summary: Revoke the specified application Token
+      description: Same-origin management session required; already accepted tasks are not canceled.
+      responses:
+        '204': { description: Revoked or already absent }
+        '404': { description: Application missing or owned by another user }
+components:
+  securitySchemes:
+    AppDeployToken: { type: http, scheme: bearer, bearerFormat: snd_ plus 256-bit random base64url }
+    SecureSessionCookie: { type: apiKey, in: cookie, name: __Host-stacknest_session }
+    SessionCookie: { type: apiKey, in: cookie, name: stacknest_session }
+  parameters:
+    AppID:
+      in: path
+      name: id
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    Application:
+      type: object
+      required: [appId, slug, name, image, generation, status, url, error, canceled]
+      properties:
+        appId: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        image: { type: string, description: Current saved image; restored to the previous configuration after failure. }
+        generation: { type: integer, format: int64, minimum: 1 }
+        status: { type: string, enum: [pending, deploying, ready, stopped, error] }
+        stage: { type: string }
+        url: { type: string, format: uri }
+        error: { type: string }
+        canceled: { type: boolean }

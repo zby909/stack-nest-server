@@ -2,6 +2,8 @@
 
 让本机脚本、AI 或 GitHub Actions 上传 HTML / ZIP / RAR，返回预览地址；确认后再发布到原项目网址。无需 SSH、登录 Cookie 或服务器密码。
 
+Docker 应用使用独立的应用 Token 和 `app deploy` 命令，见 [Docker 自动部署](DOCKER_AUTOMATION.md)。本页的静态项目 Token 不能操作应用。
+
 本功能从 `v1.0.0-rc.2` 开始提供，需要配套更新后端和 Web。早期 `v1.0.0-rc.1` 不包含本功能，也没有 CLI 下载包。
 
 ## 1. 创建项目凭据

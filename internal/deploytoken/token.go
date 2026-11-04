@@ -1,4 +1,4 @@
-// Package deploytoken 定义仅用于单个静态项目自动部署的凭据。
+// Package deploytoken 定义绑定单个静态项目或 Docker 应用的自动部署凭据。
 package deploytoken
 
 import (
@@ -33,6 +33,7 @@ type Token struct {
 	LastUsedAt *time.Time `json:"lastUsedAt"`
 	CreatedBy  string     `json:"createdBy"`
 	ProjectID  string     `json:"-"`
+	AppID      string     `json:"-"`
 	OwnerID    string     `json:"-"`
 	CreatorID  string     `json:"-"`
 	Hash       string     `json:"-"`
@@ -51,6 +52,21 @@ type Store interface {
 	ListDeployTokens(context.Context, string, auth.User) ([]Token, error)
 	DeleteDeployToken(context.Context, string, string, auth.User) error
 	AuthenticateDeployToken(context.Context, string) (Grant, error)
+}
+
+// AppStore 使用独立管理入口，避免应用凭据被当作静态项目凭据使用。
+type AppStore interface {
+	CreateAppDeployToken(context.Context, Token, auth.User) error
+	ListAppDeployTokens(context.Context, string, auth.User) ([]Token, error)
+	DeleteAppDeployToken(context.Context, string, string, auth.User) error
+	AuthenticateDeployToken(context.Context, string) (Grant, error)
+}
+
+// NewApp 复用随机凭据格式，仅授权更新一个已有应用的镜像版本。
+func NewApp(appID, name string, days int) (Token, string, error) {
+	token, plain, err := New("", name, days, false)
+	token.AppID = appID
+	return token, plain, err
 }
 
 // New 生成 256 位随机凭据，调用方仅在创建响应中展示一次原文。

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"math"
 	"net/http"
+	"stacknest/server/internal/deploytoken"
 	"strings"
 	"testing"
 	"time"
@@ -97,6 +98,11 @@ func (s *testStore) App(context.Context, string, Actor) (App, error) { return s.
 
 // SaveApp 记录加密配置。
 func (s *testStore) SaveApp(_ context.Context, a App, _ Actor, _ bool) error { s.value = a; return nil }
+
+// SaveAppImage 不在普通生命周期替身中模拟数据库授权；该边界由集成测试验证。
+func (s *testStore) SaveAppImage(context.Context, App, deploytoken.Grant, ImageUpdate) (int64, error) {
+	return 0, ErrUnavailable
+}
 
 // QueueApp 模拟任务排队。
 func (s *testStore) QueueApp(context.Context, string, Actor, string, int64) (App, error) {
