@@ -23,6 +23,8 @@ func TestArchive(t *testing.T) {
 		"stacknest-deploy/SKILL.md":                   true,
 		"stacknest-deploy/agents/openai.yaml":         true,
 		"stacknest-deploy/references/local-config.md": true,
+		"stacknest-deploy/references/static.md":       true,
+		"stacknest-deploy/references/docker.md":       true,
 		"stacknest-deploy/LICENSE":                    true,
 		"stacknest-deploy/NOTICE":                     true,
 	}

@@ -1,4 +1,4 @@
 interface:
   display_name: "StackNest 部署"
-  short_description: "通过 StackNest 上传静态项目、更新指定待发布版、续传并发布确切版本"
-  default_prompt: "使用 $stacknest-deploy 将我指定的 HTML 或压缩包部署到 StackNest，按我的要求生成预览或正式发布，并返回访问链接。"
+  short_description: "部署静态网站、更新 Docker 应用镜像，查询进度并续传或发布指定版本"
+  default_prompt: "使用 $stacknest-deploy 将我指定的静态文件或镜像部署到已有 StackNest 项目或应用，按请求预览、发布或等待部署结果，并返回访问链接。"

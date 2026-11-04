@@ -10,7 +10,7 @@ import (
 
 // 只嵌入明确列出的公共文件，避免把日后新增的本机配置或凭据带入下载包。
 //
-//go:embed stacknest-deploy/SKILL.md stacknest-deploy/agents/openai.yaml stacknest-deploy/references/local-config.md stacknest-deploy/LICENSE stacknest-deploy/NOTICE
+//go:embed stacknest-deploy/SKILL.md stacknest-deploy/agents/openai.yaml stacknest-deploy/references/local-config.md stacknest-deploy/references/static.md stacknest-deploy/references/docker.md stacknest-deploy/LICENSE stacknest-deploy/NOTICE
 var source embed.FS
 
 var bundle = sync.OnceValues(buildArchive)
@@ -26,6 +26,8 @@ func buildArchive() ([]byte, error) {
 		"stacknest-deploy/SKILL.md",
 		"stacknest-deploy/agents/openai.yaml",
 		"stacknest-deploy/references/local-config.md",
+		"stacknest-deploy/references/static.md",
+		"stacknest-deploy/references/docker.md",
 		"stacknest-deploy/LICENSE",
 		"stacknest-deploy/NOTICE",
 	} {
