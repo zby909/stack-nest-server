@@ -119,6 +119,15 @@ func TestAppAutomationIntegration(t *testing.T) {
 		s.http.Handler.ServeHTTP(w, r)
 		return w
 	}
+	for _, check := range []struct {
+		cookie *http.Cookie
+		status int
+	}{{ownerCookie, 200}, {otherCookie, 404}, {nil, 401}} {
+		out := manage("GET", "/api/apps/"+app.ID+"/deployments", "", check.cookie, true)
+		if out.Code != check.status {
+			t.Fatal("history authorization", out.Code, out.Body.String())
+		}
+	}
 	path := "/api/apps/" + app.ID + "/deploy-tokens"
 	for _, check := range []struct {
 		method string
@@ -221,6 +230,10 @@ func TestAppAutomationIntegration(t *testing.T) {
 	}
 	if w := deployRequest(s, "POST", appDeployPrefix+"deploy", plain, body); w.Code != 202 {
 		t.Fatal("completed request replay failed", w.Code)
+	}
+	history, err := apps.History(ctx, app.ID, actor)
+	if err != nil || len(history) != 2 || history[0].Generation != 2 || history[0].Source != "automation" || history[0].Status != "succeeded" || history[0].Image != request.Image {
+		t.Fatal("automation history duplicated or incorrect", history, err)
 	}
 	request.RequestID = uuid.NewString()
 	body, _ = json.Marshal(request)

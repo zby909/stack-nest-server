@@ -1,0 +1,90 @@
+openapi: 3.0.3
+info:
+  title: StackNest Docker 部署记录与镜像空间
+  version: 1.0.0
+paths:
+  /api/apps/{id}/deployments:
+    get:
+      description: 当前应用所有者或管理员可读取最近十次部署摘要。旧任务不回填；环境变量和仓库凭据不进入历史。
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: 按任务代次倒序
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deployments]
+                properties:
+                  deployments: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/Deployment'}}
+        '401': {description: 未登录}
+        '404': {description: 应用不存在或无权访问}
+  /api/apps/images:
+    get:
+      description: 仅超管可按需查询宿主镜像空间。合计为 Docker 镜像层大小；单项逻辑大小包含共享层，不能累加为可回收空间。部署或备份期间可能返回冲突。
+      responses:
+        '200':
+          description: 当前清单
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [totalBytes, images]
+                properties:
+                  totalBytes: {type: integer, format: int64}
+                  images: {type: array, items: {$ref: '#/components/schemas/Image'}}
+        '401': {description: 未登录}
+        '403': {description: 仅超管}
+        '409': {description: 运行器正在部署或维护}
+        '503': {description: 无法完成镜像引用检查}
+  /api/apps/images/{imageId}:
+    delete:
+      description: 仅超管、同源请求。只清理本实例新增拉取的镜像。重新检查应用当前及候选配置、停止容器、其他宿主容器和多重引用；与入队及运行器操作互斥。按内容 ID 非强制删除，并记录操作结果。
+      parameters:
+        - name: imageId
+          in: path
+          required: true
+          schema: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+      responses:
+        '200':
+          description: 已清理，重新读取清单获取当前占用
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deleted]
+                properties:
+                  deleted: {type: boolean}
+        '400': {description: 镜像编号无效}
+        '401': {description: 未登录}
+        '403': {description: 角色或同源验证失败}
+        '404': {description: 镜像已不存在}
+        '409': {description: 引用变化、无法确认归属或正在部署维护}
+        '503': {description: 无法完成镜像引用检查}
+components:
+  schemas:
+    Deployment:
+      type: object
+      required: [generation, image, actorEmail, source, status, queuedAt]
+      properties:
+        generation: {type: integer, format: int64}
+        image: {type: string}
+        imageId: {type: string, description: 成功部署的实际镜像编号}
+        actorEmail: {type: string}
+        source: {type: string, enum: [web, automation]}
+        status: {type: string, enum: [pending, deploying, succeeded, failed, canceled]}
+        message: {type: string, description: 有界脱敏失败摘要}
+        queuedAt: {type: string, format: date-time}
+        startedAt: {type: string, format: date-time}
+        finishedAt: {type: string, format: date-time}
+    Image:
+      type: object
+      required: [id, tags, sizeBytes, managed, removable, reason]
+      properties:
+        id: {type: string}
+        tags: {type: array, items: {type: string}}
+        sizeBytes: {type: integer, format: int64}
+        managed: {type: boolean}
+        removable: {type: boolean}
+        reason: {type: string}

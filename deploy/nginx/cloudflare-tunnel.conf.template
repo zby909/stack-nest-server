@@ -57,7 +57,7 @@ server {
     index index.html;
 
     location ~ ^/(api/|openapi\.yaml$) {
-        proxy_pass http://stacknest:8080;
+        proxy_pass http://stacknest_backend;
         proxy_http_version 1.1;
         proxy_request_buffering off;
         proxy_set_header Host $host;
@@ -96,7 +96,7 @@ server {
     location / { try_files $uri $uri/ $stacknest_tunnel_spa_index =404; }
 
     location @stacknest_tunnel_dynamic {
-        proxy_pass http://stacknest:8080;
+        proxy_pass http://stacknest_backend;
         proxy_http_version 1.1;
         proxy_request_buffering off;
         proxy_buffering off;

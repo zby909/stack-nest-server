@@ -48,6 +48,10 @@ func TestPullProgressDoesNotBlockBehindOperation(t *testing.T) {
 	sent, release := make(chan struct{}), make(chan struct{})
 	defer close(release)
 	docker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/v1.45/images/json" {
+			_, _ = w.Write([]byte("[]"))
+			return
+		}
 		if req.URL.Path == "/v1.45/images/create" {
 			_, _ = w.Write([]byte(`{"id":"layer-1","status":"Downloading","progressDetail":{"current":50,"total":100}}` + "\n"))
 			w.(http.Flusher).Flush()

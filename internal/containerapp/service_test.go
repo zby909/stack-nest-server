@@ -90,6 +90,11 @@ type testStore struct {
 	message   string
 }
 
+// AppDeployments 提供空历史，数据库事务由集成测试验证。
+func (s *testStore) AppDeployments(context.Context, string) ([]Deployment, error) {
+	return []Deployment{}, nil
+}
+
 // Apps 提供测试应用列表。
 func (s *testStore) Apps(context.Context, Actor) ([]App, error) { return []App{s.value}, nil }
 

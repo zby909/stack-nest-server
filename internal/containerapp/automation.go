@@ -27,6 +27,8 @@ func imageRepository(image string) string {
 
 // DeployImage 沿用加密配置，只改变镜像；存储事务再校验凭据、归属与当前代次。
 func (s *Service) DeployImage(ctx context.Context, grant deploytoken.Grant, input ImageUpdate) (App, error) {
+	s.imageMu.RLock()
+	defer s.imageMu.RUnlock()
 	if grant.AppID == "" || grant.ProjectID != "" {
 		return App{}, deploytoken.ErrInvalid
 	}

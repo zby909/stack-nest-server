@@ -4,6 +4,7 @@ import argparse
 import http.client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import ipaddress
 from pathlib import Path
 import shutil
 import ssl
@@ -133,6 +134,8 @@ def main():
     network = "stacknest-ingress-check-" + token
     name = "stacknest-ingress-check-" + token
     backend = None
+    backend_name = name + "-backend"
+    backend_created = False
     created = False
     total = 0
     with tempfile.TemporaryDirectory(prefix="stacknest-ingress-", dir="/tmp") as temporary:
@@ -158,10 +161,27 @@ def main():
             gateway = config["IPAM"]["Config"][0]["Gateway"]
             backend = ThreadingHTTPServer((gateway, 8080), Backend)
             threading.Thread(target=backend.serve_forever, daemon=True).start()
+            backend_config = root / "backend.conf"
+            backend_config.write_text("events {}\nhttp { server { listen 8080; location / { "
+                "proxy_pass http://" + gateway + ":8080; proxy_http_version 1.1; "
+                "proxy_set_header Host $http_host; proxy_set_header Upgrade $http_upgrade; "
+                "proxy_set_header Connection $http_connection; } } }", encoding="utf-8")
+            addresses = [str(ipaddress.ip_address(gateway) + offset) for offset in (10, 11)]
+            backend_address = 0
+
+            # start_backend 使用真实 Docker 服务名解析，重建时强制换 IP 验证 Nginx 自动恢复。
+            def start_backend():
+                run(["docker", "run", "-d", "--name", backend_name, "--network", network,
+                     "--network-alias", "stacknest", "--ip", addresses[backend_address],
+                     "--label", "com.stacknest.check=nginx",
+                     "-v", str(backend_config) + ":/etc/nginx/nginx.conf:ro", args.image], "start test backend")
+
+            start_backend()
+            backend_created = True
             for mode, base in [("http", "default.conf.template"), ("tls", "tls.conf.template"),
                                ("cloudflare", "cloudflare.conf.template"), ("tunnel", "default.conf.template")]:
                 command = ["docker", "run", "-d", "--name", name, "--network", network,
-                           "--label", "com.stacknest.check=nginx", "--add-host", "stacknest:" + gateway,
+                           "--label", "com.stacknest.check=nginx",
                            "-e", "STACKNEST_ADMIN_DOMAIN=stack-nest.example.com",
                            "-e", "STACKNEST_BASE_DOMAIN=example.com",
                            "-e", "NGINX_ENVSUBST_FILTER=STACKNEST_ADMIN_DOMAIN|STACKNEST_BASE_DOMAIN",
@@ -206,10 +226,33 @@ def main():
                         total += 2
                     else:
                         total += check_routes(ports[80])
-                    print("nginx_mode=" + mode + " verified", flush=True)
+                    original_id = state["Id"]
+                    run(["docker", "rm", "-f", backend_name], "replace test backend")
+                    backend_address = 1 - backend_address
+                    start_backend()
+                    health_port = ports[443] if mode in ("tls", "cloudflare") else ports[81] if mode == "tunnel" else ports[80]
+                    health_context = context if mode in ("tls", "cloudflare") else None
+                    health_headers = {"X-Forwarded-Proto": "https"} if mode == "tunnel" else {}
+                    deadline = time.monotonic() + 20
+                    while True:
+                        try:
+                            response = request(health_port, "stack-nest.example.com", "/api/health", health_headers, health_context)
+                            if response[0] == 200:
+                                break
+                        except (OSError, http.client.HTTPException):
+                            # 换 IP 时允许短暂不可用，下一次请求应使用刷新后的解析。
+                            pass
+                        if time.monotonic() > deadline:
+                            raise AssertionError("nginx did not resolve recreated backend")
+                        time.sleep(0.3)
+                    assert json.loads(run(["docker", "inspect", name]))[0]["Id"] == original_id
+                    total += check_routes(health_port, context=health_context, cloudflare=mode == "tunnel")
+                    print("nginx_mode=" + mode + " routes_and_backend_recreation_verified", flush=True)
                 finally:
                     run(["docker", "rm", "-f", name], "clean isolated nginx")
         finally:
+            if backend_created:
+                run(["docker", "rm", "-f", backend_name], "clean test backend")
             if backend:
                 backend.shutdown()
                 backend.server_close()

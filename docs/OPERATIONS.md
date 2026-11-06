@@ -26,7 +26,7 @@ docker compose exec -T stacknest /usr/local/bin/stacknest doctor
 | 上传 507 / 503   | 磁盘达到 90%、空间预算或探测失败        |
 | 应用访问失败     | 失败阶段、健康检查、内存与运行日志      |
 | CSS 未更新       | Cloudflare 尊重源站标头并清理旧缓存     |
-| API 重建后 502   | 重启 Nginx，重新解析后端地址            |
+| API 重建后 502   | Nginx 会自动刷新 Docker DNS；持续失败时检查 API 健康状态与 Nginx 日志 |
 | 虚拟机重启后 502 | 本机入口、容器内部接口和网段是否重叠；见 [Hyper-V 排查](HOME_SERVER_TUNNEL.md#hyper-v-网段冲突) |
 
 提交问题时提供请求编号和脱敏日志，不附密码或完整配置。

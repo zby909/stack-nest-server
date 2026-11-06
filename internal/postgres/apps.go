@@ -99,6 +99,9 @@ func (s *Store) SaveApp(ctx context.Context, a containerapp.App, actor container
 	if err != nil {
 		return err
 	}
+	if err = queueAppDeployment(ctx, tx, a.ID, a.Image, "web"); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -126,13 +129,17 @@ func (s *Store) RecoverApps(ctx context.Context) error {
 
 // CancelPendingApp 只结束仍在排队的同一部署；已领取或已完成的任务不被覆盖。
 func (s *Store) CancelPendingApp(ctx context.Context, a containerapp.App) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE container_apps SET status='error',action='',error=$3,sealed=$4,memory_mib=$5,updated_at=now() WHERE id=$1 AND generation=$2 AND status='pending' AND action='deploy'`, a.ID, a.Generation, containerapp.ErrDeployCanceled.Error(), a.Sealed, a.MemoryMiB)
+	_, err := s.db.ExecContext(ctx, `WITH canceled AS (
+        UPDATE container_apps SET status='error',action='',error=$3,sealed=$4,memory_mib=$5,updated_at=now()
+        WHERE id=$1 AND generation=$2 AND status='pending' AND action='deploy' RETURNING id,generation)
+        UPDATE app_deployments d SET status='canceled',message=$3,finished_at=now()
+        FROM canceled c WHERE d.app_id=c.id AND d.generation=c.generation AND d.finished_at IS NULL`, a.ID, a.Generation, containerapp.ErrDeployCanceled.Error(), a.Sealed, a.MemoryMiB)
 	return err
 }
 
 // ClaimApp 原子领取一个任务，不将长时间拉镜像放在数据库事务里。
 func (s *Store) ClaimApp(ctx context.Context) (containerapp.App, error) {
-	return scanApp(s.db.QueryRowContext(ctx, `WITH picked AS (SELECT id FROM container_apps WHERE status='pending' ORDER BY updated_at FOR UPDATE SKIP LOCKED LIMIT 1), updated AS (UPDATE container_apps SET status='deploying' WHERE id IN (SELECT id FROM picked) RETURNING *) SELECT `+appColumns+` FROM updated a JOIN auth_users u ON u.id=a.owner_user_id`))
+	return scanApp(s.db.QueryRowContext(ctx, `WITH picked AS (SELECT id FROM container_apps WHERE status='pending' ORDER BY updated_at FOR UPDATE SKIP LOCKED LIMIT 1), updated AS (UPDATE container_apps SET status='deploying' WHERE id IN (SELECT id FROM picked) RETURNING *), history AS (UPDATE app_deployments d SET status='deploying',started_at=COALESCE(d.started_at,now()) FROM updated a WHERE d.app_id=a.id AND d.generation=a.generation AND d.finished_at IS NULL) SELECT `+appColumns+` FROM updated a JOIN auth_users u ON u.id=a.owner_user_id`))
 }
 
 // CompleteApp 只完成领取的代次，删除失败时保留配置与数据供重试。
@@ -148,6 +155,18 @@ func (s *Store) CompleteApp(ctx context.Context, a containerapp.App, result cont
 	if message != "" {
 		status = "error"
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE container_apps SET status=$3,action='',error=$4,sealed=$5,active_sealed=$6,container_id=$7,image_id=$8,memory_mib=$9,updated_at=now() WHERE id=$1 AND generation=$2`, a.ID, a.Generation, status, message, a.Sealed, a.ActiveSealed, result.ContainerID, result.ImageID, a.MemoryMiB)
+	historyStatus, imageID := "succeeded", result.ImageID
+	if message != "" {
+		historyStatus, imageID = "failed", ""
+	}
+	if message == containerapp.ErrDeployCanceled.Error() {
+		historyStatus = "canceled"
+	}
+	_, err := s.db.ExecContext(ctx, `WITH completed AS (
+        UPDATE container_apps SET status=$3,action='',error=$4,sealed=$5,active_sealed=$6,container_id=$7,image_id=$8,memory_mib=$9,updated_at=now()
+        WHERE id=$1 AND generation=$2 RETURNING id,generation)
+        UPDATE app_deployments d SET status=$10,image_id=$11,message=left($4,4096),finished_at=now()
+        FROM completed a WHERE d.app_id=a.id AND d.generation=a.generation AND d.finished_at IS NULL`,
+		a.ID, a.Generation, status, message, a.Sealed, a.ActiveSealed, result.ContainerID, result.ImageID, a.MemoryMiB, historyStatus, imageID)
 	return err
 }

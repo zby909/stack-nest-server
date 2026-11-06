@@ -21,6 +21,14 @@ import (
 
 type appTestRuntime struct{}
 
+// Images 提供空清单供超管鉴权回归使用。
+func (appTestRuntime) Images(context.Context, containerapp.ImageRequest) (containerapp.ImageInventory, error) {
+	return containerapp.ImageInventory{Images: []containerapp.ImageUsage{}}, nil
+}
+
+// DeleteImage 只模拟镜像管理调用，不访问宿主。
+func (appTestRuntime) DeleteImage(context.Context, containerapp.ImageRequest) error { return nil }
+
 // Health 提供仅测试使用的可用状态。
 func (appTestRuntime) Health(context.Context) error { return nil }
 

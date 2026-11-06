@@ -92,6 +92,25 @@ func TestInstanceControlsIntegration(t *testing.T) {
 	}
 	adminCookie := login("other-admin@example.com")
 	for _, attempt := range []struct {
+		cookie *http.Cookie
+		want   int
+	}{{nil, 401}, {ownerCookie, 403}, {adminCookie, 403}, {superCookie, 200}} {
+		if out := call("GET", "/api/apps/images", "", attempt.cookie, origin); out.Code != attempt.want {
+			t.Fatal("image list role boundary", out.Code, out.Body.String())
+		}
+	}
+	imagePath := "/api/apps/images/sha256:" + strings.Repeat("a", 64)
+	if out := call("DELETE", imagePath, "", superCookie, "https://other.example"); out.Code != 403 {
+		t.Fatal("image cleanup CSRF boundary", out.Code)
+	}
+	if out := call("DELETE", imagePath, "", adminCookie, origin); out.Code != 403 {
+		t.Fatal("image cleanup role boundary", out.Code)
+	}
+	if out := call("DELETE", imagePath, "", superCookie, origin); out.Code != 200 {
+		t.Fatal("super image cleanup", out.Code, out.Body.String())
+	}
+
+	for _, attempt := range []struct {
 		cookie       *http.Cookie
 		body, origin string
 		want         int

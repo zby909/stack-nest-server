@@ -1,3 +1,12 @@
+# Docker 内部 DNS 持续解析后端，容器重建后自动连接新地址。
+proxy_connect_timeout 5s;
+upstream stacknest_backend {
+    zone stacknest_backend 64k;
+    resolver 127.0.0.11 valid=5s ipv6=off;
+    resolver_timeout 2s;
+    server stacknest:8080 resolve;
+}
+
 map $http_upgrade $stacknest_connection {
     default upgrade;
     "" close;
@@ -66,7 +75,7 @@ server {
     index index.html;
 
     location ~ ^/(api/|openapi\.yaml$) {
-        proxy_pass http://stacknest:8080;
+        proxy_pass http://stacknest_backend;
         proxy_http_version 1.1;
         proxy_request_buffering off;
         proxy_set_header Host $host;
@@ -99,7 +108,7 @@ server {
     if ($stacknest_dynamic_site) { return 418; }
     client_max_body_size 91m;
     location @dynamic_site {
-        proxy_pass http://stacknest:8080;
+        proxy_pass http://stacknest_backend;
         proxy_http_version 1.1;
         proxy_request_buffering off;
         proxy_buffering off;

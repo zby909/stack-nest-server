@@ -56,6 +56,7 @@ Docker 应用联调使用 [Compose 环境](GETTING_STARTED.md)。停止开发库
 - 自动部署凭据使用手写 SQL 与 [独立协议](../openapi/automation.yaml)，命令行入口为 `cmd/stacknest-deploy`；测试覆盖 Token 权限、真实分片上传与发布事务。
 - Docker 自动部署复用同一凭据存储，使用[独立入口](../openapi/app-automation.yaml)；`internal/containerapp/automation.go` 只改镜像，`internal/postgres/app_deployment.go` 原子核对授权、基线和最近回执。
 - 同时修改 API、前端和数据库时，作为配套版本维护。
+- Docker 部署记录与超管镜像清理使用[独立契约](../openapi/app-maintenance.yaml)和手写路由；记录与任务入队在同一数据库事务内提交。
 
 ## 检查与测试
 
@@ -92,3 +93,5 @@ sudo python3 deploy/check_egress_network.py
 ```
 
 这两项需要 Linux 环境，使用隔离夹具验证 Nginx 与网络规则。真实 SMTP、DNS、证书和恢复仍需目标环境验收。
+
+镜像清理的真实 Engine 检查可在专用 Linux 测试环境运行：`STACKNEST_TEST_DOCKER_SOCKET=/var/run/docker.sock go test ./internal/dockerrunner -run TestImageCleanupEngineIntegration`。它创建唯一名称的临时 scratch 镜像与停止容器，验证引用保护后清理自身夹具。

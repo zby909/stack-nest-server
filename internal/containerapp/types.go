@@ -155,6 +155,7 @@ type Runtime interface {
 type Store interface {
 	AppLimits(context.Context) (LimitsView, error)
 	UpdateAppLimits(context.Context, LimitsUpdate) (LimitsView, error)
+	AppDeployments(context.Context, string) ([]Deployment, error)
 	Apps(context.Context, Actor) ([]App, error)
 	App(context.Context, string, Actor) (App, error)
 	SaveApp(context.Context, App, Actor, bool) error

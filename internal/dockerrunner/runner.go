@@ -158,6 +158,8 @@ func (r *Runner) Serve(ctx context.Context, socket string) error {
 		respond(w, 200, map[string]bool{"ok": true})
 	})
 	mux.HandleFunc("GET /diagnostics", r.diagnostics)
+	mux.HandleFunc("POST /images/list", r.manageImages)
+	mux.HandleFunc("POST /images/delete", r.manageImages)
 	mux.HandleFunc("GET /capacity", r.capacity)
 	mux.HandleFunc("GET /progress/{id}/{generation}", r.readProgress)
 	mux.HandleFunc("POST /operation", r.operation)

@@ -40,6 +40,8 @@ Tunnel 则由宿主 cloudflared 主动建立加密连接，再通过本机 HTTP 
 
 Nginx 按 Host 分流。正式站点直接读取文件；预览和应用由 Go 查询数据库，确认记录仍有效。
 
+Nginx 通过 Docker 内部 DNS 定期刷新 API 地址，后端容器重建换 IP 后自动恢复连接，无需重启入口。
+
 - 管理域名：前端页面和管理 API。
 - `stack-nest-{slug}`：Nginx 直接读取已发布静态文件。
 - `stack-nest--{版本UUID}`：Go 检查版本仍保留后提供预览。

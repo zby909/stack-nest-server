@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -17,6 +18,7 @@ import (
 
 // Service 在所有权校验后加密配置，并执行可恢复的串行任务队列。
 type Service struct {
+	imageMu  sync.RWMutex
 	store    Store
 	runtime  Runtime
 	secret   string
@@ -79,6 +81,8 @@ func (s *Service) Get(ctx context.Context, id string, actor Actor) (App, error) 
 
 // Save 先检查资源与磁盘，再保存任务；编辑时保留未替换的敏感信息。
 func (s *Service) Save(ctx context.Context, id string, actor Actor, input Input, generation int64) (App, error) {
+	s.imageMu.RLock()
+	defer s.imageMu.RUnlock()
 	create := id == ""
 	var a App
 	if create {
@@ -141,7 +145,7 @@ func (s *Service) Save(ctx context.Context, id string, actor Actor, input Input,
 	if err != nil {
 		return a, err
 	}
-	a.Name, a.MemoryMiB = input.Name, input.MemoryMiB
+	a.Name, a.MemoryMiB, a.Image = input.Name, input.MemoryMiB, input.Image
 	if err = s.store.SaveApp(ctx, a, actor, create); err != nil {
 		return a, err
 	}
@@ -150,6 +154,8 @@ func (s *Service) Save(ctx context.Context, id string, actor Actor, input Input,
 
 // Queue 检查持久化代次并排队，不把长操作交给浏览器连接。
 func (s *Service) Queue(ctx context.Context, id string, actor Actor, action string, generation int64) (App, error) {
+	s.imageMu.RLock()
+	defer s.imageMu.RUnlock()
 	if action == "cancel" {
 		return s.Cancel(ctx, id, actor, generation)
 	}

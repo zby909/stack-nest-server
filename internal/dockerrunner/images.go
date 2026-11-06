@@ -39,6 +39,7 @@ func (r *Runner) pull(ctx context.Context, spec containerapp.Spec, pinned string
 		}
 		cancel()
 	}()
+	before := r.localImageIDs(task)
 	headers := map[string]string{}
 	if spec.Registry != nil {
 		head, _, found := strings.Cut(spec.Image, "/")
@@ -80,6 +81,7 @@ func (r *Runner) pull(ctx context.Context, spec containerapp.Spec, pinned string
 	if err = r.engine.call(task, "GET", "/images/"+url.PathEscape(spec.Image)+"/json", nil, &value); err != nil {
 		return value, err
 	}
+	r.recordPulledImage(value, spec.Image, before)
 	return value, r.validateImage(value, spec)
 }
 

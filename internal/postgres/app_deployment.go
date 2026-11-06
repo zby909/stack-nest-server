@@ -71,5 +71,8 @@ func (s *Store) SaveAppImage(ctx context.Context, a containerapp.App, grant depl
 	if err != nil {
 		return 0, err
 	}
+	if err = queueAppDeployment(ctx, tx, a.ID, input.Image, "automation"); err != nil {
+		return 0, err
+	}
 	return result, tx.Commit()
 }

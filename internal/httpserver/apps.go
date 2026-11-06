@@ -182,7 +182,7 @@ func (s *Server) writeAppError(w http.ResponseWriter, r *http.Request, err error
 	switch {
 	case errors.Is(err, containerapp.ErrNotFound):
 		status, message = 404, err.Error()
-	case errors.Is(err, containerapp.ErrBusy), errors.Is(err, containerapp.ErrQuota), errors.Is(err, containerapp.ErrConflict), errors.Is(err, containerapp.ErrCancelTooLate):
+	case errors.Is(err, containerapp.ErrImageProtected), errors.Is(err, containerapp.ErrBusy), errors.Is(err, containerapp.ErrQuota), errors.Is(err, containerapp.ErrConflict), errors.Is(err, containerapp.ErrCancelTooLate):
 		status, message = 409, err.Error()
 	case errors.Is(err, containerapp.ErrUnavailable):
 		status, message = 503, err.Error()

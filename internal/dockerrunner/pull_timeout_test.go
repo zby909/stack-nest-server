@@ -30,6 +30,9 @@ func TestPullTimeouts(t *testing.T) {
 				}
 				inspected := false
 				engine := &Engine{client: &http.Client{Transport: pullTransport(func(req *http.Request) (*http.Response, error) {
+					if strings.HasSuffix(req.URL.Path, "/images/json") {
+						return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("[]"))}, nil
+					}
 					if req.Method == "GET" {
 						inspected = true
 						return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"Id":"image","Os":"linux","Architecture":"amd64","Size":1024}`))}, nil

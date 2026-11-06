@@ -28,6 +28,9 @@ func TestCancelActivePull(t *testing.T) {
 		started := make(chan struct{})
 		r := &Runner{dataDir: t.TempDir(), guard: guard}
 		r.engine = &Engine{client: &http.Client{Transport: pullTransport(func(req *http.Request) (*http.Response, error) {
+			if strings.HasSuffix(req.URL.Path, "/images/json") {
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("[]"))}, nil
+			}
 			if req.Method != "POST" || !strings.Contains(req.URL.Path, "/images/create") {
 				t.Error("canceled pull attempted further Docker operations")
 			}

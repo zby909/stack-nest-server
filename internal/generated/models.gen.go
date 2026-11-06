@@ -11,28 +11,29 @@ import (
 
 // Defines values for ActivityEventAction.
 const (
-	ActivityEventActionAppDelete   ActivityEventAction = "app-delete"
-	ActivityEventActionAppDeploy   ActivityEventAction = "app-deploy"
-	ActivityEventActionAppLimits   ActivityEventAction = "app-limits"
-	ActivityEventActionAppRestart  ActivityEventAction = "app-restart"
-	ActivityEventActionAppStart    ActivityEventAction = "app-start"
-	ActivityEventActionAppStop     ActivityEventAction = "app-stop"
-	ActivityEventActionDelete      ActivityEventAction = "delete"
-	ActivityEventActionDiscard     ActivityEventAction = "discard"
-	ActivityEventActionDraft       ActivityEventAction = "draft"
-	ActivityEventActionEdit        ActivityEventAction = "edit"
-	ActivityEventActionExport      ActivityEventAction = "export"
-	ActivityEventActionNetwork     ActivityEventAction = "network"
-	ActivityEventActionPause       ActivityEventAction = "pause"
-	ActivityEventActionPublish     ActivityEventAction = "publish"
-	ActivityEventActionResume      ActivityEventAction = "resume"
-	ActivityEventActionRollback    ActivityEventAction = "rollback"
-	ActivityEventActionTokenCreate ActivityEventAction = "token-create"
-	ActivityEventActionTokenRevoke ActivityEventAction = "token-revoke"
-	ActivityEventActionUpdate      ActivityEventAction = "update"
-	ActivityEventActionUpload      ActivityEventAction = "upload"
-	ActivityEventActionUserAdd     ActivityEventAction = "user-add"
-	ActivityEventActionUserRole    ActivityEventAction = "user-role"
+	ActivityEventActionAppDelete      ActivityEventAction = "app-delete"
+	ActivityEventActionAppDeploy      ActivityEventAction = "app-deploy"
+	ActivityEventActionAppImageDelete ActivityEventAction = "app-image-delete"
+	ActivityEventActionAppLimits      ActivityEventAction = "app-limits"
+	ActivityEventActionAppRestart     ActivityEventAction = "app-restart"
+	ActivityEventActionAppStart       ActivityEventAction = "app-start"
+	ActivityEventActionAppStop        ActivityEventAction = "app-stop"
+	ActivityEventActionDelete         ActivityEventAction = "delete"
+	ActivityEventActionDiscard        ActivityEventAction = "discard"
+	ActivityEventActionDraft          ActivityEventAction = "draft"
+	ActivityEventActionEdit           ActivityEventAction = "edit"
+	ActivityEventActionExport         ActivityEventAction = "export"
+	ActivityEventActionNetwork        ActivityEventAction = "network"
+	ActivityEventActionPause          ActivityEventAction = "pause"
+	ActivityEventActionPublish        ActivityEventAction = "publish"
+	ActivityEventActionResume         ActivityEventAction = "resume"
+	ActivityEventActionRollback       ActivityEventAction = "rollback"
+	ActivityEventActionTokenCreate    ActivityEventAction = "token-create"
+	ActivityEventActionTokenRevoke    ActivityEventAction = "token-revoke"
+	ActivityEventActionUpdate         ActivityEventAction = "update"
+	ActivityEventActionUpload         ActivityEventAction = "upload"
+	ActivityEventActionUserAdd        ActivityEventAction = "user-add"
+	ActivityEventActionUserRole       ActivityEventAction = "user-role"
 )
 
 // Valid indicates whether the value is a known member of the ActivityEventAction enum.
@@ -41,6 +42,8 @@ func (e ActivityEventAction) Valid() bool {
 	case ActivityEventActionAppDelete:
 		return true
 	case ActivityEventActionAppDeploy:
+		return true
+	case ActivityEventActionAppImageDelete:
 		return true
 	case ActivityEventActionAppLimits:
 		return true
