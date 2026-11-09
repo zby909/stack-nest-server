@@ -50,7 +50,7 @@ Docker 应用联调使用 [Compose 环境](GETTING_STARTED.md)。停止开发库
 ## 修改代码
 
 - 业务规则在 `internal/project`、`internal/containerapp` 等模块；模块分工见 [架构](ARCHITECTURE.md)。
-- API 路由在 `openapi/openapi.yaml`，模型在 `openapi/components.yaml`；修改后执行 `go generate ./openapi`，不要手改生成代码。服务端 `/openapi.yaml` 返回合并后的完整契约。宿主网络、角色、限额及 [平台诊断和版本](../openapi/platform.yaml) 使用同目录独立契约与手写路由。
+- API 主路由在 `openapi/openapi.yaml`，模型在 `openapi/components.yaml`；修改后执行 `go generate ./openapi`，不要手改生成代码。宿主网络、角色、限额及 [平台诊断和版本](../openapi/platform.yaml) 使用同目录独立契约与手写路由。服务端 `/openapi.yaml` 自动合并全部契约，保留 Cookie / Token 的鉴权区别，补充模型使用文件名前缀避免重名。
 - 修改 Ent schema 后执行 `go generate ./internal/ent`，再用 `atlas migrate diff 变更名 --env local` 生成并审查迁移。
 - 手写 SQL 使用 `atlas migrate hash --dir file://migrations` 更新校验。已应用的迁移不改写。
 - 自动部署凭据使用手写 SQL 与 [独立协议](../openapi/automation.yaml)，命令行入口为 `cmd/stacknest-deploy`；测试覆盖 Token 权限、真实分片上传与发布事务。
@@ -76,6 +76,8 @@ Windows 一键检查用 `./scripts/check.ps1`；带独立 PostgreSQL 的完整�
 未设置测试数据库时，Go 会跳过 PostgreSQL 集成测试。需要手动运行时，先创建并迁移专用的 `stacknest_test`、`stacknest_auth_test`，分别设置 `STACKNEST_TEST_DATABASE_URL`、`STACKNEST_TEST_AUTH_DATABASE_URL`。测试会清理专用库，不可指向生产库。
 
 GitHub Actions 自动准备临时 PostgreSQL、执行迁移和 Go race / vet / 漏洞检查。前端使用 [浏览器回归](https://github.com/zby909/stack-nest-web/blob/main/docs/TESTING.md)。
+
+Go 测试检查合并契约的接口覆盖与引用；部署工具测试检查 Git 跟踪文档的本地文件链接。发布时同时检查配套前端文档，本地可用 `python3 deploy/check_docs.py ../web` 运行，不访问外部链接。
 
 ## 部署工具检查
 

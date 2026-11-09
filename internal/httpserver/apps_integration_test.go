@@ -127,7 +127,7 @@ func TestContainerAppsIntegration(t *testing.T) {
 		server.http.Handler.ServeHTTP(out, req)
 		return out
 	}
-	input := `{"name":"First app","slug":"first","image":"example/app:v1","port":3000,"memoryMiB":128,"cpus":0.5,"dataPath":"/app/data","healthPath":"/health","env":{"SECRET":"secret-app-value"}}`
+	input := `{"name":"First app","slug":"first","image":"example/app:v1","port":3000,"memoryMiB":128,"cpus":0.5,"dataPath":"/app/data","healthPath":"/health","startupTimeoutSeconds":180,"env":{"SECRET":"secret-app-value"}}`
 	for _, attempt := range []struct {
 		cookie *http.Cookie
 		origin string
@@ -150,8 +150,8 @@ func TestContainerAppsIntegration(t *testing.T) {
 		t.Fatal(created.Body.String())
 	}
 	id := response.App.ID
-	if response.App.HealthPath != "/health" {
-		t.Fatal("health path was not preserved")
+	if response.App.HealthPath != "/health" || response.App.StartupTimeoutSeconds != 180 {
+		t.Fatal("health settings were not preserved")
 	}
 	usage := call("GET", "/api/apps/"+id, "", ownerCookie, "")
 	if usage.Code != 200 || !strings.Contains(usage.Body.String(), `"memoryBytes":1234`) || !strings.Contains(usage.Body.String(), `"health":"healthy"`) {

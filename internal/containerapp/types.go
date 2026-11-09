@@ -49,14 +49,15 @@ type Registry struct {
 
 // Spec 是受平台约束的单个 HTTP 容器配置，不接受任意 Docker 参数。
 type Spec struct {
-	Image      string            `json:"image"`
-	Port       int               `json:"port"`
-	MemoryMiB  int               `json:"memoryMiB"`
-	CPUs       float64           `json:"cpus"`
-	DataPath   string            `json:"dataPath"`
-	HealthPath string            `json:"healthPath"`
-	Env        map[string]string `json:"env"`
-	Registry   *Registry         `json:"registry,omitempty"`
+	Image                 string            `json:"image"`
+	Port                  int               `json:"port"`
+	MemoryMiB             int               `json:"memoryMiB"`
+	CPUs                  float64           `json:"cpus"`
+	DataPath              string            `json:"dataPath"`
+	HealthPath            string            `json:"healthPath"`
+	StartupTimeoutSeconds int               `json:"startupTimeoutSeconds"`
+	Env                   map[string]string `json:"env"`
+	Registry              *Registry         `json:"registry,omitempty"`
 }
 
 // Input 允许保留已有敏感配置，编辑时不需要回显密码。
@@ -71,33 +72,34 @@ type Input struct {
 
 // App 在数据库保存配置密文，公开接口仅返回非敏感配置。
 type App struct {
-	ID           string    `json:"id"`
-	OwnerID      string    `json:"ownerId"`
-	OwnerEmail   string    `json:"ownerEmail"`
-	Name         string    `json:"name"`
-	Slug         string    `json:"slug"`
-	Image        string    `json:"image"`
-	Port         int       `json:"port"`
-	MemoryMiB    int       `json:"memoryMiB"`
-	CPUs         float64   `json:"cpus"`
-	DataPath     string    `json:"dataPath"`
-	HealthPath   string    `json:"healthPath"`
-	EnvKeys      []string  `json:"envKeys"`
-	HasRegistry  bool      `json:"hasRegistry"`
-	Status       string    `json:"status"`
-	Action       string    `json:"action,omitempty"`
-	Error        string    `json:"error,omitempty"`
-	Canceled     bool      `json:"canceled,omitempty"`
-	Generation   int64     `json:"generation"`
-	ContainerID  string    `json:"-"`
-	ImageID      string    `json:"imageId,omitempty"`
-	Sealed       string    `json:"-"`
-	ActiveSealed string    `json:"-"`
-	ActorID      string    `json:"-"`
-	ActorEmail   string    `json:"-"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
-	URL          string    `json:"url"`
+	ID                    string    `json:"id"`
+	OwnerID               string    `json:"ownerId"`
+	OwnerEmail            string    `json:"ownerEmail"`
+	Name                  string    `json:"name"`
+	Slug                  string    `json:"slug"`
+	Image                 string    `json:"image"`
+	Port                  int       `json:"port"`
+	MemoryMiB             int       `json:"memoryMiB"`
+	CPUs                  float64   `json:"cpus"`
+	DataPath              string    `json:"dataPath"`
+	HealthPath            string    `json:"healthPath"`
+	StartupTimeoutSeconds int       `json:"startupTimeoutSeconds"`
+	EnvKeys               []string  `json:"envKeys"`
+	HasRegistry           bool      `json:"hasRegistry"`
+	Status                string    `json:"status"`
+	Action                string    `json:"action,omitempty"`
+	Error                 string    `json:"error,omitempty"`
+	Canceled              bool      `json:"canceled,omitempty"`
+	Generation            int64     `json:"generation"`
+	ContainerID           string    `json:"-"`
+	ImageID               string    `json:"imageId,omitempty"`
+	Sealed                string    `json:"-"`
+	ActiveSealed          string    `json:"-"`
+	ActorID               string    `json:"-"`
+	ActorEmail            string    `json:"-"`
+	CreatedAt             time.Time `json:"createdAt"`
+	UpdatedAt             time.Time `json:"updatedAt"`
+	URL                   string    `json:"url"`
 }
 
 // Actor 保留请求身份，后台工作完成时仍能记录操作人。
@@ -183,6 +185,9 @@ func (s Spec) Validate() error {
 	}
 	if err := ValidateHealthPath(s.HealthPath); err != nil {
 		return err
+	}
+	if s.StartupTimeoutSeconds != 0 && (s.StartupTimeoutSeconds < 30 || s.StartupTimeoutSeconds > 300) {
+		return invalid("启动等待时间须为 30–300 秒")
 	}
 	if s.MemoryMiB < 64 || s.MemoryMiB > MaxMemoryMiB || s.CPUs < 0.1 || s.CPUs > 1 || math.IsNaN(s.CPUs) || math.IsInf(s.CPUs, 0) {
 		return invalid(fmt.Sprintf("内存须为 64–%d MiB，CPU 须为 0.1–1 核", MaxMemoryMiB))

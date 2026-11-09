@@ -73,7 +73,7 @@ func (r *Runner) captureDeploymentFailure(ctx context.Context, op containerapp.O
 			output = "启动日志暂时无法读取。"
 		}
 	}
-	header := fmt.Sprintf("失败时间：%s\n任务代次：%d\n镜像：%s\n容器端口：%d\nHTTP 健康路径：%s\n%s\n原因：%s\n\n启动日志（最多 200 行）：\n", time.Now().UTC().Format(time.RFC3339), op.Generation, op.Spec.Image, op.Spec.Port, op.Spec.HealthPath, stateText, reason)
+	header := fmt.Sprintf("失败时间：%s\n任务代次：%d\n镜像：%s\n容器端口：%d\nHTTP 健康路径：%s\n启动等待：%g 秒\n%s\n原因：%s\n\n启动日志（最多 200 行）：\n", time.Now().UTC().Format(time.RFC3339), op.Generation, op.Spec.Image, op.Spec.Port, op.Spec.HealthPath, op.Spec.StartupTimeout().Seconds(), stateText, reason)
 	record := deploymentFailure{ID: op.ID, Generation: op.Generation, Text: boundedFailureText(containerapp.RedactLog(header+output, op.Spec), failureTextLimit)}
 	reason = boundedFailureText(containerapp.RedactLog(reason, op.Spec), 2048)
 	if err := r.saveDeploymentFailure(record); err != nil {

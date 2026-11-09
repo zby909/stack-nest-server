@@ -105,7 +105,7 @@ func (r *Runner) operate(ctx context.Context, op containerapp.Operation) (output
 		return fallback, err
 	}
 	if op.Action == "start" || op.Action == "restart" {
-		if err = r.ready(ctx, op.ID, value.ID); err != nil {
+		if err = r.ready(ctx, op.ID, value.ID, op.Spec.StartupTimeout()); err != nil {
 			return stateResponse(value), err
 		}
 	}
@@ -209,7 +209,7 @@ func (r *Runner) deploy(ctx context.Context, op containerapp.Operation, old insp
 		if _, err = r.owned(ctx, op.ID, candidate.ID); err != nil {
 			return fallback, errors.New("候选容器归属异常")
 		}
-		if candidate.State.Running && r.ready(ctx, op.ID, candidate.ID) == nil {
+		if candidate.State.Running && r.ready(ctx, op.ID, candidate.ID, op.Spec.StartupTimeout()) == nil {
 			r.cleanOthers(ctx, op.ID, candidate.ID)
 			return stateResponse(candidate), nil
 		}
@@ -249,7 +249,7 @@ func (r *Runner) deploy(ctx context.Context, op containerapp.Operation, old insp
 	r.stage(ctx, "starting")
 	err = r.start(ctx, cid)
 	if err == nil {
-		err = r.ready(ctx, op.ID, cid)
+		err = r.ready(ctx, op.ID, cid, op.Spec.StartupTimeout())
 	}
 	if err != nil {
 		r.stage(ctx, "restoring")
@@ -276,31 +276,41 @@ func (r *Runner) deploy(ctx context.Context, op containerapp.Operation, old insp
 }
 
 // ready 等待私有端口或 HTTP 健康路径就绪，不请求用户指定的外部地址。
-func (r *Runner) ready(ctx context.Context, id, cid string) error {
+func (r *Runner) ready(ctx context.Context, id, cid string, timeout time.Duration) error {
 	r.stage(ctx, "healthchecking")
-	task, cancel := context.WithTimeout(ctx, 60*time.Second)
+	task, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	var lastProbe error
+	restarts := -1
 	for {
 		value, err := r.owned(task, id, cid)
 		if err != nil {
 			if task.Err() != nil && ctx.Err() == nil && lastProbe != nil {
-				return fmt.Errorf("60 秒内未就绪：%w", lastProbe)
+				return fmt.Errorf("%g 秒内未就绪：%w", timeout.Seconds(), lastProbe)
 			}
 			return err
 		}
-		if value.State.OOMKilled || value.State.Status == "dead" {
-			return errors.New("容器被终止")
+		if value.State.OOMKilled {
+			return errors.New("容器因超出内存限制被终止（OOM）")
+		}
+		if restarts < 0 {
+			restarts = value.RestartCount
+		}
+		if value.State.Status == "dead" || value.State.Status == "exited" {
+			return fmt.Errorf("容器进程退出或反复重启（退出码 %d，重启 %d 次）", value.State.ExitCode, value.RestartCount)
 		}
 		if value.State.Running {
 			if lastProbe = r.probe(task, value, id); lastProbe == nil {
 				return nil
 			}
 		}
+		if value.RestartCount-restarts >= 3 {
+			return fmt.Errorf("等待就绪期间容器反复重启（%d 次）", value.RestartCount-restarts)
+		}
 		select {
 		case <-task.Done():
 			if lastProbe != nil && ctx.Err() == nil {
-				return fmt.Errorf("60 秒内未就绪：%w", lastProbe)
+				return fmt.Errorf("%g 秒内未就绪：%w", timeout.Seconds(), lastProbe)
 			}
 			return task.Err()
 		case <-time.After(500 * time.Millisecond):

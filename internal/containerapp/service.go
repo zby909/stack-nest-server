@@ -43,6 +43,7 @@ func (s *Service) view(a App) (App, error) {
 	}
 	a.Image, a.Port, a.MemoryMiB, a.CPUs, a.DataPath = spec.Image, spec.Port, spec.MemoryMiB, spec.CPUs, spec.DataPath
 	a.HealthPath = spec.HealthPath
+	a.StartupTimeoutSeconds = int(spec.StartupTimeout() / time.Second)
 	a.EnvKeys = []string{}
 	for key := range spec.Env {
 		a.EnvKeys = append(a.EnvKeys, key)
@@ -105,6 +106,9 @@ func (s *Service) Save(ctx context.Context, id string, actor Actor, input Input,
 		if err != nil {
 			return a, err
 		}
+		if input.StartupTimeoutSeconds == 0 {
+			input.StartupTimeoutSeconds = previous.StartupTimeoutSeconds
+		}
 		if input.EnvPatch != nil {
 			if input.ReplaceEnv || len(input.Env) != 0 {
 				return a, invalid("逐项修改与整体替换环境变量不能同时使用")
@@ -134,6 +138,7 @@ func (s *Service) Save(ctx context.Context, id string, actor Actor, input Input,
 	if err := input.Spec.Validate(); err != nil {
 		return a, err
 	}
+	input.StartupTimeoutSeconds = int(input.Spec.StartupTimeout() / time.Second)
 	if err := s.runtime.Health(ctx); err != nil {
 		return a, ErrUnavailable
 	}

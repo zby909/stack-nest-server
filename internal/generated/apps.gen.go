@@ -204,7 +204,7 @@ type AppInput struct {
 	// Generation 更新时必填，采用上次查询的代次
 	Generation *int64 `json:"generation,omitempty"`
 
-	// HealthPath 可选 HTTP 路径，例如 /health；60 秒内返回 2xx 才就绪，留空仅检查端口
+	// HealthPath 可选 HTTP 路径，例如 /health；启动等待时间内返回 2xx 才就绪，留空仅检查端口
 	HealthPath *string `json:"healthPath,omitempty"`
 
 	// Image Linux amd64 仓库镜像地址，可使用标签或摘要
@@ -222,6 +222,9 @@ type AppInput struct {
 
 	// Slug 创建时必填；之后不可修改
 	Slug *string `json:"slug,omitempty"`
+
+	// StartupTimeoutSeconds 启动等待秒数；省略或 0 时，新应用默认 60 秒，编辑保留原值。明确设置 60 可恢复默认。
+	StartupTimeoutSeconds *int `json:"startupTimeoutSeconds,omitempty"`
 }
 
 // AppList defines model for AppList.
@@ -303,27 +306,30 @@ type ContainerApp struct {
 	Action *string `json:"action,omitempty"`
 
 	// Canceled 最近一次部署由用户取消；可更新配置重新部署
-	Canceled    *bool              `json:"canceled,omitempty"`
-	Cpus        float32            `json:"cpus"`
-	CreatedAt   time.Time          `json:"createdAt"`
-	DataPath    string             `json:"dataPath"`
-	EnvKeys     []string           `json:"envKeys"`
-	Error       *string            `json:"error,omitempty"`
-	Generation  int64              `json:"generation"`
-	HasRegistry bool               `json:"hasRegistry"`
-	HealthPath  *string            `json:"healthPath,omitempty"`
-	Id          string             `json:"id"`
-	Image       string             `json:"image"`
-	ImageId     *string            `json:"imageId,omitempty"`
-	MemoryMiB   int                `json:"memoryMiB"`
-	Name        string             `json:"name"`
-	OwnerEmail  string             `json:"ownerEmail"`
-	OwnerId     string             `json:"ownerId"`
-	Port        int                `json:"port"`
-	Slug        string             `json:"slug"`
-	Status      ContainerAppStatus `json:"status"`
-	UpdatedAt   time.Time          `json:"updatedAt"`
-	Url         string             `json:"url"`
+	Canceled    *bool     `json:"canceled,omitempty"`
+	Cpus        float32   `json:"cpus"`
+	CreatedAt   time.Time `json:"createdAt"`
+	DataPath    string    `json:"dataPath"`
+	EnvKeys     []string  `json:"envKeys"`
+	Error       *string   `json:"error,omitempty"`
+	Generation  int64     `json:"generation"`
+	HasRegistry bool      `json:"hasRegistry"`
+	HealthPath  *string   `json:"healthPath,omitempty"`
+	Id          string    `json:"id"`
+	Image       string    `json:"image"`
+	ImageId     *string   `json:"imageId,omitempty"`
+	MemoryMiB   int       `json:"memoryMiB"`
+	Name        string    `json:"name"`
+	OwnerEmail  string    `json:"ownerEmail"`
+	OwnerId     string    `json:"ownerId"`
+	Port        int       `json:"port"`
+	Slug        string    `json:"slug"`
+
+	// StartupTimeoutSeconds 实际启动等待秒数，旧配置返回 60
+	StartupTimeoutSeconds *int               `json:"startupTimeoutSeconds,omitempty"`
+	Status                ContainerAppStatus `json:"status"`
+	UpdatedAt             time.Time          `json:"updatedAt"`
+	Url                   string             `json:"url"`
 }
 
 // ContainerAppStatus defines model for ContainerApp.Status.

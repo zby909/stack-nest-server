@@ -50,7 +50,12 @@ components:
         memoryMiB: {type: integer, minimum: 64, maximum: 1024}
         cpus: {type: number, minimum: 0.1, maximum: 1}
         dataPath: {type: string, description: 可选的单个容器内持久化目录}
-        healthPath: {type: string, maxLength: 256, description: 可选 HTTP 路径，例如 /health；60 秒内返回 2xx 才就绪，留空仅检查端口}
+        healthPath: {type: string, maxLength: 256, description: 可选 HTTP 路径，例如 /health；启动等待时间内返回 2xx 才就绪，留空仅检查端口}
+        startupTimeoutSeconds:
+          type: integer
+          default: 60
+          oneOf: [{enum: [0]}, {minimum: 30, maximum: 300}]
+          description: 启动等待秒数；省略或 0 时，新应用默认 60 秒，编辑保留原值。明确设置 60 可恢复默认。
         env: {type: object, additionalProperties: {type: string}, description: 最多 64 个变量，总体积 16 KiB}
         replaceEnv: {type: boolean, default: false, description: 编辑时默认保留；设为 true 后整体替换}
         envPatch:
@@ -82,6 +87,7 @@ components:
         cpus: {type: number}
         dataPath: {type: string}
         healthPath: {type: string}
+        startupTimeoutSeconds: {type: integer, minimum: 30, maximum: 300, description: 实际启动等待秒数，旧配置返回 60}
         envKeys: {type: array, items: {type: string}}
         hasRegistry: {type: boolean}
         generation: {type: integer, format: int64}
