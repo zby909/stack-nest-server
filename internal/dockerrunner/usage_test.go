@@ -1,6 +1,7 @@
 package dockerrunner
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,32 @@ import (
 	"testing"
 	"time"
 )
+
+// TestUsageFallsBackAfterSlowCPU 验证两次采样超时后，单次读数仍能提供内存和进程数。
+func TestUsageFallsBackAfterSlowCPU(t *testing.T) {
+	engine := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		query := req.URL.Query()
+		if query.Get("stream") != "false" {
+			t.Error("unbounded statistics stream requested")
+		}
+		if query.Get("one-shot") != "true" {
+			<-req.Context().Done()
+			return
+		}
+		_, _ = w.Write([]byte(`{"read":"2026-11-10T06:00:00Z","memory_stats":{"usage":100,"limit":512,"stats":{"inactive_file":25}},"pids_stats":{"current":7}}`))
+	}))
+	defer engine.Close()
+	runner := &Runner{engine: fakeEngine(engine)}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	usage, err := runner.usage(ctx, "aaaaaaaaaaaa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if usage.MemoryBytes != 75 || usage.MemoryLimitBytes != 512 || usage.PIDs != 7 || usage.CPUPercent != nil || usage.SampledAt.IsZero() {
+		t.Fatalf("invalid fallback sample: %+v", usage)
+	}
+}
 
 // TestUsageCounterBoundaries 验证内存缓存扣除、CPU 计数重置和首次采样不会产生假数据。
 func TestUsageCounterBoundaries(t *testing.T) {

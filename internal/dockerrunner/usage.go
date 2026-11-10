@@ -2,6 +2,7 @@ package dockerrunner
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"time"
 
@@ -33,13 +34,26 @@ type resourceStats struct {
 	} `json:"pids_stats"`
 }
 
-// usage 采样两次 CPU 计数并限制请求时间，不创建持续监控流。
+// usage 优先采集 CPU 增量，超时后尝试单次采集内存和进程数。
 func (r *Runner) usage(ctx context.Context, cid string) (*containerapp.Usage, error) {
-	task, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
+	path := "/containers/" + url.PathEscape(cid) + "/stats?stream=false"
+	// 为两个 Docker 采集周期留出余量，同时给健康检查保留时间。
+	task, cancel := context.WithTimeout(ctx, 2250*time.Millisecond)
 	var stats resourceStats
-	if err := r.engine.call(task, "GET", "/containers/"+url.PathEscape(cid)+"/stats?stream=false", nil, &stats); err != nil {
+	err := r.engine.call(task, "GET", path, nil, &stats)
+	timedOut := task.Err() == context.DeadlineExceeded
+	cancel()
+	if err != nil && timedOut && ctx.Err() == nil {
+		fallback, done := context.WithTimeout(ctx, 500*time.Millisecond)
+		defer done()
+		stats = resourceStats{}
+		err = r.engine.call(fallback, "GET", path+"&one-shot=true", nil, &stats)
+	}
+	if err != nil {
 		return nil, err
+	}
+	if stats.Read.IsZero() {
+		return nil, errors.New("Docker 未返回有效的资源采样")
 	}
 	return stats.view(), nil
 }
