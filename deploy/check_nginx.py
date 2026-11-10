@@ -4,7 +4,6 @@ import argparse
 import http.client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
-import ipaddress
 from pathlib import Path
 import shutil
 import ssl
@@ -15,11 +14,12 @@ import time
 import uuid
 
 
-# run 隐藏 Docker 命令正文；失败只报告动作和状态码。
+# run 不打印命令正文；夹具失败时保留 Docker 的错误原因，便于区分网络与配置问题。
 def run(args, stage="docker"):
     result = subprocess.run(args, capture_output=True, text=True, timeout=45)
     if result.returncode:
-        raise RuntimeError(stage + " failed (exit " + str(result.returncode) + ")")
+        detail = result.stderr.strip()[-2000:]
+        raise RuntimeError(stage + " failed (exit " + str(result.returncode) + "): " + detail)
     return result.stdout.strip()
 
 
@@ -134,8 +134,7 @@ def main():
     network = "stacknest-ingress-check-" + token
     name = "stacknest-ingress-check-" + token
     backend = None
-    backend_name = name + "-backend"
-    backend_created = False
+    backend_names = []
     created = False
     total = 0
     with tempfile.TemporaryDirectory(prefix="stacknest-ingress-", dir="/tmp") as temporary:
@@ -166,18 +165,18 @@ def main():
                 "proxy_pass http://" + gateway + ":8080; proxy_http_version 1.1; "
                 "proxy_set_header Host $http_host; proxy_set_header Upgrade $http_upgrade; "
                 "proxy_set_header Connection $http_connection; } } }", encoding="utf-8")
-            addresses = [str(ipaddress.ip_address(gateway) + offset) for offset in (10, 11)]
-            backend_address = 0
-
-            # start_backend 使用真实 Docker 服务名解析，重建时强制换 IP 验证 Nginx 自动恢复。
+            # start_backend 由 Docker 分配地址，兼容不允许自动子网指定静态 IP 的 Engine。
             def start_backend():
-                run(["docker", "run", "-d", "--name", backend_name, "--network", network,
-                     "--network-alias", "stacknest", "--ip", addresses[backend_address],
+                candidate = name + "-backend-" + uuid.uuid4().hex[:8]
+                backend_names.append(candidate)
+                run(["docker", "run", "-d", "--name", candidate, "--network", network,
+                     "--network-alias", "stacknest",
                      "--label", "com.stacknest.check=nginx",
                      "-v", str(backend_config) + ":/etc/nginx/nginx.conf:ro", args.image], "start test backend")
+                state = json.loads(run(["docker", "inspect", candidate]))[0]
+                return candidate, state["NetworkSettings"]["Networks"][network]["IPAddress"]
 
-            start_backend()
-            backend_created = True
+            backend_name, backend_address = start_backend()
             for mode, base in [("http", "default.conf.template"), ("tls", "tls.conf.template"),
                                ("cloudflare", "cloudflare.conf.template"), ("tunnel", "default.conf.template")]:
                 command = ["docker", "run", "-d", "--name", name, "--network", network,
@@ -227,9 +226,12 @@ def main():
                     else:
                         total += check_routes(ports[80])
                     original_id = state["Id"]
-                    run(["docker", "rm", "-f", backend_name], "replace test backend")
-                    backend_address = 1 - backend_address
-                    start_backend()
+                    # 新旧容器短暂共存，旧地址仍被占用，确保新后端确实使用不同 IP。
+                    previous_name, previous_address = backend_name, backend_address
+                    backend_name, backend_address = start_backend()
+                    assert backend_address and backend_address != previous_address
+                    run(["docker", "rm", "-f", previous_name], "replace test backend")
+                    backend_names.remove(previous_name)
                     health_port = ports[443] if mode in ("tls", "cloudflare") else ports[81] if mode == "tunnel" else ports[80]
                     health_context = context if mode in ("tls", "cloudflare") else None
                     health_headers = {"X-Forwarded-Proto": "https"} if mode == "tunnel" else {}
@@ -251,8 +253,8 @@ def main():
                 finally:
                     run(["docker", "rm", "-f", name], "clean isolated nginx")
         finally:
-            if backend_created:
-                run(["docker", "rm", "-f", backend_name], "clean test backend")
+            for backend_name in backend_names:
+                subprocess.run(["docker", "rm", "-f", backend_name], capture_output=True, timeout=45)
             if backend:
                 backend.shutdown()
                 backend.server_close()
