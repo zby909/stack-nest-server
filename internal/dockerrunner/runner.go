@@ -44,6 +44,7 @@ type Runner struct {
 	diskMu                            sync.Mutex
 	disk                              map[string]*diskSample
 	diskActive                        int
+	cpuHistory                        cpuHistory
 }
 
 var hexID = regexp.MustCompile(`^[a-f0-9]{12,64}$`)
@@ -260,7 +261,7 @@ func (r *Runner) state(w http.ResponseWriter, req *http.Request) {
 		if r.probe(req.Context(), value, req.PathValue("id")) == nil {
 			response.Health = "healthy"
 		}
-		response.Usage, _ = r.usage(req.Context(), value.ID)
+		response.Usage, _ = r.usage(req.Context(), value.ID, value.State.StartedAt)
 	}
 	respond(w, 200, response)
 }

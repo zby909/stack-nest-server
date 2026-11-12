@@ -10,15 +10,13 @@ import (
 	"time"
 )
 
-// TestUsageFallsBackAfterSlowCPU 验证两次采样超时后，单次读数仍能提供内存和进程数。
-func TestUsageFallsBackAfterSlowCPU(t *testing.T) {
+// TestUsageReturnsMemoryOnFirstRead 验证首个请求只需单次采样，立即返回内存和进程数。
+func TestUsageReturnsMemoryOnFirstRead(t *testing.T) {
 	engine := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		query := req.URL.Query()
-		if query.Get("stream") != "false" {
-			t.Error("unbounded statistics stream requested")
-		}
-		if query.Get("one-shot") != "true" {
-			<-req.Context().Done()
+		if query.Get("stream") != "false" || query.Get("one-shot") != "true" {
+			t.Error("statistics request waits for more than one sample")
+			w.WriteHeader(400)
 			return
 		}
 		_, _ = w.Write([]byte(`{"read":"2026-11-10T06:00:00Z","memory_stats":{"usage":100,"limit":512,"stats":{"inactive_file":25}},"pids_stats":{"current":7}}`))
@@ -27,24 +25,24 @@ func TestUsageFallsBackAfterSlowCPU(t *testing.T) {
 	runner := &Runner{engine: fakeEngine(engine)}
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	usage, err := runner.usage(ctx, "aaaaaaaaaaaa")
+	usage, err := runner.usage(ctx, "aaaaaaaaaaaa", time.Date(2026, 11, 10, 5, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if usage.MemoryBytes != 75 || usage.MemoryLimitBytes != 512 || usage.PIDs != 7 || usage.CPUPercent != nil || usage.SampledAt.IsZero() {
-		t.Fatalf("invalid fallback sample: %+v", usage)
+		t.Fatalf("invalid first sample: %+v", usage)
 	}
 }
 
-// TestUsageCounterBoundaries 验证内存缓存扣除、CPU 计数重置和首次采样不会产生假数据。
+// TestUsageCounterBoundaries 验证兼容两种 cgroup 缓存口径，避免计数下溢。
 func TestUsageCounterBoundaries(t *testing.T) {
 	var stats resourceStats
-	fixture := `{"read":"2026-10-10T13:00:01Z","preread":"2026-10-10T13:00:00Z","cpu_stats":{"cpu_usage":{"total_usage":150},"system_cpu_usage":2000,"online_cpus":4},"precpu_stats":{"cpu_usage":{"total_usage":100},"system_cpu_usage":1000},"memory_stats":{"usage":100,"limit":512,"stats":{"inactive_file":25}},"pids_stats":{"current":7}}`
+	fixture := `{"read":"2026-10-10T13:00:01Z","memory_stats":{"usage":100,"limit":512,"stats":{"inactive_file":25}},"pids_stats":{"current":7}}`
 	if err := json.Unmarshal([]byte(fixture), &stats); err != nil {
 		t.Fatal(err)
 	}
 	result := stats.view()
-	if result.CPUPercent == nil || *result.CPUPercent != 20 || result.MemoryBytes != 75 || result.MemoryLimitBytes != 512 || result.PIDs != 7 {
+	if result.MemoryBytes != 75 || result.MemoryLimitBytes != 512 || result.PIDs != 7 {
 		t.Fatal("incorrect sample", result)
 	}
 	stats.Memory.Stats = map[string]uint64{"total_inactive_file": 30}
@@ -55,14 +53,32 @@ func TestUsageCounterBoundaries(t *testing.T) {
 	if stats.view().MemoryBytes != 100 {
 		t.Fatal("cache counter underflow")
 	}
-	stats.CPU.Usage.Total = 99
-	if stats.view().CPUPercent != nil {
-		t.Fatal("CPU reset produced bogus percentage")
-	}
-	stats.CPU.Usage.Total = 150
-	stats.PreRead = time.Time{}
-	if stats.view().CPUPercent != nil {
-		t.Fatal("first sample reported fabricated CPU usage")
+}
+
+// TestCPUUsageAcrossSamples 验证重启、乱序和过期读数不会串到当前容器的 CPU 占用率。
+func TestCPUUsageAcrossSamples(t *testing.T) {
+	var history cpuHistory
+	start := time.Date(2026, 11, 12, 1, 0, 0, 0, time.UTC)
+	for _, row := range []struct {
+		name          string
+		read, started time.Duration
+		total, system uint64
+		want          float64
+	}{
+		{"first", time.Second, 0, 100, 1000, -1},
+		{"next", 2 * time.Second, 0, 150, 2000, 20},
+		{"restarted", 4 * time.Second, 3 * time.Second, 160, 3000, -1},
+		{"late old run", 5 * time.Second, 0, 170, 4000, -1},
+		{"new run", 6 * time.Second, 3 * time.Second, 200, 5000, 8},
+		{"expired", 60 * time.Second, 3 * time.Second, 300, 6000, -1},
+		{"counter reset", 61 * time.Second, 3 * time.Second, 10, 7000, -1},
+	} {
+		sample := cpuSample{read: start.Add(row.read), startedAt: start.Add(row.started), stats: cpuStats{System: row.system, Online: 4}}
+		sample.stats.Usage.Total = row.total
+		got := history.percent("container", sample)
+		if row.want < 0 && got != nil || row.want >= 0 && (got == nil || *got != row.want) {
+			t.Fatalf("%s: unexpected CPU sample %v", row.name, got)
+		}
 	}
 }
 
@@ -75,8 +91,8 @@ func TestRuntimeStatisticsRespectOwnership(t *testing.T) {
 		engine := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			if strings.HasSuffix(req.URL.Path, "/stats") {
 				requests++
-				if req.URL.Query().Get("stream") != "false" {
-					t.Error("unbounded statistics stream requested")
+				if req.URL.Query().Get("stream") != "false" || req.URL.Query().Get("one-shot") != "true" {
+					t.Error("expected a single statistics sample")
 				}
 				_, _ = w.Write([]byte(`{"read":"2026-10-10T13:00:01Z","memory_stats":{"usage":100,"limit":512},"pids_stats":{"current":7}}`))
 				return

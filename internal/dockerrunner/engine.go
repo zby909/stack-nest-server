@@ -106,6 +106,7 @@ type inspection struct {
 		OOMKilled bool
 		ExitCode  int
 		Error     string
+		StartedAt time.Time
 	}
 	NetworkSettings struct {
 		Networks map[string]struct{ IPAddress string }

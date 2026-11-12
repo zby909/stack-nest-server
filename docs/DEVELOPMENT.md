@@ -97,3 +97,5 @@ sudo python3 deploy/check_egress_network.py
 这两项需要 Linux 环境，使用隔离夹具验证 Nginx 与网络规则。真实 SMTP、DNS、证书和恢复仍需目标环境验收。
 
 镜像清理的真实 Engine 检查可在专用 Linux 测试环境运行：`STACKNEST_TEST_DOCKER_SOCKET=/var/run/docker.sock go test ./internal/dockerrunner -run TestImageCleanupEngineIntegration`。它创建唯一名称的临时 scratch 镜像与停止容器，验证引用保护后清理自身夹具。
+
+资源采样检查使用同一环境变量与 `-run TestUsageEngineIntegration`。它构建一个无网络的临时容器，核对首次内存和后续 CPU 采样。后端 CI 和发布检查会运行此用例。

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"sync"
 	"time"
 
 	"stacknest/server/internal/containerapp"
@@ -20,11 +21,9 @@ type cpuStats struct {
 
 // resourceStats 保留单个容器的计数，不把 Docker 原始统计返回后台。
 type resourceStats struct {
-	Read    time.Time `json:"read"`
-	PreRead time.Time `json:"preread"`
-	CPU     cpuStats  `json:"cpu_stats"`
-	PreCPU  cpuStats  `json:"precpu_stats"`
-	Memory  struct {
+	Read   time.Time `json:"read"`
+	CPU    cpuStats  `json:"cpu_stats"`
+	Memory struct {
 		Usage uint64            `json:"usage"`
 		Limit uint64            `json:"limit"`
 		Stats map[string]uint64 `json:"stats"`
@@ -34,31 +33,73 @@ type resourceStats struct {
 	} `json:"pids_stats"`
 }
 
-// usage 优先采集 CPU 增量，超时后尝试单次采集内存和进程数。
-func (r *Runner) usage(ctx context.Context, cid string) (*containerapp.Usage, error) {
-	path := "/containers/" + url.PathEscape(cid) + "/stats?stream=false"
-	// 为两个 Docker 采集周期留出余量，同时给健康检查保留时间。
-	task, cancel := context.WithTimeout(ctx, 2250*time.Millisecond)
-	var stats resourceStats
-	err := r.engine.call(task, "GET", path, nil, &stats)
-	timedOut := task.Err() == context.DeadlineExceeded
-	cancel()
-	if err != nil && timedOut && ctx.Err() == nil {
-		fallback, done := context.WithTimeout(ctx, 500*time.Millisecond)
-		defer done()
-		stats = resourceStats{}
-		err = r.engine.call(fallback, "GET", path+"&one-shot=true", nil, &stats)
+const (
+	cpuSampleTTL  = 30 * time.Second
+	maxCPUSamples = 128
+)
+
+type cpuSample struct {
+	read, startedAt time.Time
+	stats           cpuStats
+}
+
+// cpuHistory 仅保留 CPU 增量所需的上一份读数，内存与进程数始终即时读取。
+type cpuHistory struct {
+	mu      sync.Mutex
+	samples map[string]cpuSample
+}
+
+// percent 比较同一轮容器运行中的两次读数，忽略重启、过期或乱序的样本。
+func (h *cpuHistory) percent(cid string, current cpuSample) *float64 {
+	if current.startedAt.IsZero() || current.stats.System == 0 || current.stats.Online == 0 {
+		return nil
 	}
-	if err != nil {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.samples == nil {
+		h.samples = make(map[string]cpuSample)
+	}
+	previous, exists := h.samples[cid]
+	if exists && (!current.read.After(previous.read) || current.startedAt.Before(previous.startedAt)) {
+		return nil
+	}
+	if !exists && len(h.samples) >= maxCPUSamples {
+		for id, sample := range h.samples {
+			if current.read.Sub(sample.read) > cpuSampleTTL {
+				delete(h.samples, id)
+			}
+		}
+		if len(h.samples) >= maxCPUSamples {
+			return nil
+		}
+	}
+	h.samples[cid] = current
+	if !exists || !current.startedAt.Equal(previous.startedAt) || current.read.Sub(previous.read) > cpuSampleTTL ||
+		current.stats.Online != previous.stats.Online || current.stats.System <= previous.stats.System || current.stats.Usage.Total < previous.stats.Usage.Total {
+		return nil
+	}
+	percent := float64(current.stats.Usage.Total-previous.stats.Usage.Total) / float64(current.stats.System-previous.stats.System) * float64(current.stats.Online) * 100
+	return &percent
+}
+
+// usage 立即读取单次资源样本，用相邻请求间的 CPU 增量计算占用率。
+func (r *Runner) usage(ctx context.Context, cid string, startedAt time.Time) (*containerapp.Usage, error) {
+	task, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	path := "/containers/" + url.PathEscape(cid) + "/stats?stream=false&one-shot=true"
+	var stats resourceStats
+	if err := r.engine.call(task, "GET", path, nil, &stats); err != nil {
 		return nil, err
 	}
 	if stats.Read.IsZero() {
 		return nil, errors.New("Docker 未返回有效的资源采样")
 	}
-	return stats.view(), nil
+	result := stats.view()
+	result.CPUPercent = r.cpuHistory.percent(cid, cpuSample{read: stats.Read, startedAt: startedAt, stats: stats.CPU})
+	return result, nil
 }
 
-// view 使用 Docker CLI 的 Linux 内存口径，缺少有效 CPU 增量时保留未知值。
+// view 使用 Docker CLI 的 Linux 内存口径，扣除非活跃文件缓存。
 func (s resourceStats) view() *containerapp.Usage {
 	cache := s.Memory.Stats["total_inactive_file"]
 	if value, ok := s.Memory.Stats["inactive_file"]; ok {
@@ -68,10 +109,5 @@ func (s resourceStats) view() *containerapp.Usage {
 	if cache < memory {
 		memory -= cache
 	}
-	result := &containerapp.Usage{MemoryBytes: memory, MemoryLimitBytes: s.Memory.Limit, PIDs: s.PIDs.Current, SampledAt: s.Read}
-	if !s.PreRead.IsZero() && s.PreCPU.System > 0 && s.CPU.System > s.PreCPU.System && s.CPU.Usage.Total >= s.PreCPU.Usage.Total && s.CPU.Online > 0 {
-		percent := float64(s.CPU.Usage.Total-s.PreCPU.Usage.Total) / float64(s.CPU.System-s.PreCPU.System) * float64(s.CPU.Online) * 100
-		result.CPUPercent = &percent
-	}
-	return result
+	return &containerapp.Usage{MemoryBytes: memory, MemoryLimitBytes: s.Memory.Limit, PIDs: s.PIDs.Current, SampledAt: s.Read}
 }
