@@ -3,6 +3,7 @@
 import argparse
 from contextlib import contextmanager
 from copy import deepcopy
+import http.client
 import io
 import json
 import os
@@ -10,6 +11,8 @@ from pathlib import Path, PurePosixPath
 import re
 import shutil
 import signal
+import socket
+import ssl
 import stat
 import subprocess
 import sys
@@ -18,7 +21,7 @@ import tempfile
 
 from migrate_host import backup_lock, checked_project, check_layout, digest
 from release_manifest import VERSION, validate
-from resolve_compose import write_private
+from resolve_compose import backup_status_dir, write_private
 
 COMPONENTS = {"stacknest": "app", "runner": "app", "nginx": "web", "migrate": "migrate"}
 DOCKER = ["docker"]
@@ -28,22 +31,22 @@ MIGRATION_COMMAND = ["migrate", "apply", "--dir", "file:///migrations", "--url"]
 
 
 # run 只报告操作阶段，避免 Compose 或 Atlas 错误输出包含数据库连接串。
-def run(command, stage, timeout=90, **kwargs):
+def run(command, stage, timeout=90, allowed=(0,), **kwargs):
     try:
         result = subprocess.run([str(value) for value in command], capture_output=True, timeout=timeout, **kwargs)
     except subprocess.TimeoutExpired:
         raise RuntimeError(f"{stage} timed out") from None
-    if result.returncode:
+    if result.returncode not in allowed:
         raise RuntimeError(f"{stage} failed (exit {result.returncode})")
     return result.stdout
 
 
 # run_backup 给备份脚本时间执行退出处理，避免超时直接杀死恢复流程。
-def run_backup(command, env, lock):
+def run_backup(command, env, lock, timeout=900):
     with subprocess.Popen([str(value) for value in command], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           env=env, pass_fds=(lock.fileno(),), start_new_session=True) as process:
         try:
-            output, _ = process.communicate(timeout=900)
+            output, errors = process.communicate(timeout=timeout)
         except (subprocess.TimeoutExpired, KeyboardInterrupt) as error:
             try:
                 os.killpg(process.pid, signal.SIGTERM)
@@ -59,7 +62,9 @@ def run_backup(command, env, lock):
                 process.communicate()
             raise RuntimeError("backup interrupted; attempting to restore services") from error
         if process.returncode:
-            raise RuntimeError(f"backup original release failed (exit {process.returncode})")
+            stage = re.search(rb"(?m)^backup_failed_stage=([a-z-]+)$", errors)
+            tag = f" at {stage[1].decode()}" if stage else ""
+            raise RuntimeError(f"backup failed{tag} (exit {process.returncode})")
         return output
 
 
@@ -206,13 +211,88 @@ def check_idle(command):
         raise ValueError("wait for Docker deployments to finish before upgrading")
 
 
-# check_health 用实际运行版本、Nginx、API 数据库及 Runner 检查切换结果。
+# nginx_entries 采用容器实际发布的端口，覆盖普通 HTTP、HTTPS、Tunnel 和 SSH 入口。
+def nginx_entries(command, config):
+    service = config["services"]["nginx"]
+    keys = {f"{item['target']}/tcp" for item in service.get("ports", []) if item.get("protocol", "tcp") == "tcp"}
+    # TLS 入口启用时，80 仅负责跳转。
+    if "443/tcp" in keys:
+        keys.discard("80/tcp")
+    names = {"80/tcp": "HTTP", "81/tcp": "Tunnel", "82/tcp": "SSH", "443/tcp": "HTTPS"}
+    cid = run(command + ["ps", "-q", "nginx"], "find running Nginx").decode().strip()
+    if not cid:
+        raise RuntimeError("Nginx is not running")
+    ports = json.loads(run(DOCKER + ["inspect", "--format", "{{json .NetworkSettings.Ports}}", cid],
+                           "inspect Nginx entry ports"))
+    host = service.get("environment", {}).get("STACKNEST_ADMIN_DOMAIN", "")
+    entries = []
+    for key in sorted(keys & names.keys()):
+        bindings = ports.get(key) or []
+        if not bindings:
+            raise RuntimeError(f"Nginx {names[key]} port has no active binding")
+        for binding in bindings:
+            address = {"0.0.0.0": "127.0.0.1", "::": "::1", "": "127.0.0.1"}.get(binding["HostIp"], binding["HostIp"])
+            authority = "localhost" if key == "82/tcp" else host
+            if not re.fullmatch(r"[A-Za-z0-9.-]+", authority):
+                raise ValueError("Nginx admin domain is missing or invalid")
+            entries.append((names[key], address, int(binding["HostPort"]), authority))
+    if not entries:
+        raise ValueError("no supported Nginx entry port is published")
+    return entries
+
+
+# entry_response 连接已发布的本机端口，使用对应的 Host 和 HTTPS SNI。
+def entry_response(entry, path):
+    name, address, port, host = entry
+    connection = http.client.HTTPConnection(address, port, timeout=5)
+    headers = {"Host": host, "Accept-Encoding": "identity"}
+    if name == "Tunnel":
+        headers["X-Forwarded-Proto"] = "https"
+    try:
+        if name == "HTTPS":
+            # 源站可能使用 Cloudflare Origin CA；此处只验证本机握手和路由。
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            connection.sock = context.wrap_socket(socket.create_connection((address, port), timeout=5),
+                                                  server_hostname=host)
+        connection.request("GET", path, headers=headers)
+        with connection.getresponse() as response:
+            return response.status, response.headers.get_content_type(), response.read(128 << 10)
+    finally:
+        connection.close()
+
+
+# check_entry 确认首页是管理界面，健康请求确实经 Nginx 到达 API 和数据库。
+def check_entry(command, config):
+    for entry in nginx_entries(command, config):
+        name = entry[0]
+        try:
+            status, content_type, body = entry_response(entry, "/")
+            if status != 200 or content_type != "text/html" or b"<title>StackNest</title>" not in body:
+                raise RuntimeError(f"Nginx {name} did not return the StackNest homepage (HTTP {status})")
+            status, content_type, body = entry_response(entry, "/api/health")
+            if status != 200 or content_type != "application/json" or json.loads(body).get("status") != "ok":
+                raise RuntimeError(f"Nginx {name} API health check failed (HTTP {status})")
+        except (OSError, http.client.HTTPException, ValueError, AttributeError) as error:
+            raise RuntimeError(f"Nginx {name} could not complete its local HTTP check") from error
+    print("entry=verified", flush=True)
+
+
+# check_health 用实际版本、入口和平台诊断验收；SMTP 连接故障单独提示。
 def check_health(command, version):
     result = json.loads(run(command + ["exec", "-T", "stacknest", "/usr/local/bin/stacknest", "version"], "check running version"))
     if result["version"] != version:
         raise RuntimeError("running version differs from the release")
     run(command + ["exec", "-T", "nginx", "nginx", "-t"], "validate Nginx")
-    run(command + ["exec", "-T", "stacknest", "/usr/local/bin/stacknest", "doctor"], "check platform")
+    check_entry(command, read_config(command))
+    report = json.loads(run(command + ["exec", "-T", "stacknest", "/usr/local/bin/stacknest", "doctor", "--json"],
+                            "check platform", allowed=(0, 1)))
+    failed = {item["name"] for item in report["checks"] if item["status"] == "fail"}
+    if failed - {"smtp"} or report["failed"] and not failed:
+        raise RuntimeError("platform diagnostics failed: " + (", ".join(sorted(failed - {"smtp"})) or "unknown check"))
+    if "smtp" in failed:
+        print("warning=SMTP TLS or authentication failed; check login email delivery", flush=True)
     return result["revision"]
 
 
@@ -250,13 +330,15 @@ def ensure_candidate(old, new, images):
 
 
 # backup 使用原镜像创建一致快照，并验证数据库和文件的摘要。
-def backup(root, state_dir, current, project, backup_root, status, lock):
+def backup(root, state_dir, current, project, backup_root, status, lock, *, timeout=900, keep=None):
     snapshot = state_dir / "compose.before.json"
     write_private(snapshot, json.dumps(current, indent=2, ensure_ascii=False) + "\n")
     print("stage=backup", flush=True)
     env = dict(os.environ, STACKNEST_COMPOSE_PROJECT=project, STACKNEST_BACKUP_LOCK_FD=str(lock.fileno()))
     env.pop("STACKNEST_APPS_FROZEN", None)
-    result = run_backup(["bash", root / "deploy/backup.sh", snapshot, backup_root, status], env, lock)
+    if keep is not None:
+        env["STACKNEST_BACKUP_KEEP"] = str(keep)
+    result = run_backup(["bash", root / "deploy/backup.sh", snapshot, backup_root, status], env, lock, timeout)
     values = [Path(line.removeprefix("backup=")) for line in result.decode().splitlines() if line.startswith("backup=")]
     if len(values) != 1 or values[0].parent != backup_root or not values[0].is_dir() or values[0].is_symlink():
         raise RuntimeError("backup did not return a completed directory")
@@ -374,11 +456,7 @@ def upgrade(args):
         if snapshot in updates:
             raise ValueError("backup snapshot must be a separate file")
         updates[snapshot] = (snapshot.read_bytes(), json.dumps(candidate, indent=2, ensure_ascii=False) + "\n")
-    mount = next((m for m in current["services"]["stacknest"].get("volumes", [])
-                  if m.get("type") == "bind" and m.get("target") == "/run/stacknest-backup"), None)
-    if not mount:
-        raise ValueError("backup status mount is required")
-    status = Path(mount["source"])
+    status = backup_status_dir(current)
     backup_root = args.backup_root.resolve()
     ancestor = next(path for path in (backup_root, *backup_root.parents) if path.is_dir())
     docker_root = Path(run(DOCKER + ["info", "--format", "{{.DockerRootDir}}"], "read Docker storage").decode().strip())
@@ -394,6 +472,7 @@ def upgrade(args):
         raise ValueError("insufficient backup space after pulling images")
     check_migrations(command, current, images["migrate"])
     check_idle(command)
+    check_entry(command, current)
     if args.check:
         print("preflight=passed", flush=True)
         return

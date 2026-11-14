@@ -49,27 +49,20 @@ sudo env STACKNEST_COMPOSE_PROJECT=stacknest bash deploy/backup.sh \
 
 ### 每日备份
 
-创建 `/etc/stacknest-backup.conf`，替换路径：
-
-```dotenv
-STACKNEST_BACKUP_COMPOSE=/实际server目录/compose.resolved.json
-STACKNEST_BACKUP_ROOT=/实际备份目录
-STACKNEST_BACKUP_STATUS_DIR=/实际server目录/backup-status
-STACKNEST_COMPOSE_PROJECT=stacknest
-STACKNEST_BACKUP_KEEP=14
-```
+在正在运行的部署目录执行：
 
 ```bash
-sudo chmod 600 /etc/stacknest-backup.conf
-sudo install -m 644 deploy/stacknest-backup.service deploy/stacknest-backup.timer /etc/systemd/system/
-sudo systemctl edit --full stacknest-backup.service
-sudo systemctl daemon-reload
-sudo systemctl start stacknest-backup.service
-sudo systemctl enable --now stacknest-backup.timer
-systemctl list-timers stacknest-backup.timer
+sudo python3 deploy/backup_schedule.py install
 ```
 
-full edit 中将 ExecStart 的脚本路径改为实际 server 目录。先确认手动任务成功，再启用定时器；默认按服务器时区每日 03:15 运行，带最多 5 分钟随机延迟。
+命令读取当前 `.env`，默认在部署目录的 `backups/` 保留最近 14 份。首次备份会短暂停止后台与运行中的应用，成功后启用每日定时任务。每天按服务器时区 03:15 起执行，带最多 5 分钟随机延迟。
+
+迁移恢复的实例加 `--compose /实际目录/compose.json`，自定义项目名加 `--project`。可通过 `--backup-root` 和 `--keep` 指定备份目录与份数。定时任务会读取当前部署配置，手动配置的旧定时器可继续使用。保留定时任务所用的工具目录。
+
+```bash
+systemctl list-timers stacknest-backup.timer
+sudo journalctl -u stacknest-backup.service -n 50
+```
 
 ## 升级
 
@@ -82,7 +75,7 @@ sudo python3 /新版/server/deploy/upgrade_release.py \
 
 默认读取当前目录的 `.env`。迁移恢复或自定义 JSON 实例用 `--compose /实际目录/compose.json`；可用 `--project` 指定原项目名。定时备份另读快照时用 `--backup-compose /实际快照.json`，已有 systemd 定时器可用 `--backup-timer stacknest-backup.timer`。先加 `--check` 可只拉取镜像并检查空间、配置和迁移。
 
-工具适用于单 Nginx、独立 Runner 且迁移文件一致的发布版。它会备份并验证归档，再切换三个发布镜像，检查 API、Runner 和 Nginx。备份与切换期间，后台会短暂中断。切换后检查失败会恢复旧配置及镜像。升级配置快照位于备份目录的 `.upgrades/`，权限仅限操作用户。
+工具适用于单 Nginx、独立 Runner 且迁移文件一致的发布版。它会先备份，再切换镜像并通过 Nginx 实际访问后台首页和 `/api/health`。HTTPS 在本机验证握手和分流，公网证书链仍通过浏览器验收。切换检查失败会恢复旧配置和镜像；SMTP 单独提示。备份和切换会短暂中断服务。配置快照保存在私有的 `.upgrades/` 目录。
 
 ### 手动升级
 

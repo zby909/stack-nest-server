@@ -17,7 +17,7 @@ FILES = (
     "compose.egress.yaml", "deploy/nginx/default.conf.template",
     "deploy/nginx/tls.conf.template", "deploy/nginx/cloudflare.conf.template",
     "deploy/nginx/ssh.conf.template", "deploy/nginx/cloudflare-tunnel.conf.template",
-    "deploy/backup.sh", "deploy/backup_status.py", "deploy/resolve_compose.py",
+    "deploy/backup.sh", "deploy/backup_status.py", "deploy/backup_schedule.py", "deploy/resolve_compose.py",
     "deploy/migrate_host.py", "deploy/upgrade_release.py", "deploy/release_manifest.py",
     "deploy/generate_quota_seccomp.py",
     "deploy/stacknest-backup.service", "deploy/stacknest-backup.timer",

@@ -59,6 +59,56 @@ class UpgradeTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "pending or incomplete"):
                 upgrade.check_migrations([], self.old, self.images["migrate"])
 
+    # test_entries_follow_published_ports 使用实际入口和域名，有 TLS 时跳过 HTTP 跳转端口。
+    def test_entries_follow_published_ports(self):
+        service = self.old["services"]["nginx"]
+        service["environment"] = {"STACKNEST_ADMIN_DOMAIN": "stack.example.com"}
+        service["ports"] = [{"target": target} for target in (80, 81, 82, 443)]
+        ports = {
+            "80/tcp": [{"HostIp": "0.0.0.0", "HostPort": "80"}],
+            "81/tcp": [{"HostIp": "127.0.0.1", "HostPort": "18081"}],
+            "82/tcp": [{"HostIp": "127.0.0.1", "HostPort": "18080"}],
+            "443/tcp": [{"HostIp": "0.0.0.0", "HostPort": "10443"}, {"HostIp": "::", "HostPort": "10443"}],
+        }
+        with patch.object(upgrade, "run", side_effect=[b"container", json.dumps(ports).encode()]):
+            self.assertEqual(upgrade.nginx_entries([], self.old), [
+                ("HTTPS", "127.0.0.1", 10443, "stack.example.com"),
+                ("HTTPS", "::1", 10443, "stack.example.com"),
+                ("Tunnel", "127.0.0.1", 18081, "stack.example.com"),
+                ("SSH", "127.0.0.1", 18080, "localhost"),
+            ])
+
+    # test_entry_rejects_wrong_route 防止静态项目或 SPA 回退页面掩盖 API 入口错误。
+    def test_entry_rejects_wrong_route(self):
+        home = (200, "text/html", b"<title>StackNest</title>")
+        with patch.object(upgrade, "nginx_entries", return_value=[("SSH", "127.0.0.1", 18080, "localhost")]):
+            with patch.object(upgrade, "entry_response", side_effect=[home, home]):
+                with self.assertRaisesRegex(RuntimeError, "API health"):
+                    upgrade.check_entry([], self.old)
+            with patch.object(upgrade, "entry_response", side_effect=[home, (503, "application/json", b'{"status":"unavailable"}')]):
+                with self.assertRaisesRegex(RuntimeError, "HTTP 503"):
+                    upgrade.check_entry([], self.old)
+            with patch.object(upgrade, "entry_response", side_effect=[home, (200, "application/json", b'{"status":"ok"}')]), \
+                    patch("sys.stdout", new_callable=io.StringIO) as output:
+                upgrade.check_entry([], self.old)
+                self.assertIn("entry=verified", output.getvalue())
+
+    # test_smtp_warns_without_hiding_runtime_failure 只有 SMTP 故障时继续，运行依赖失败仍报错。
+    def test_smtp_warns_without_hiding_runtime_failure(self):
+        smtp = {"name": "smtp", "status": "fail"}
+        running = json.dumps({"version": "v1.0.0-rc.17", "revision": "a" * 40}).encode()
+        with patch.object(upgrade, "read_config", return_value=self.old), \
+                patch.object(upgrade, "check_entry") as entry, patch("sys.stdout", new_callable=io.StringIO) as output:
+            report = json.dumps({"checks": [smtp], "failed": True}).encode()
+            with patch.object(upgrade, "run", side_effect=[running, b"", report]):
+                self.assertEqual(upgrade.check_health([], "v1.0.0-rc.17"), "a" * 40)
+            self.assertIn("warning=SMTP", output.getvalue())
+            entry.assert_called_once_with([], self.old)
+            report = json.dumps({"checks": [smtp, {"name": "docker", "status": "fail"}], "failed": True}).encode()
+            with patch.object(upgrade, "run", side_effect=[running, b"", report]):
+                with self.assertRaisesRegex(RuntimeError, "diagnostics failed: docker"):
+                    upgrade.check_health([], "v1.0.0-rc.17")
+
     # test_rollback_restores_every_file 验收失败后按原配置重启，连同备份与公网快照一并恢复。
     def test_rollback_restores_every_file(self):
         files = {self.root / name: (("old " + name + "\r\n").encode(), "new " + name)

@@ -9,6 +9,15 @@ import subprocess
 import tempfile
 
 
+# backup_status_dir 备份摘要使用 API 实际挂载的目录。
+def backup_status_dir(config):
+    mount = next((mount for mount in config["services"]["stacknest"].get("volumes", [])
+                  if mount.get("type") == "bind" and mount.get("target") == "/run/stacknest-backup"), None)
+    if not mount:
+        raise ValueError("backup status mount is required")
+    return Path(mount["source"])
+
+
 # resolve 只有完整解析成功后才替换旧快照，避免定时备份读到空配置或半文件。
 def resolve(destination, project=None, files=(), env_files=()):
     target = Path(destination).absolute()
