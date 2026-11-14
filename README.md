@@ -38,9 +38,9 @@
 
 ![StackNest 静态项目管理界面，展示项目列表、发布状态和存储用量](https://raw.githubusercontent.com/zby909/stack-nest-web/main/docs/images/projects-desktop.png)
 
-**让应用运行起来。** Docker 应用的健康状态、资源用量和管理操作放在同一张卡片中。
+**管理 Docker 应用。** 列表显示运行状态和实际内存，点开应用可查看磁盘和配置明细。
 
-![StackNest Docker 应用管理界面，展示健康检查、CPU、内存和磁盘用量](https://raw.githubusercontent.com/zby909/stack-nest-web/main/docs/images/docker-desktop.png)
+![StackNest Docker 应用列表，展示健康、内存和常用操作](https://raw.githubusercontent.com/zby909/stack-nest-web/main/docs/images/docker-desktop.png)
 
 <details>
   <summary><strong>📱 手机布局 · 🌙 深色主题与平台诊断</strong></summary>
