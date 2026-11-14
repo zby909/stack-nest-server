@@ -9,7 +9,7 @@ import subprocess
 import tarfile
 import time
 
-from package_release import validate
+from release_manifest import validate
 
 
 class APIError(RuntimeError):

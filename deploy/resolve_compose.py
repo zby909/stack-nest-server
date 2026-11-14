@@ -33,13 +33,21 @@ def resolve(destination, project=None, files=(), env_files=()):
         raise ValueError("Compose returned invalid JSON; existing file retained") from None
     if not isinstance(value, dict) or not isinstance(value.get("services"), dict) or not value["services"]:
         raise ValueError("Compose configuration lacks services; existing file retained")
+    # 保留 Docker 已经转义的美元符号。
+    write_private(target, result.stdout.rstrip() + "\n")
+    return target
+
+
+# write_private 原子替换私有配置，写入失败时保留原文件。
+def write_private(target, content, *, owner=None, mode=0o600):
     descriptor, temporary = tempfile.mkstemp(prefix=".compose-resolved-", suffix=".json", dir=target.parent)
     temporary = Path(temporary)
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as output:
-            os.chmod(temporary, 0o600)
-            # 保留 Docker 已经转义的美元符号，不能重新插值或回显内容。
-            output.write(result.stdout.rstrip() + "\n")
+        with os.fdopen(descriptor, "wb") as output:
+            if owner is not None:
+                os.chown(temporary, *owner)
+            os.chmod(temporary, mode)
+            output.write(content.encode("utf-8") if isinstance(content, str) else content)
             output.flush()
             os.fsync(output.fileno())
         os.replace(temporary, target)
@@ -52,7 +60,6 @@ def resolve(destination, project=None, files=(), env_files=()):
     finally:
         if temporary.exists():
             temporary.unlink()
-    return target
 
 
 # main 仅显示目标路径；CLI、JSON 及系统异常不回显 Compose 内容或环境。

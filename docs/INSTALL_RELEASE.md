@@ -72,6 +72,6 @@ docker compose exec -T stacknest /usr/local/bin/stacknest doctor
 
 ## 下一步
 
-[使用平台](https://github.com/zby909/stack-nest-server/blob/main/docs/USAGE.md) · [Docker 应用](https://github.com/zby909/stack-nest-server/blob/main/docs/DOCKER_APPS.md) · [备份与升级](https://github.com/zby909/stack-nest-server/blob/main/docs/OPERATIONS.md) · [换服务器](https://github.com/zby909/stack-nest-server/blob/main/docs/MIGRATION.md)
+[使用平台](https://github.com/zby909/stack-nest-server/blob/main/docs/USAGE.md) · [Docker 应用](https://github.com/zby909/stack-nest-server/blob/main/docs/DOCKER_APPS.md) · [版本升级](https://github.com/zby909/stack-nest-server/blob/main/docs/OPERATIONS.md#升级) · [换服务器](https://github.com/zby909/stack-nest-server/blob/main/docs/MIGRATION.md)
 
 按需启用 [XFS 配额](https://github.com/zby909/stack-nest-server/blob/main/docs/STORAGE_QUOTAS.md)或 [局域网保护](https://github.com/zby909/stack-nest-server/blob/main/docs/NETWORK_EGRESS.md)。

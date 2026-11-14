@@ -6,8 +6,9 @@ import hashlib
 import io
 import json
 from pathlib import Path
-import re
 import tarfile
+
+from release_manifest import validate
 
 FILES = (
     "LICENSE", "NOTICE", "internal/dockerrunner/seccomp-LICENSE",
@@ -17,29 +18,12 @@ FILES = (
     "deploy/nginx/tls.conf.template", "deploy/nginx/cloudflare.conf.template",
     "deploy/nginx/ssh.conf.template", "deploy/nginx/cloudflare-tunnel.conf.template",
     "deploy/backup.sh", "deploy/backup_status.py", "deploy/resolve_compose.py",
-    "deploy/migrate_host.py", "deploy/generate_quota_seccomp.py",
+    "deploy/migrate_host.py", "deploy/upgrade_release.py", "deploy/release_manifest.py",
+    "deploy/generate_quota_seccomp.py",
     "deploy/stacknest-backup.service", "deploy/stacknest-backup.timer",
     "deploy/cloudflared.service", "deploy/check_nginx.py",
     "deploy/check_egress_network.py",
 )
-VERSION = r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?"
-REPOSITORY = r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+"
-SHA = r"[0-9a-f]{40}"
-IMAGE = r"ghcr\.io/[a-z0-9][a-z0-9_.-]*/stacknest-(app|web|migrate)@sha256:[0-9a-f]{64}"
-
-
-# validate 拒绝浮动镜像、非法路径和不完整版本信息。
-def validate(manifest):
-    if not re.fullmatch(VERSION, manifest["version"]) or len(manifest["version"]) > 80:
-        raise ValueError("invalid release version")
-    for component in ("server", "web"):
-        source = manifest["sources"][component]
-        if not re.fullmatch(REPOSITORY, source["repository"]) or not re.fullmatch(SHA, source["commit"]):
-            raise ValueError("source repository and full commit SHA are required")
-    for component in ("app", "web", "migrate"):
-        match = re.fullmatch(IMAGE, manifest["images"][component])
-        if not match or match.group(1) != component:
-            raise ValueError("each image must have its own registry SHA256 digest")
 
 
 # read_public 只读取白名单内的普通文件，避免打包本地私有配置或符号链接。
