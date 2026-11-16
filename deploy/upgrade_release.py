@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import shlex
 import shutil
 import signal
 import socket
@@ -28,6 +29,15 @@ DOCKER = ["docker"]
 RUNTIME_TIMEOUT = 180
 RUNTIME = ("runner", "stacknest", "nginx")
 MIGRATION_COMMAND = ["migrate", "apply", "--dir", "file:///migrations", "--url"]
+PREFLIGHT_HINTS = {
+    "发布包": "重新解压目标版本的发布包，并核对 SHA-256。",
+    "当前实例与目标版本": "核对部署配置、正在运行的服务及目标版本是否匹配。",
+    "磁盘空间": "检查备份目录和 Docker 存储所在磁盘，腾出备份与镜像所需空间。",
+    "镜像": "检查 Docker 服务、镜像仓库连接及拉取权限。",
+    "数据库迁移": "检查迁移状态。若版本之间含数据库迁移，请按运维文档手动升级。",
+    "部署队列": "等待正在部署的 Docker 应用结束，再预检。",
+    "入口": "检查 Nginx 的本机管理入口和 /api/health。",
+}
 
 
 # run 只报告操作阶段，避免 Compose 或 Atlas 错误输出包含数据库连接串。
@@ -422,19 +432,102 @@ def regular_file(path):
     return path.resolve()
 
 
+# preflight_step 记录每个实际执行的检查，未执行的项目保持为空。
+@contextmanager
+def preflight_step(results, name):
+    results[name] = False
+    yield
+    results[name] = True
+
+
+# recheck_command 生成可从其他目录重跑的预检命令，只携带路径和选项。
+def recheck_command(args):
+    command = ["sudo", "python3", str(Path(__file__).resolve()), str(args.release)]
+    if args.compose:
+        command += ["--compose", str(args.compose)]
+    else:
+        command += ["--env-file", str(args.env_file or Path.cwd() / ".env")]
+    command += ["--backup-root", str(args.backup_root)]
+    for name in ("project", "backup_compose", "backup_timer"):
+        if value := getattr(args, name):
+            command += ["--" + name.replace("_", "-"), str(value)]
+    return shlex.join([*command, "--check"])
+
+
+# print_preflight 汇总实际检查结果，失败时只建议重新运行预检。
+def print_preflight(args, versions, results):
+    print(f"升级预检 {versions.get('current', '尚未确认')} → {versions.get('target', '尚未确认')}", flush=True)
+    for name in PREFLIGHT_HINTS:
+        state = {True: "通过", False: "失败", None: "未执行"}[results.get(name)]
+        print(f"  {name} · {state}", flush=True)
+    failed = next((name for name, passed in results.items() if not passed), None)
+    if failed:
+        print(PREFLIGHT_HINTS[failed], flush=True)
+        print(f"处理后重跑 {recheck_command(args)}", flush=True)
+    elif args.check:
+        print("实际升级前会先备份，期间服务会短暂中断。", flush=True)
+
+
 # upgrade 校验候选配置、磁盘和迁移后，按需进入维护窗口。
 def upgrade(args):
-    root = args.release.resolve(strict=True)
-    manifest = verify_release(root)
+    versions, results = {}, {}
+    try:
+        root, command, project, current, updates, manifest, backup_root, status = prepare(args, versions, results)
+    finally:
+        print_preflight(args, versions, results)
+    if args.check:
+        print("preflight=passed", flush=True)
+        return
+    backup_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    apply_release(root, command, project, current, updates, versions["current"], manifest, backup_root, status, args.backup_timer)
+
+
+# prepare 完成预检并返回实际要切换的配置，备份和服务切换由 upgrade 执行。
+def prepare(args, versions, results):
+    with preflight_step(results, "发布包"):
+        root = args.release.resolve(strict=True)
+        manifest = verify_release(root)
+        versions["target"] = manifest["version"]
+    with preflight_step(results, "当前实例与目标版本"):
+        command, project, current, updates = prepare_config(args, manifest, versions)
+        bytes_needed = inspect_running(command, current)
+        status = backup_status_dir(current)
+    reserve = 512 << 20
+    with preflight_step(results, "磁盘空间"):
+        backup_root = args.backup_root.resolve()
+        ancestor = next(path for path in (backup_root, *backup_root.parents) if path.is_dir())
+        docker_root = Path(run(DOCKER + ["info", "--format", "{{.DockerRootDir}}"], "read Docker storage").decode().strip())
+        if shutil.disk_usage(ancestor).free < bytes_needed + reserve or shutil.disk_usage(docker_root).free < reserve:
+            raise ValueError("insufficient space for backup or new images")
+    print(f"preparing={versions['current']} -> {manifest['version']} project={project}", flush=True)
+    with preflight_step(results, "镜像"):
+        for component, image in manifest["images"].items():
+            local = subprocess.run(DOCKER + ["image", "inspect", image], capture_output=True, timeout=90)
+            if local.returncode:
+                run(DOCKER + ["pull", image], f"pull {component}", 1200)
+    with preflight_step(results, "磁盘空间"):
+        if shutil.disk_usage(ancestor).free < bytes_needed + reserve:
+            raise ValueError("insufficient backup space after pulling images")
+    with preflight_step(results, "数据库迁移"):
+        check_migrations(command, current, manifest["images"]["migrate"])
+    with preflight_step(results, "部署队列"):
+        check_idle(command)
+    with preflight_step(results, "入口"):
+        check_entry(command, current)
+    return root, command, project, current, updates, manifest, backup_root, status
+
+
+# prepare_config 生成候选配置，核对已安装版本并保留原配置用于回退。
+def prepare_config(args, manifest, versions):
     source = regular_file(args.compose or args.env_file or ".env")
     dotenv = args.compose is None
     command = compose(source, dotenv, args.project)
     current = read_config(command)
     project = checked_project(current["name"])
     command = compose(source, dotenv, project)
-    bytes_needed = inspect_running(command, current)
     original = json.loads(run(command + ["exec", "-T", "stacknest", "/usr/local/bin/stacknest", "version"], "read current version"))
     old_version = original["version"]
+    versions["current"] = old_version
     if version_order(manifest["version"]) <= version_order(old_version):
         raise ValueError("target release must be newer than the running version")
     images = manifest["images"]
@@ -456,28 +549,7 @@ def upgrade(args):
         if snapshot in updates:
             raise ValueError("backup snapshot must be a separate file")
         updates[snapshot] = (snapshot.read_bytes(), json.dumps(candidate, indent=2, ensure_ascii=False) + "\n")
-    status = backup_status_dir(current)
-    backup_root = args.backup_root.resolve()
-    ancestor = next(path for path in (backup_root, *backup_root.parents) if path.is_dir())
-    docker_root = Path(run(DOCKER + ["info", "--format", "{{.DockerRootDir}}"], "read Docker storage").decode().strip())
-    reserve = 512 << 20
-    if shutil.disk_usage(ancestor).free < bytes_needed + reserve or shutil.disk_usage(docker_root).free < reserve:
-        raise ValueError("insufficient space for backup or new images")
-    print(f"preparing={old_version} -> {manifest['version']} project={project}", flush=True)
-    for component, image in images.items():
-        local = subprocess.run(DOCKER + ["image", "inspect", image], capture_output=True, timeout=90)
-        if local.returncode:
-            run(DOCKER + ["pull", image], f"pull {component}", 1200)
-    if shutil.disk_usage(ancestor).free < bytes_needed + reserve:
-        raise ValueError("insufficient backup space after pulling images")
-    check_migrations(command, current, images["migrate"])
-    check_idle(command)
-    check_entry(command, current)
-    if args.check:
-        print("preflight=passed", flush=True)
-        return
-    backup_root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    apply_release(root, command, project, current, updates, old_version, manifest, backup_root, status, args.backup_timer)
+    return command, project, current, updates
 
 
 # interrupt 让维护中的 TERM 进入回退流程。
@@ -507,7 +579,7 @@ def main():
     signal.signal(signal.SIGTERM, interrupt)
     try:
         # Compose 的 COMPOSE_FILE 相对路径按进程目录解释。
-        args.release = args.release.resolve(strict=True)
+        args.release = args.release.absolute()
         for name in ("compose", "env_file", "backup_root", "backup_compose"):
             path = getattr(args, name)
             if path is not None:

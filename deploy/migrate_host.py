@@ -323,6 +323,22 @@ def preview_configs(config, port):
         mounts.append({"type": "bind", "source": "./deploy/nginx/ssh.conf.template", "target": "/etc/nginx/templates/ssh.conf.template", "read_only": True})
     return public, local
 
+# restore_database 只向空白目标数据库恢复，失败时回滚该批 SQL。
+def restore_database(command, dump):
+    run(command + ["up", "-d", "--wait", "--wait-timeout", "120", "postgres"], stage="start fresh database")
+    tables = run(command + ["exec", "-T", "postgres", "psql", "-U", "stacknest", "-d", "stacknest", "-Atc", "SELECT count(*) FROM pg_tables WHERE schemaname='public'"])
+    if tables.strip() != "0":
+        raise ValueError("target database is not empty")
+    with dump.open("rb") as source:
+        run(command + ["exec", "-T", "postgres", "pg_restore", "-U", "stacknest", "-d", "stacknest", "--exit-on-error", "--single-transaction", "--no-owner", "--no-privileges"], stdin=source, stage="restore database")
+
+
+# restore_files 将已校验的归档解压到目标命名卷。
+def restore_files(command, archive):
+    with archive.open("rb") as source:
+        run(command + ["run", "--rm", "--no-deps", "-T", "--user", "0:0", "--entrypoint", "sh", "stacknest", "-ec", "test -z \"$(find /data -type f -print -quit)\"; tar -xzf - -C /data"], stdin=source, stage="restore files")
+
+
 # import_bundle 在全新实例恢复，先仅开放本机预览，确认后再 activate。
 def import_bundle(args):
     bundle = Path(args.bundle).resolve(strict=True)
@@ -369,15 +385,9 @@ def import_bundle(args):
     print("stage=load-images", flush=True)
     run(["docker", "image", "load", "--input", bundle / "images.tar"], stage="load images")
     print("stage=restore", flush=True)
-    run(command + ["up", "-d", "--wait", "--wait-timeout", "120", "postgres"], stage="start fresh database")
     try:
-        tables = run(command + ["exec", "-T", "postgres", "psql", "-U", "stacknest", "-d", "stacknest", "-Atc", "SELECT count(*) FROM pg_tables WHERE schemaname='public'"])
-        if tables.strip() != "0":
-            raise ValueError("target database is not empty")
-        with (bundle / "data/postgres.dump").open("rb") as source:
-            run(command + ["exec", "-T", "postgres", "pg_restore", "-U", "stacknest", "-d", "stacknest", "--exit-on-error", "--single-transaction", "--no-owner", "--no-privileges"], stdin=source, stage="restore database")
-        with (bundle / "data/files.tar.gz").open("rb") as source:
-            run(command + ["run", "--rm", "--no-deps", "-T", "--user", "0:0", "--entrypoint", "sh", "stacknest", "-ec", "test -z \"$(find /data -type f -print -quit)\"; tar -xzf - -C /data"], stdin=source, stage="restore files")
+        restore_database(command, bundle / "data/postgres.dump")
+        restore_files(command, bundle / "data/files.tar.gz")
         run(command + ["up", "-d", "--wait", "--wait-timeout", "120"], stage="start restored services")
         for name in ("nginx", "tunnel"):
             if name in config["services"]:

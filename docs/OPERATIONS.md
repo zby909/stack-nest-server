@@ -73,7 +73,9 @@ sudo python3 /新版/server/deploy/upgrade_release.py \
   --backup-root /实际备份目录
 ```
 
-默认读取当前目录的 `.env`。迁移恢复或自定义 JSON 实例用 `--compose /实际目录/compose.json`；可用 `--project` 指定原项目名。定时备份另读快照时用 `--backup-compose /实际快照.json`，已有 systemd 定时器可用 `--backup-timer stacknest-backup.timer`。先加 `--check` 可只拉取镜像并检查空间、配置和迁移。
+默认读取当前目录的 `.env`。迁移恢复或自定义 JSON 实例用 `--compose /实际目录/compose.json`，可用 `--project` 指定原项目名。定时备份另读快照时用 `--backup-compose /实际快照.json`，已有 systemd 定时器可用 `--backup-timer stacknest-backup.timer`。
+
+先加 `--check` 拉取镜像并预检。结果会显示当前和目标版本、每项检查状态。遇到失败，可按提示排查后重跑给出的预检命令。
 
 工具适用于单 Nginx、独立 Runner 且迁移文件一致的发布版。它会先备份，再切换镜像并通过 Nginx 实际访问后台首页和 `/api/health`。HTTPS 在本机验证握手和分流，公网证书链仍通过浏览器验收。切换检查失败会恢复旧配置和镜像；SMTP 单独提示。备份和切换会短暂中断服务。配置快照保存在私有的 `.upgrades/` 目录。
 

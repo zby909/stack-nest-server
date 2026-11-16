@@ -1,9 +1,11 @@
 """覆盖升级前拒绝、配置保留及失败回退。"""
-from contextlib import nullcontext
+from argparse import Namespace
+from contextlib import nullcontext, redirect_stdout
 import copy
 import io
 import json
 from pathlib import Path
+import shlex
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -58,6 +60,31 @@ class UpgradeTests(unittest.TestCase):
         with patch.object(upgrade, "migration_checksum", return_value=b"same"), patch.object(upgrade, "run", side_effect=[b"", b"PENDING 1"]):
             with self.assertRaisesRegex(ValueError, "pending or incomplete"):
                 upgrade.check_migrations([], self.old, self.images["migrate"])
+
+    # test_preflight_summary 失败步骤保留状态，重试命令完整保留部署路径和 --check。
+    def test_preflight_summary(self):
+        args = Namespace(release=self.root / "new release", compose=self.root / "private settings.json",
+                         env_file=None, backup_root=self.root / "backups & files", project="stacknest",
+                         backup_compose=None, backup_timer="stacknest-backup.timer", check=True)
+        results = {}
+        with upgrade.preflight_step(results, "发布包"):
+            pass
+        with self.assertRaisesRegex(RuntimeError, "migration failure"):
+            with upgrade.preflight_step(results, "数据库迁移"):
+                raise RuntimeError("migration failure")
+        output = io.StringIO()
+        with redirect_stdout(output):
+            upgrade.print_preflight(args, {"current": "v1.0.1", "target": "v1.0.2"}, results)
+        summary = output.getvalue()
+        self.assertIn("v1.0.1 → v1.0.2", summary)
+        self.assertIn("发布包 · 通过", summary)
+        self.assertIn("数据库迁移 · 失败", summary)
+        self.assertIn("入口 · 未执行", summary)
+        command = shlex.split(summary.split("处理后重跑 ", 1)[1].strip())
+        self.assertEqual(command[3:], [
+            str(args.release), "--compose", str(args.compose), "--backup-root", str(args.backup_root),
+            "--project", args.project, "--backup-timer", args.backup_timer, "--check",
+        ])
 
     # test_entries_follow_published_ports 使用实际入口和域名，有 TLS 时跳过 HTTP 跳转端口。
     def test_entries_follow_published_ports(self):
