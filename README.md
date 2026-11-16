@@ -53,15 +53,9 @@
 
 ## 在自己的服务器上运行
 
-推荐使用 [Docker 版本部署包](docs/INSTALL_RELEASE.md)，服务器无需安装 Go 或 Node.js。安装以所下载版本的包内 README 为准。
+使用 [Docker 部署包](docs/INSTALL_RELEASE.md)在 **Linux amd64** 上配置并启动平台。安装后可以上传 [示例站点](examples/README.md)，体验预览与发布。
 
-1. **下载**：从 [Releases](https://github.com/zby909/stack-nest-server/releases) 获取部署包与校验文件。
-2. **配置**：准备域名、SMTP 邮箱和 HTTPS 证书，按安装教程填写配置。
-3. **启动**：运行 `docker compose pull` 和 `docker compose up -d --wait --wait-timeout 120`。
-
-支持 **Linux amd64**，需要 Docker Engine **26+**、Compose **2.24.4+**、至少 **2 GiB 内存**；可选应用联网保护需要 Engine **28+**。安装完成后，可上传 [最小示例站点](examples/README.md)体验完整发布流程。
-
-🏠 没有公网 IP？另有 [家用电脑 + Cloudflare Tunnel 教程](docs/HOME_SERVER_TUNNEL.md)。
+家用电脑或没有公网 IP 的服务器可以使用 [Cloudflare Tunnel](docs/HOME_SERVER_TUNNEL.md)。
 
 ## 按需阅读
 
@@ -69,10 +63,8 @@
 | --- | --- |
 | 使用平台、部署 Docker 应用 | [使用指南](docs/USAGE.md) · [Docker 应用](docs/DOCKER_APPS.md) |
 | 用 AI 或 GitHub Actions 更新项目 | [静态站点自动部署](docs/AUTOMATION.md) · [Docker 自动部署](docs/DOCKER_AUTOMATION.md) |
-| 备份、升级或换服务器 | [日常运维](docs/OPERATIONS.md) · [迁移](docs/MIGRATION.md) |
-| 了解组件怎样协作 | [架构与工作原理](docs/ARCHITECTURE.md) |
-| 修改代码或参与开发 | [开发与测试](docs/DEVELOPMENT.md) · [Web 仓库](https://github.com/zby909/stack-nest-web) |
-| 从源码部署或发布版本 | [源码部署](docs/GETTING_STARTED.md) · [版本发布](docs/RELEASING.md) |
+| 备份、恢复或升级 | [日常运维](docs/OPERATIONS.md) · [恢复演练](docs/RESTORE.md) |
+| 开发与维护 | [开发与测试](docs/DEVELOPMENT.md) · [架构原理](docs/ARCHITECTURE.md) · [全部文档](docs/README.md) |
 
 后端使用 **Go · PostgreSQL · Ent · Atlas**；管理界面使用 **React · TypeScript · Vite · Tailwind CSS**。
 

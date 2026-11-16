@@ -16,6 +16,7 @@
 ## 运维与可选配置
 
 - [运维](OPERATIONS.md) — 备份、升级、日志与排障。
+- [恢复演练](RESTORE.md) — 在隔离实例确认日常备份可用。
 - [换服务器](MIGRATION.md) — 导出、恢复和切换入口。
 - [配置参考](DEPLOYMENT.md) — 环境变量、证书和入口。
 - [磁盘硬配额](STORAGE_QUOTAS.md) — XFS 与存储要求。

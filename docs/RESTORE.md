@@ -1,20 +1,22 @@
 # 恢复参考
 
-完整恢复优先使用 [迁移包](MIGRATION.md)导入空白目标。包中包含固定镜像、配置、数据库和文件，便于一起验证。
+完整恢复优先将 [迁移包](MIGRATION.md)导入空白实例。迁移包包含镜像、配置、数据库及业务文件。
 
-日常备份只有数据库与文件，需另保留匹配的平台版本、运行配置和原认证密钥。换回旧镜像不会回退数据库或应用数据。
+日常备份只保存数据库和业务文件。另存备份时的运行配置及平台版本，恢复时沿用其中的原认证密钥。
 
 ## 演练日常备份
 
-准备备份时的私有 Compose JSON（可用 [配置解析工具](OPERATIONS.md#备份)保存）及其原平台镜像。Linux 宿主执行：
+在 Linux 宿主准备备份时的 [私有 Compose JSON](OPERATIONS.md#备份)及对应的本地平台镜像。演练目录和 Compose 项目名须是新的。
 
 ```bash
-sudo python3 deploy/restore_backup.py /备份目录/stacknest-时间 +  /配置目录/compose.resolved.json /opt/stacknest-restore-test +  --project stacknest-restore-test --preview-port 19080
+sudo python3 deploy/restore_backup.py \
+  /备份目录/stacknest-时间 /配置目录/compose.resolved.json \
+  /opt/stacknest-restore-test --project stacknest-restore-test
 ```
 
-工具会校验备份摘要，恢复到新数据库与数据卷，核对迁移状态和本地镜像。入口仅监听 `127.0.0.1:19080`。演练使用本机邮件设置，Docker 应用保持停止，可检查还原的应用数据目录。
+工具校验摘要、恢复数据库和文件，再检查迁移状态及本地镜像。演练仅开放回环入口，默认不发送验证码，Docker 应用保持停止。
 
-通过 SSH 转发访问 `http://localhost:19080`，已发布的静态站点使用 `http://stack-nest-项目标识.localhost:19080`。结束后执行工具给出的清理命令，移除本次容器和卷，按需删除演练目录内的私有配置。
+在自己的电脑运行 `ssh -N -L 19080:127.0.0.1:19080 用户@服务器`。打开 `http://localhost:19080/api/health` 核对健康状态，用 `http://stack-nest-项目标识.localhost:19080` 检查已发布站点。结束后按脚本提示清理演练容器和卷，再移除演练目录里的私有配置。
 
 ## 含 Docker 应用的实例
 
@@ -22,7 +24,7 @@ sudo python3 deploy/restore_backup.py /备份目录/stacknest-时间 +  /配置�
 
 ## 仅静态实例的原地恢复
 
-仅适用于没有 Docker 应用的目标和备份。在实际部署目录操作，先备份当前目标；任一步失败时保持 API 与入口停止。
+先用要恢复的那份备份完成上述演练，并另备份当前实例。在正式部署目录执行，确认演练库和正式库均无 Docker 应用后才覆盖数据库。恢复开始后若有步骤失败，保持 API 与入口停止。
 
 ```bash
 (
@@ -30,6 +32,8 @@ sudo python3 deploy/restore_backup.py /备份目录/stacknest-时间 +  /配置�
   stacknest_backup_dir=/实际备份目录
   (cd "$stacknest_backup_dir" && sha256sum -c SHA256SUMS)
   tar -tzf "$stacknest_backup_dir/files.tar.gz" > /dev/null
+  test "$(sudo docker compose -p stacknest-restore-test -f /opt/stacknest-restore-test/compose.json \
+    exec -T postgres psql -U stacknest -d stacknest -Atc 'SELECT count(*) FROM container_apps;')" = 0
   docker compose stop nginx stacknest runner
   docker compose up -d --wait postgres
   test "$(docker compose exec -T postgres psql -U stacknest -d stacknest -Atc 'SELECT count(*) FROM container_apps;')" = 0

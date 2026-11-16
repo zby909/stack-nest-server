@@ -33,7 +33,7 @@ docker compose exec -T stacknest /usr/local/bin/stacknest doctor
 
 ## 备份
 
-宿主需要 Python 3、Bash、Compose、flock 和 tar。先保存实际运行配置，再手动备份：
+宿主需要 Python 3.9+、Bash、Compose、flock 和 tar。先保存实际运行配置，再手动备份：
 
 ```bash
 python3 deploy/resolve_compose.py compose.resolved.json

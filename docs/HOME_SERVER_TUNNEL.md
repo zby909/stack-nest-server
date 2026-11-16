@@ -26,25 +26,9 @@ curl -fsS http://127.0.0.1:18081/ -H 'Host: demo.example.com' -H 'X-Forwarded-Pr
 
 测试页应显示 Tunnel 连通提示。保留入口的回环绑定，不把 18081 改为公开端口。
 
-### Hyper-V 网段冲突
-
-Default Switch 的虚拟机网段可能在 Windows 重启后变化。若与 Docker 网段重叠，会出现“容器正常，但 Tunnel 回源 502”。用 `ip -4 route` 和 `docker network inspect stacknest_default` 对照检查，网络名随 Compose 项目名变化。
-
-首次部署时可在自建的 `compose.network.yaml` 中固定平台网段：
-
-```yaml
-networks:
-  default:
-    ipam:
-      config:
-        - subnet: 10.203.0.0/24
-```
-
-这里的网段只是示例，须避开局域网、VPN 和其他 Docker 网络。在 `.env` 的 `COMPOSE_FILE` 末尾追加 `:compose.network.yaml`，后续启动和升级都保留它。已有实例更换网段前先备份、停止相关容器并重建网络，保留命名数据卷；不要使用 `down -v`。这只固定平台网络，Docker 应用各自的网络需另外检查。
-
 ## 2. 创建 Tunnel
 
-在 Cloudflare **Zero Trust → Networks → Tunnels** 创建 Cloudflared 类型的隧道，保存连接器 Token。
+在 Cloudflare 控制台的 **Networking → Tunnels** 创建隧道，取得 [连接器 Token](https://developers.cloudflare.com/tunnel/reference/tunnel-tokens/)。
 
 安装 [官方 apt 源](https://pkg.cloudflare.com/index.html)的软件：
 
@@ -90,7 +74,7 @@ ready 应返回 200。失败时查看 `sudo journalctl -u cloudflared -n 50 --no
 
 ## 4. 配置域名
 
-在 Tunnel 的“已发布应用程序”添加：
+打开该隧道，在 **Routes → Add route** 选“已发布应用程序”：
 
 | 字段            | 值                               |
 | --------------- | -------------------------------- |
@@ -99,9 +83,9 @@ ready 应返回 200。失败时查看 `sudo journalctl -u cloudflared -n 50 --no
 | 服务 URL        | `http://127.0.0.1:18081`         |
 | 路径、Host 覆盖 | 留空或默认                       |
 
-DNS 的泛域名应指向此 Tunnel，并启用代理。有旧的管理域名精确记录时也改到此 Tunnel；其他网站的精确记录保留。
+在 DNS 检查 `*.example.com` 有代理开启的 CNAME，指向 `<隧道 UUID>.cfargotunnel.com`。若管理域名有单独的记录，也将它指向同一隧道。[Cloudflare 路由说明](https://developers.cloudflare.com/tunnel/concepts/routing/#dns-records)
 
-检查 Origin Rules 不会把本项目转到其他端口。浏览器缓存 TTL 选择“尊重现有标头”，清除旧覆盖缓存。
+核对旧 Origin Rules 的回源端口，浏览器缓存 TTL 见 [缓存配置](CLOUDFLARE_TUNNEL.md#缓存)。
 
 ## 5. 验证
 
@@ -113,5 +97,21 @@ curl -i https://unexpected.example.com/
 ```
 
 应依次得到测试页、健康 JSON、401、404。最后在管理域名完成邮箱登录与一次静态发布。
+
+## Hyper-V 网段冲突
+
+Windows 重启后，Default Switch 网段可能变化。若 Tunnel 返回 502，用 `ip -4 route` 和 `docker network inspect stacknest_default` 检查虚拟机与 Docker 网段是否重叠。网络名随 Compose 项目名变化。
+
+可在自建的 `compose.network.yaml` 固定平台网段：
+
+```yaml
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 10.203.0.0/24
+```
+
+将示例网段换成与局域网、VPN 和其他 Docker 网络均不重叠的网段，在 `COMPOSE_FILE` 末尾追加 `:compose.network.yaml`。已有实例更换网段前先备份，重建时保留命名卷。应用各自的网络单独检查。
 
 [连接器维护](CLOUDFLARE_TUNNEL.md) · [备份](OPERATIONS.md) · [换服务器](MIGRATION.md)

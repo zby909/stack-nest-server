@@ -58,7 +58,7 @@ Nginx 通过 Docker 内部 DNS 定期刷新 API 地址，后端容器重建换 I
 
 HTTPS 会话使用 Secure、HttpOnly、SameSite 和主机限定 Cookie。应用代理过滤管理 Cookie，限制应用 Cookie 的父域作用域。
 
-站点和预览内容默认公开，持有预览链接即可访问；版本清理或暂停后预览失效。
+站点和预览内容默认公开。预览仅在版本仍保留且项目未暂停时可访问。
 
 ## 上传与版本切换
 

@@ -32,7 +32,7 @@ Compose 使用部署目录的 `.env`，同名 shell 环境变量优先。[完整
 | `STACKNEST_BACKUP_STATUS_DIR`       | 备份摘要目录，须与备份脚本配置一致               |
 | `STACKNEST_DOCKER_STORAGE_DIR`      | 实际 Docker data-root，默认 `/var/lib/docker`    |
 
-发布包另外填写 `STACKNEST_RELEASE` 和三个 `STACKNEST_*_IMAGE`，升级时整组更新。自定义数据库密码须做 URL 编码；使用随机十六进制值可避免特殊字符。
+发布包已填入 `STACKNEST_RELEASE` 和三个 `STACKNEST_*_IMAGE`，初次安装直接使用，升级时整组更新。自定义数据库密码写进连接串时须做 URL 编码。
 
 用户表为空时初始化成员，后续在后台管理。认证密钥必须自行生成，空值、过短或旧模板示例值会阻止启动；它还用于 Docker 配置加密，不能直接替换已有实例的值。
 

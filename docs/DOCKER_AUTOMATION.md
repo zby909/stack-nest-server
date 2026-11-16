@@ -1,6 +1,6 @@
 # 自动部署 Docker 应用
 
-在 CI 构建并推送镜像，再让 StackNest 更新已有应用。CLI 默认等待部署及健康检查完成，失败返回非零退出码。需要后端、Web 和 CLI `v1.0.0-rc.10` 或更新版本。
+在 CI 构建并推送镜像，再让 StackNest 更新已有应用。使用与平台配套的 CLI，默认等待部署及健康检查完成，失败返回非零退出码。
 
 ## 准备
 
@@ -15,8 +15,6 @@ Token 原文只显示一次，默认 30 天有效，最多保留 10 个，可随
 在应用“自动部署”中点击“交给 AI 部署”，下载通用 Skill 并复制说明，再提供新镜像地址及应用 Token 文件路径。已安装者更新整个 Skill 目录，保留自己的私有配置。
 
 可以说：“使用 stacknest-deploy 将这个镜像部署到我的应用，等检查通过后给我链接。”首次连接会自动识别 Token 绑定的应用，不必填写应用名；断线后说“继续等待刚才的部署”，使用原任务代次，不重复提交镜像。
-
-此引导随 `v1.0.0-rc.11` 提供，使用已有 `rc.10+` CLI 和部署接口。
 
 ## 本机使用
 
@@ -50,7 +48,7 @@ stacknest-deploy app wait --generation 8 --token-file /私有目录/app.token
 | 配置 | 内容 |
 | --- | --- |
 | Variable `STACKNEST_URL` | 管理端 HTTPS 地址，Runner 必须能访问 |
-| Variable `STACKNEST_CLI_VERSION` | 固定 CLI 版本，如 `v1.0.0-rc.10` |
+| Variable `STACKNEST_CLI_VERSION` | 确切的 CLI 版本号，例如 `v1.0.2` |
 | Secret `STACKNEST_DEPLOY_TOKEN` | 本应用的部署 Token |
 | Variable `STACKNEST_IMAGE_PREFIX`（可选） | 镜像代理前缀，如 `gh-proxy.com/docker/`；直连留空 |
 

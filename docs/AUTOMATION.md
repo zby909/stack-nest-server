@@ -1,10 +1,6 @@
 # 自动部署静态项目
 
-让本机脚本、AI 或 GitHub Actions 上传 HTML / ZIP / RAR，返回预览地址；确认后再发布到原项目网址。无需 SSH、登录 Cookie 或服务器密码。
-
-Docker 应用使用独立的应用 Token 和 `app deploy` 命令，见 [Docker 自动部署](DOCKER_AUTOMATION.md)。本页的静态项目 Token 不能操作应用。
-
-本功能从 `v1.0.0-rc.2` 开始提供，需要配套更新后端和 Web。早期 `v1.0.0-rc.1` 不包含本功能，也没有 CLI 下载包。
+用本机脚本、AI 或 GitHub Actions 上传 HTML / ZIP / RAR。先生成预览，确认后发布到原项目网址。[Docker 自动部署](DOCKER_AUTOMATION.md)使用应用专属 Token。
 
 ## 1. 创建项目凭据
 
@@ -14,20 +10,13 @@ Docker 应用使用独立的应用 Token 和 `app deploy` 命令，见 [Docker �
 - 需要脚本直接上线时，勾选 **允许正式发布**；调用方仍须明确执行发布命令。
 - 原文只显示一次，保存在本机私有文件或 GitHub Secret。每个项目最多保留 10 个 Token，不用的或过期的可以撤销。
 
-一个 Token 绑定一个已有项目。它不能创建或删除项目、管理邮箱、操作 Docker 应用，也不能访问其他项目或接管其他 Token / 浏览器的上传。项目删除、Token 撤销或过期、创建者删除或失去权限后，后续请求被拒绝。项目归属与签发时不一致也会失效。已开始处理的发布可能继续完成。
+Token 只允许在绑定的已有项目上传预览，或按授权发布。项目归属改变、项目删除、创建者失去权限，以及 Token 撤销或过期，都会阻止后续请求。
 
 ## 2. 准备命令行工具
 
-[Releases](https://github.com/zby909/stack-nest-server/releases) 已提供 Linux、Windows、macOS 的 amd64 / arm64 CLI 与 `.sha256` 校验文件。选择 `v1.0.0-rc.2` 或更新版本，下载匹配本机的 `stacknest-deploy-版本-系统-架构`，校验后解压即可，无需 Go 或 Docker。
+从与平台配套的 [Release](https://github.com/zby909/stack-nest-server/releases) 下载 `stacknest-deploy-版本-系统-架构` 压缩包及其 `.sha256`。Linux 用 `sha256sum -c 文件.sha256`，macOS 用 `shasum -a 256 -c 文件.sha256`，Windows 用 `Get-FileHash` 核对 SHA-256，再解压。
 
-从源码构建则在 `server/` 执行（Go 版本见 `go.mod`）：
-
-```bash
-go build -o stacknest-deploy ./cmd/stacknest-deploy
-./stacknest-deploy --help
-```
-
-Windows 使用 `go build -o stacknest-deploy.exe ./cmd/stacknest-deploy`。
+从源码构建可在 `server/` 运行 `go build -o stacknest-deploy ./cmd/stacknest-deploy`，Windows 输出文件加 `.exe`。
 
 ## 3. 上传预览
 
@@ -63,21 +52,17 @@ export STACKNEST_URL=https://stack-nest.example.com
 }
 ```
 
-单个 HTML / HTM 的名称不限，会作为 `index.html` 发布；配套资源须内嵌或使用外部 URL。ZIP / RAR 的内容仍须包含 `index.html`。文件不超过 90 MiB，沿用平台原有解压和磁盘检查。
-
-**预览默认公开，持有地址即可访问。** 上传预览不会更新正式站点。项目同时只保留一个草稿；普通 `upload` 遇到已有草稿会明确失败，不自动覆盖。可按下一节更新指定草稿，或先在后台发布、丢弃。
+文件格式和容量见 [静态站点](USAGE.md#静态站点)。**预览链接默认公开。** 每项目保留一个草稿，有草稿时可在后台发布或丢弃，或者按下节明确替换。
 
 ### 更新已有待发布版
 
-后端和 CLI 均升级至 `v1.0.0-rc.4` 或更新版本后，可明确替换某个草稿：
+用 `--replace-draft` 指定要替换的草稿：
 
 ```bash
 ./stacknest-deploy upload --file ./guide.html --token-file "$HOME/.config/stacknest/travel.token" --replace-draft dep-要替换的草稿编号 --notes '调整第二天行程'
 ```
 
-旧编号来自要修改的预览回执，也可通过 `status` 核实。新文件校验成功后才替换，失败保留旧草稿；成功返回新的 `draftId` 和 `previewUrl`，旧预览地址失效。正式站点保持原样。上传期间正式版或指定草稿发生变化时返回冲突，不自动改为覆盖最新草稿。普通 `upload` 仍禁止覆盖。
-
-断线后保留原文件和 `--replace-draft` 参数重跑，续传记录绑定这次替换目标。之后确认发布时使用**新回执**的编号。网页可在项目“版本”页点击“更新待发布版”。
+草稿编号来自预览回执，也可用 `status` 核对。校验成功后才替换，旧预览地址随即失效。断线后用原文件和原参数续传，发布时使用**新回执**的编号。
 
 ## 4. 确认发布
 
@@ -93,11 +78,9 @@ export STACKNEST_URL=https://stack-nest.example.com
 
 ## 断点续传与重试
 
-默认在当前目录写 `.stacknest-upload-文件标识.json`，文件名由目标、文件、参数及凭据的摘要决定。新文件自动使用新记录，只保存上传编号、文件摘要、目标、版本和 Token 指纹，不保存凭据原文。失败后使用**同一文件和同一组参数**重跑，会从服务端确认偏移继续，临时上传保留 24 小时。
+失败后用**同一文件、Token 和参数**重跑。CLI 从服务端确认的位置继续，临时上传保留 24 小时。当前目录的 `.stacknest-upload-文件标识.json` 保存续传状态和成功回执，重复运行会返回同一次上传结果。
 
-连续失败最多尝试四次，不会无限重试。同一续传记录的文件内容、Token 或参数改变时拒绝继续；上传过程中不要修改本地文件。成功后的状态文件作为幂等收据保留，重复运行仍确认同一次上传，不生成新版本。原版本被替换、丢弃或清理后，确认接口返回 409，不会把另一版本当作本次结果。
-
-如果手动指定了固定的 `--state`，下一次文件更新要换一个状态文件。记录过期、版本被丢弃，或确实需要重新部署相同内容时，可以删除对应的状态文件再执行。旧收据可按需清理。不要把状态文件、Token 或本机配置提交到 Git；项目 `.gitignore` 建议加入：
+指定固定 `--state` 时，部署新文件请换一个状态文件。记录过期、草稿已丢弃或确实要重新部署同一文件时，可删除对应的状态记录。把状态和私有配置排除在 Git 之外：
 
 ```gitignore
 .stacknest-upload*.json
@@ -114,7 +97,7 @@ export STACKNEST_URL=https://stack-nest.example.com
 | 类型 | 名称 | 内容 |
 | --- | --- | --- |
 | Variable | `STACKNEST_URL` | 管理端 HTTPS 地址 |
-| Variable | `STACKNEST_CLI_VERSION` | 包含 CLI 下载包的确切版本号，例如 `v1.0.0-rc.2` |
+| Variable | `STACKNEST_CLI_VERSION` | 确切的 CLI 版本号，例如 `v1.0.2` |
 | Secret | `STACKNEST_DEPLOY_TOKEN` | 本项目的部署 Token |
 
 将示例中的 `site.html` 改成实际文件。Vite 等项目需要在上传前增加自己的构建步骤，再把 `dist` **目录内的内容**打包成 ZIP；平台不代为构建源码。
@@ -125,25 +108,14 @@ GitHub 托管 Runner 必须能访问管理端地址。模板不在 Pull Request 
 
 ## 让 AI 使用
 
-进入 **项目详情 → 设置 → 自动部署 → 交给 AI 部署**，可下载通用 Skill、打开 CLI 发布页，并复制已填入当前后台地址和项目标识的说明。将说明交给 AI，再指定要上传的文件和私有 Token 文件路径即可；复制内容和 Skill 下载包均不包含凭据。默认只生成预览。
+从 **项目详情 → 设置 → 自动部署 → 交给 AI 部署** 下载 [stacknest-deploy Skill](../skills/stacknest-deploy/SKILL.md)，把整个目录放入 AI 工具的 Skill 目录后重载。复制页面上的部署说明给 AI，再提供上传文件和私有 Token 文件路径。
 
-可以把下面的说明放进旅游攻略等**用户项目**的 `AGENTS.md`，只写路径和规则：
-
-> 修改完成后，调用 stacknest-deploy 上传单个 HTML 并返回预览链接。管理端地址为我的 StackNest URL，凭据从指定的私有 Token 文件读取，不输出其内容。使用默认状态文件，失败时用相同文件和参数续传。默认只生成预览，只有我明确确认某个预览后，才允许发布该确切版本。不得擅自覆盖或丢弃已有草稿。
-
-之后可以直接说“改完行程，给我一个新预览”。
-
-也可以使用仓库附带的 [stacknest-deploy Skill](../skills/stacknest-deploy/SKILL.md)。将 `skills/stacknest-deploy` 整个目录复制到你的 AI 工具支持的 Skill 目录；Codex 默认使用 `~/.codex/skills/`（配置了 `CODEX_HOME` 时使用其中的 `skills/`）。首次使用时，AI 会先检查现有配置和 PATH，只询问缺少的管理端地址、CLI 路径和 Token 文件路径；项目由 Token 自动查询识别，不用填写项目名或 slug。未安装 CLI 可以让它协助下载。不需要先手动编辑配置文件。重新加载 Skill 后可以这样说：
+首次使用会补齐缺少的连接信息，也可让 AI 安装 CLI。项目由 Token 自动识别。默认先生成预览，确认发布时沿用该次预览的回执。
 
 ```text
 使用 $stacknest-deploy 上传当前 HTML，给我预览。
-使用 $stacknest-deploy 将当前 HTML 直接发布到我指定的项目，返回正式链接。
+使用 $stacknest-deploy 修改刚才的预览，再给我新链接。
+使用 $stacknest-deploy 发布刚才确认的预览。
 ```
 
-连接验证通过后，AI 会在私有安装副本的 `references/local-config.md` 记住路径、地址和项目对应关系，后续复用；不保存 Token 原文，也不修改仓库里的通用模板。换电脑或凭据过期时只补充失效项。可以要求仅本次使用、不保存配置。
-
-Skill 默认生成预览；明确要求正式上线时，会使用本次上传返回的版本编号发布，不重复询问。已有其他草稿或版本冲突时停止。它复用 CLI，不需要另外安装上传脚本。
-
-需要继续修改预览时，可以说“使用 $stacknest-deploy 修改刚才的预览，再给我新链接”。Skill 会使用该次回执的旧草稿编号替换，成功后保留新回执供发布使用；不会替换未指定的其他草稿。
-
-协议见 [自动部署 API](../openapi/automation.yaml)。Bearer 只在 `/api/deploy/v1/` 生效；正常管理 API 继续使用会话 Cookie 和同源校验。文件分片、校验、预览和发布复用现有业务流程，数据库只保存 Token 的 SHA-256 摘要。
+可让 AI 在私有配置中只记住路径或要求仅本次使用。接口见 [自动部署 API](../openapi/automation.yaml)。
