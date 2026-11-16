@@ -1,6 +1,6 @@
 # Cloudflare 参考
 
-首次安装见 [家用电脑教程](HOME_SERVER_TUNNEL.md)，连接和分流原理见 [架构](ARCHITECTURE.md)。
+首次安装见 [家用电脑教程](HOME_SERVER_TUNNEL.md)，连接和分流原理见 [架构](../architecture/README.md)。
 
 ## 入口与路由
 

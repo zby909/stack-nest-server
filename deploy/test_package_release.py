@@ -24,7 +24,7 @@ class PackageReleaseTests(unittest.TestCase):
         self.base = Path(self.work.name)
         self.source = self.base / "source"
         self.source.mkdir()
-        for name in (*package_release.FILES, ".env.compose.example", "docs/INSTALL_RELEASE.md"):
+        for name in (*package_release.FILES, ".env.compose.example", "docs/deployment/INSTALL_RELEASE.md"):
             target = self.source / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / name, target)
@@ -67,7 +67,9 @@ class PackageReleaseTests(unittest.TestCase):
         self.assertIn("COMPOSE_FILE=compose.release.yaml:compose.tls.yaml", settings)
         for value in self.manifest["images"].values():
             self.assertIn(value, settings)
-        self.assertIn(b"https://github.com/example/stack-nest-server/blob/" + b"a" * 40, files["server/README.md"])
+        docs = b"https://github.com/example/stack-nest-server/blob/" + b"a" * 40 + b"/docs/"
+        self.assertIn(docs + b"deployment/HOME_SERVER_TUNNEL.md", files["server/README.md"])
+        self.assertIn(docs + b"usage/README.md#", files["server/README.md"])
 
     # test_reproducible_and_no_overwrite 相同输入完全一致，已有发布包不能被静默覆盖。
     def test_reproducible_and_no_overwrite(self):

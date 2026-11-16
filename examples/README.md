@@ -1,6 +1,6 @@
 # 第一次部署
 
-先按 [Docker 部署](../docs/INSTALL_RELEASE.md)启动平台，再用这个最小站点体验一次发布。
+先按 [Docker 部署](../docs/deployment/INSTALL_RELEASE.md)启动平台，再用这个最小站点体验一次发布。
 
 ## 静态站点
 
@@ -27,4 +27,4 @@ docker build --platform linux/amd64 -t YOUR_REGISTRY/stacknest-demo:v1 deploy/sm
 docker push YOUR_REGISTRY/stacknest-demo:v1
 ```
 
-[应用配置说明](../docs/DOCKER_APPS.md)
+[应用配置说明](../docs/usage/DOCKER_APPS.md)

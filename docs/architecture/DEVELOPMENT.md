@@ -2,7 +2,7 @@
 
 两个仓库并排放置为 `server/`、`web/`。后端命令在 `server/` 执行。
 
-准备满足 [go.mod](../go.mod) 的 Go 版本、Docker Compose 和 Atlas CLI；Atlas 版本与 [迁移镜像](../deploy/migrate/Dockerfile)一致。前端使用 Node.js 24 和其 `package.json` 指定的 pnpm。
+准备满足 [go.mod](../../go.mod) 的 Go 版本、Docker Compose 和 Atlas CLI；Atlas 版本与 [迁移镜像](../../deploy/migrate/Dockerfile)一致。前端使用 Node.js 24 和其 `package.json` 指定的 pnpm。
 
 ## 本地运行
 
@@ -45,18 +45,18 @@ Go 读取进程环境变量，不自动加载配置文件或创建表。
 - 契约：`http://localhost:8080/openapi.yaml`
 - 静态预览：界面返回的 `stack-nest-{slug}.localhost:5173`
 
-Docker 应用联调使用 [Compose 环境](GETTING_STARTED.md)。停止开发库并保留数据：`docker compose -p stacknest-dev -f compose.dev.yaml down`。
+Docker 应用联调使用 [Compose 环境](../deployment/GETTING_STARTED.md)。停止开发库并保留数据：`docker compose -p stacknest-dev -f compose.dev.yaml down`。
 
 ## 修改代码
 
-- 业务规则在 `internal/project`、`internal/containerapp` 等模块；模块分工见 [架构](ARCHITECTURE.md)。
-- API 主路由在 `openapi/openapi.yaml`，模型在 `openapi/components.yaml`；修改后执行 `go generate ./openapi`，不要手改生成代码。宿主网络、角色、限额及 [平台诊断和版本](../openapi/platform.yaml) 使用同目录独立契约与手写路由。服务端 `/openapi.yaml` 自动合并全部契约，保留 Cookie / Token 的鉴权区别，补充模型使用文件名前缀避免重名。
+- 业务规则在 `internal/project`、`internal/containerapp` 等模块；模块分工见 [架构](README.md)。
+- API 主路由在 `openapi/openapi.yaml`，模型在 `openapi/components.yaml`；修改后执行 `go generate ./openapi`，不要手改生成代码。宿主网络、角色、限额及 [平台诊断和版本](../../openapi/platform.yaml) 使用同目录独立契约与手写路由。服务端 `/openapi.yaml` 自动合并全部契约，保留 Cookie / Token 的鉴权区别，补充模型使用文件名前缀避免重名。
 - 修改 Ent schema 后执行 `go generate ./internal/ent`，再用 `atlas migrate diff 变更名 --env local` 生成并审查迁移。
 - 手写 SQL 使用 `atlas migrate hash --dir file://migrations` 更新校验。已应用的迁移不改写。
-- 自动部署凭据使用手写 SQL 与 [独立协议](../openapi/automation.yaml)，命令行入口为 `cmd/stacknest-deploy`；测试覆盖 Token 权限、真实分片上传与发布事务。
-- Docker 自动部署复用同一凭据存储，使用[独立入口](../openapi/app-automation.yaml)；`internal/containerapp/automation.go` 只改镜像，`internal/postgres/app_deployment.go` 原子核对授权、基线和最近回执。
+- 自动部署凭据使用手写 SQL 与 [独立协议](../../openapi/automation.yaml)，命令行入口为 `cmd/stacknest-deploy`；测试覆盖 Token 权限、真实分片上传与发布事务。
+- Docker 自动部署复用同一凭据存储，使用[独立入口](../../openapi/app-automation.yaml)；`internal/containerapp/automation.go` 只改镜像，`internal/postgres/app_deployment.go` 原子核对授权、基线和最近回执。
 - 同时修改 API、前端和数据库时，作为配套版本维护。
-- Docker 部署记录与超管镜像清理使用[独立契约](../openapi/app-maintenance.yaml)和手写路由；记录与任务入队在同一数据库事务内提交。
+- Docker 部署记录与超管镜像清理使用[独立契约](../../openapi/app-maintenance.yaml)和手写路由；记录与任务入队在同一数据库事务内提交。
 
 ## 检查与测试
 

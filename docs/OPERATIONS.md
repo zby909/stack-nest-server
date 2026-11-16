@@ -1,117 +1,15 @@
 # 运维
 
-命令在实际部署目录执行，保持原 Compose 项目名、入口和可选覆盖。使用私有 compose.json 的实例，将简写命令换成自己的 `docker compose -p 项目名 -f 文件`。
+[查看运维指南](deployment/OPERATIONS.md)。
 
 ## 状态与排障
 
-```bash
-docker compose ps -a
-docker compose logs --tail=100 stacknest runner nginx
-docker compose exec -T nginx nginx -t
-docker compose exec -T stacknest /usr/local/bin/stacknest doctor
-```
-
-`migrate` 为 Exited (0) 正常。超管可在“服务器状态 → 平台诊断”手动执行同一检查，最多 30 秒，不发送邮件；普通管理员只查看资源、备份和版本。
-
-“平台版本”显示管理界面与 API 的版本和提交号。发布版不一致时先刷新浏览器，再核对是否使用了同一发布包。CLI 也可执行 `docker compose exec -T stacknest /usr/local/bin/stacknest version`。
-
-| 问题             | 优先检查                                |
-| ---------------- | --------------------------------------- |
-| 迁移失败         | migrate 日志，修复后重建一次性容器      |
-| 配置没生效       | 更新容器，restart 不读取新环境          |
-| 收不到验证码     | 邮箱名单、SMTP 授权码、日志、垃圾邮件箱 |
-| 登录后写接口 403 | 同源 API、Host、真实 HTTPS 协议         |
-| 静态站点 404     | 域名、正式发布状态及目录                |
-| 上传 413 / 504   | 代理大小限制、缓冲和超时                |
-| 上传 507 / 503   | 磁盘达到 90%、空间预算或探测失败        |
-| 应用访问失败     | 失败阶段、健康检查、内存与运行日志      |
-| CSS 未更新       | Cloudflare 尊重源站标头并清理旧缓存     |
-| API 重建后 502   | Nginx 会自动刷新 Docker DNS；持续失败时检查 API 健康状态与 Nginx 日志 |
-| 虚拟机重启后 502 | 本机入口、容器内部接口和网段是否重叠；见 [Hyper-V 排查](HOME_SERVER_TUNNEL.md#hyper-v-网段冲突) |
-
-提交问题时提供请求编号和脱敏日志，不附密码或完整配置。
+[查看状态与排障](deployment/OPERATIONS.md#状态与排障)。
 
 ## 备份
 
-宿主需要 Python 3.9+、Bash、Compose、flock 和 tar。先保存实际运行配置，再手动备份：
-
-```bash
-python3 deploy/resolve_compose.py compose.resolved.json
-sudo env STACKNEST_COMPOSE_PROJECT=stacknest bash deploy/backup.sh \
-  compose.resolved.json "$PWD/backups" "$PWD/backup-status"
-```
-
-项目名换为自己的名称；摘要目录对应 `.env` 的 `STACKNEST_BACKUP_STATUS_DIR`。自定义启动参数时，resolve_compose.py 使用相同的 `--file`、`--env-file` 和 `--project`。
-
-配置快照含密码，私有保存。备份包括同一时点的数据库和业务文件，默认保留 14 份；备份期间 API 与运行应用短暂停止，然后恢复原状态。
-
-`.partial-` 是失败现场，不作为完整备份。日常备份不带镜像和运行配置；完整换机使用 [迁移包](MIGRATION.md)。恢复方法见 [恢复参考](RESTORE.md)。
-
-### 每日备份
-
-在正在运行的部署目录执行：
-
-```bash
-sudo python3 deploy/backup_schedule.py install
-```
-
-命令读取当前 `.env`，默认在部署目录的 `backups/` 保留最近 14 份。首次备份会短暂停止后台与运行中的应用，成功后启用每日定时任务。每天按服务器时区 03:15 起执行，带最多 5 分钟随机延迟。
-
-迁移恢复的实例加 `--compose /实际目录/compose.json`，自定义项目名加 `--project`。可通过 `--backup-root` 和 `--keep` 指定备份目录与份数。定时任务会读取当前部署配置，手动配置的旧定时器可继续使用。保留定时任务所用的工具目录。
-
-```bash
-systemctl list-timers stacknest-backup.timer
-sudo journalctl -u stacknest-backup.service -n 50
-```
+[查看备份说明](deployment/OPERATIONS.md#备份)。
 
 ## 升级
 
-下载新版部署包，校验 SHA-256 后解压到独立目录。在现有部署目录运行新版包里的升级工具：
-
-```bash
-sudo python3 /新版/server/deploy/upgrade_release.py \
-  --backup-root /实际备份目录
-```
-
-默认读取当前目录的 `.env`。迁移恢复或自定义 JSON 实例用 `--compose /实际目录/compose.json`，可用 `--project` 指定原项目名。定时备份另读快照时用 `--backup-compose /实际快照.json`，已有 systemd 定时器可用 `--backup-timer stacknest-backup.timer`。
-
-先加 `--check` 拉取镜像并预检。结果会显示当前和目标版本、每项检查状态。遇到失败，可按提示排查后重跑给出的预检命令。
-
-工具适用于单 Nginx、独立 Runner 且迁移文件一致的发布版。它会先备份，再切换镜像并通过 Nginx 实际访问后台首页和 `/api/health`。HTTPS 在本机验证握手和分流，公网证书链仍通过浏览器验收。切换检查失败会恢复旧配置和镜像；SMTP 单独提示。备份和切换会短暂中断服务。配置快照保存在私有的 `.upgrades/` 目录。
-
-### 手动升级
-
-包含数据库迁移、部署模板变化或使用源码构建时，按以下流程：
-
-1. 已启用备份定时器时先暂停，等待正在执行的备份结束。在**原配置、原镜像**下执行上面的备份步骤，并另外保存原 `.env`、配置快照及证书。
-2. 在旁边解压并校验新部署包，阅读版本说明；保留原项目名、密码、认证密钥、证书和自定义覆盖。
-3. 同步新 Compose 与 deploy 文件，对照模板整组更新三个 IMAGE 及版本，合并新增配置。不要用新包的 `.env` 覆盖旧密钥。
-4. 执行 `docker compose config --quiet` 和 `docker compose pull`，确认新配置与镜像准备完成。
-5. 在维护窗口执行：
-
-```bash
-(
-  set -euo pipefail
-  docker compose stop -t 35 nginx stacknest runner
-  docker compose rm -f migrate
-  docker compose up -d --wait --wait-timeout 120
-  docker compose exec -T nginx nginx -t
-  docker compose exec -T stacknest /usr/local/bin/stacknest doctor
-)
-```
-
-仅改版本号不会更新固定摘要。源码部署先 build；私有 compose.json 实例直接更新被实际使用的配置。
-
-不删除数据卷。迁移失败保持 API 停止，排查后再启动；切回旧镜像不会自动撤销数据库迁移。
-
-升级后核对登录、项目和应用。使用 `.env` 部署的实例重新执行 `python3 deploy/resolve_compose.py compose.resolved.json` 更新备份快照，再恢复定时器；使用私有 Compose 文件时继续沿用实际配置和同样的解析参数。
-
-## 数据与日志
-
-- sites、previous、drafts：当前、上一正式版与待发布版。
-- pending、changes、trash：事务恢复依据，不手动清理；不是用户回收站。
-- uploads：续传临时数据，保留 24 小时，不随备份和迁移携带。
-- 操作日志：每份约 1 MiB，保留当前和两份轮转。
-- 平台容器日志：10 MiB × 3；应用日志：5 MiB × 2。
-
-[原理](ARCHITECTURE.md#数据备份与升级) · [换服务器](MIGRATION.md) · [恢复参考](RESTORE.md)
+[查看升级说明](deployment/OPERATIONS.md#升级)。

@@ -1,6 +1,6 @@
 # 家用电脑部署
 
-适合没有公网 IP 的 Ubuntu 电脑或虚拟机。平台仍使用 Docker，宿主运行 cloudflared 将请求带到本机入口。[连接原理](ARCHITECTURE.md) · [路由与缓存参考](CLOUDFLARE_TUNNEL.md)
+适合没有公网 IP 的 Ubuntu 电脑或虚拟机。平台仍使用 Docker，宿主运行 cloudflared 将请求带到本机入口。[连接原理](../architecture/README.md) · [路由与缓存参考](CLOUDFLARE_TUNNEL.md)
 
 准备托管在 Cloudflare 的域名和可正常出站联网的 Ubuntu。命令均在 Ubuntu Bash 执行。
 

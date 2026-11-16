@@ -4,9 +4,9 @@ StackNest 面向个人与小团队的可信成员，使用单台 Linux 服务器
 
 ## 按任务阅读
 
-- 功能与边界：[产品范围](docs/REQUIREMENTS.md)。
-- 改代码：[开发与测试](docs/DEVELOPMENT.md)；模块位置见 [源码分工](docs/ARCHITECTURE.md#源码分工)。前端在独立的 `stack-nest-web` 仓库，通常并排放在 `../web/`。
-- 发版本：[发布流程](docs/RELEASING.md)；维护现有服务器：[运维](docs/OPERATIONS.md)，实例路径见本地 `docs/INSTANCE.md`（若存在，被 Git 忽略）。
+- 功能与边界：[产品范围](docs/overview/README.md)。
+- 改代码：[开发与测试](docs/architecture/DEVELOPMENT.md)；模块位置见 [源码分工](docs/architecture/README.md#源码分工)。前端在独立的 `stack-nest-web` 仓库，通常并排放在 `../web/`。
+- 发版本：[发布流程](docs/architecture/RELEASING.md)；维护现有服务器：[运维](docs/deployment/OPERATIONS.md)，实例路径见本地 `docs/INSTANCE.md`（若存在，被 Git 忽略）。
 
 ## 修改约定
 

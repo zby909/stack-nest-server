@@ -1,6 +1,8 @@
-# 架构与工作原理
+# 架构与开发
 
-StackNest 面向可信成员使用的单服务器实例。这里解释服务如何协作，安装步骤见 [Docker 部署](INSTALL_RELEASE.md)。
+StackNest 面向可信成员使用的单服务器实例。服务分工与请求路径见下文。
+
+[开发与测试](DEVELOPMENT.md) · [版本发布](RELEASING.md) · [前端文档](https://github.com/zby909/stack-nest-web/blob/main/docs/README.md) · [部署与运维](../deployment/README.md)
 
 ## 服务分工
 
@@ -90,7 +92,7 @@ HTTPS 会话使用 Secure、HttpOnly、SameSite 和主机限定 Cookie。应用�
 
 网卡地址与补充 CIDR 共同确定禁止范围。NAT 虚拟机只能识别自身网段，外部家庭网络需要补充配置。应用 DNS 使用指定公共解析器。
 
-服务周期核对规则，状态缺失或过期时 Runner 拒绝新的联网操作。配置入口只对超管开放。[配置步骤](NETWORK_EGRESS.md)
+服务周期核对规则，状态缺失或过期时 Runner 拒绝新的联网操作。配置入口只对超管开放。[配置步骤](../deployment/NETWORK_EGRESS.md)
 
 ### 磁盘配额
 
@@ -98,7 +100,7 @@ CPU 与内存由 cgroups 限制，磁盘容量由 XFS Project Quota 限制。
 
 传统 overlay2 的 size 约束容器可写层；Runner 为每应用持久化目录设置容量和 inode 配额。命名卷不会自动受可写层上限约束。
 
-配额需要 XFS、ftype=1、prjquota 和匹配的 Docker 存储布局。root 应用也不能通过被 seccomp 禁止的配额属性修改撤销限额。[启用步骤](STORAGE_QUOTAS.md)
+配额需要 XFS、ftype=1、prjquota 和匹配的 Docker 存储布局。root 应用也不能通过被 seccomp 禁止的配额属性修改撤销限额。[启用步骤](../deployment/STORAGE_QUOTAS.md)
 
 ## 数据、备份与升级
 
@@ -113,7 +115,7 @@ CPU 与内存由 cgroups 限制，磁盘容量由 XFS Project Quota 限制。
 
 备份停止 API 和正在运行的应用，保存同一时点的数据库及文件，再恢复原状态。迁移包额外保存镜像与运行配置；未完成上传不打包。
 
-应用更新失败只尝试恢复容器，不撤销应用自己的数据库或文件修改。[备份与升级](OPERATIONS.md) · [迁移](MIGRATION.md)
+应用更新失败只尝试恢复容器，不撤销应用自己的数据库或文件修改。[备份与升级](../deployment/OPERATIONS.md) · [迁移](../deployment/MIGRATION.md)
 
 ## 缓存
 
@@ -140,5 +142,3 @@ GitHub Actions 按两仓库同名标签固定提交，检查、构建并实际�
 | `cmd/stacknest-deploy`、`internal/deployclient`、`internal/deploytoken`、`skills/stacknest-deploy` | 自动部署 CLI、项目凭据与 AI Skill |
 | `openapi`、`migrations`                          | 接口契约、数据库迁移        |
 | `deploy`                                         | 入口、备份、迁移和部署工具  |
-
-[开发与测试](DEVELOPMENT.md)

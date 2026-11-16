@@ -1,6 +1,6 @@
 # 发布版本
 
-[后端工作流](../.github/workflows/release.yml)统一发布镜像与部署包，前端使用独立仓库的同名标签。
+[后端工作流](../../.github/workflows/release.yml)统一发布镜像与部署包，前端使用独立仓库的同名标签。
 
 ## 准备
 
@@ -64,4 +64,4 @@ GitHub 临时错误有限重试；响应丢失时先确认远端结果，避免�
 
 构建材料和浏览器失败报告保留 7 天。材料过期后需重新构建；若已有未完成草稿，先核对原因，不能用新构建覆盖其附件。
 
-[用户部署](INSTALL_RELEASE.md) · [流程原理](ARCHITECTURE.md#版本发布)
+[用户部署](../deployment/INSTALL_RELEASE.md) · [流程原理](README.md#版本发布)

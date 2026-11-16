@@ -1,6 +1,6 @@
-# 产品范围
+# 项目介绍
 
-## 1. 目标
+## 适用场景
 
 让个人开发者和小团队的可信成员，在自己的服务器上方便地部署、更新、查看和迁移项目。
 
@@ -19,7 +19,7 @@
 | 运维        | Docker Compose、备份、完整换机迁移                 |
 | 可选保护    | XFS 配额、应用公网访问与局域网保护                 |
 
-操作见 [使用指南](USAGE.md)与 [Docker 应用](DOCKER_APPS.md)。
+[界面截图](../../README.md#看看界面) · [部署与运维](../deployment/README.md) · [使用指南](../usage/README.md)
 
 ## 项目规则
 
@@ -38,12 +38,12 @@
 - 不执行用户源码或 Dockerfile 构建，不编排用户多容器应用。
 - 不提供公开注册、计费、集群、自定义项目域名或自动证书申请。
 - 不提供访问码、任意历史版本恢复或通用的应用数据库回退。
-- Docker 面向可信成员，共享内核隔离的原理见 [架构](ARCHITECTURE.md)。
+- Docker 面向可信成员，共享内核隔离的原理见 [架构](../architecture/README.md)。
 
 ## 验收
 
-发布前完成 [后端测试](DEVELOPMENT.md#检查与测试)和 [前端回归](https://github.com/zby909/stack-nest-web/blob/main/docs/TESTING.md)。
+发布前完成 [后端测试](../architecture/DEVELOPMENT.md#检查与测试)和 [前端回归](https://github.com/zby909/stack-nest-web/blob/main/docs/TESTING.md)。
 
 部署后检查邮箱登录、角色权限、静态发布与回退、Docker 数据保留、备份恢复，以及已启用的配额和网络保护。
 
-接口字段以 [OpenAPI](../openapi/openapi.yaml)及补充契约为准。
+接口字段以 [OpenAPI](../../openapi/openapi.yaml)及补充契约为准。

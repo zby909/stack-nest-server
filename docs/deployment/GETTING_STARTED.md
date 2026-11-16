@@ -42,4 +42,4 @@ docker compose exec -T stacknest /usr/local/bin/stacknest doctor
 
 Go、前端和 Atlas 在构建容器中处理。手动配置方案无需宿主开发工具；构建阶段还需要额外的可用内存与临时磁盘空间。
 
-打开管理域名，完成邮箱登录和一次静态发布。[升级与备份](OPERATIONS.md) · [本地开发](DEVELOPMENT.md)
+打开管理域名，完成邮箱登录和一次静态发布。[升级与备份](OPERATIONS.md) · [本地开发](../architecture/DEVELOPMENT.md)

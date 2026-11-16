@@ -89,4 +89,4 @@ sudo docker compose -p stacknest -f /opt/stacknest-migrated/compose.json ps
 
 维护时沿用该配置；修改域名或 SMTP 同时核对 compose.json 与 compose.public.json。自动备份定时器在新机器重新安装。
 
-自建镜像仓库及其他外部依赖不自动迁移。备份和维护见 [运维](OPERATIONS.md)，数据协作原理见 [架构](ARCHITECTURE.md#数据备份与升级)。
+自建镜像仓库及其他外部依赖不自动迁移。备份和维护见 [运维](OPERATIONS.md)，数据协作原理见 [架构](../architecture/README.md#数据备份与升级)。

@@ -1,10 +1,10 @@
 # 配置参考
 
-首次安装见 [Docker 部署](INSTALL_RELEASE.md)。本页用于查询选项，工作原理见 [架构](ARCHITECTURE.md)。
+首次安装见 [Docker 部署](INSTALL_RELEASE.md)。本页用于查询选项，工作原理见 [架构](../architecture/README.md)。
 
 ## 环境变量
 
-Compose 使用部署目录的 `.env`，同名 shell 环境变量优先。[完整模板](../.env.compose.example)包含默认值。
+Compose 使用部署目录的 `.env`，同名 shell 环境变量优先。[完整模板](../../.env.compose.example)包含默认值。
 
 发布包提供 `./bin/stacknest-setup` 交互向导，源码目录可运行 `go run ./cmd/stacknest-setup`。它只为新安装创建 `.env`，自动生成相互匹配的数据库密码、连接串和认证密钥，不覆盖已有文件，也不安装或启动服务。
 

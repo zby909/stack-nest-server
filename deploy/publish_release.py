@@ -158,7 +158,7 @@ def publish(repository, version, directory, client=None):
     if reference.get("type") != "commit" or reference.get("sha") != source:
         raise ValueError("server tag no longer matches the checked source")
     body = (marker + f"\n\nStackNest {version}\n\n"
-            f"[安装说明](https://github.com/{repository}/blob/{source}/docs/INSTALL_RELEASE.md)\n\n"
+            f"[安装说明](https://github.com/{repository}/blob/{source}/docs/deployment/INSTALL_RELEASE.md)\n\n"
             "包含平台部署包与 Linux / Windows / macOS 部署 CLI；附件均提供 SHA-256 校验。\n")
     release = api.ensure("Create release draft", read, lambda: api.raw("POST", root, {
         "tag_name": version, "name": "StackNest " + version, "body": body,

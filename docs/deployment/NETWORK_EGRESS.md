@@ -2,7 +2,7 @@
 
 可选功能。开启后 Docker 应用可访问公网及 Linux 本机服务，其他配置的局域网目标被拦截。静态网站的 JavaScript 请求来自访问者浏览器，不受这些容器规则约束。
 
-默认应用网络为 internal。防火墙与 NAT 的工作方式见 [原理](ARCHITECTURE.md#联网保护)。
+默认应用网络为 internal。防火墙与 NAT 的工作方式见 [原理](../architecture/README.md#联网保护)。
 
 ## 1. 安装宿主服务
 
@@ -67,4 +67,4 @@ sudo /usr/local/bin/stacknest-egress check
 sudo nft list table inet stacknest_egress
 ```
 
-配置文件为 `/etc/stacknest-egress/config.json`；服务只维护自己的 nft 表，不切换 Docker 防火墙后端。详细模块和控制边界见 [架构](ARCHITECTURE.md#联网保护)。
+配置文件为 `/etc/stacknest-egress/config.json`；服务只维护自己的 nft 表，不切换 Docker 防火墙后端。详细模块和控制边界见 [架构](../architecture/README.md#联网保护)。

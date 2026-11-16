@@ -96,6 +96,7 @@ class PublishReleaseTests(unittest.TestCase):
         client = FakeGitHub([("create", "after", 502), ("upload", "after", 502), ("publish", "after", 502)])
         result = self.publish(client)
         self.assertFalse(result["draft"])
+        self.assertIn(f"https://github.com/{REPOSITORY}/blob/{REVISION}/docs/deployment/INSTALL_RELEASE.md", result["body"])
         self.assertEqual(len(result["assets"]), 14)
         self.assertEqual(client.writes.count("create"), 1)
         self.assertEqual(client.writes.count("publish"), 1)

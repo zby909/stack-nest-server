@@ -55,7 +55,7 @@ def package_release(root, output, manifest, egress_binary, setup_binary):
     for component in ("app", "web", "migrate"):
         env += "STACKNEST_" + component.upper() + "_IMAGE=" + manifest["images"][component] + "\n"
     files[".env.compose.example"] = env.encode("utf-8")
-    readme = read_public(root, "docs/INSTALL_RELEASE.md").decode("utf-8")
+    readme = read_public(root, "docs/deployment/INSTALL_RELEASE.md").decode("utf-8")
     source = manifest["sources"]["server"]
     readme = readme.replace("https://github.com/zby909/stack-nest-server/blob/main/",
                            "https://github.com/" + source["repository"] + "/blob/" + source["commit"] + "/")

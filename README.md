@@ -8,7 +8,7 @@
   <p>为个人开发者和小团队准备，在自己的服务器上部署、预览和管理项目。</p>
 
   <p>
-    <a href="docs/INSTALL_RELEASE.md"><strong>开始部署 →</strong></a> ·
+    <a href="docs/deployment/INSTALL_RELEASE.md"><strong>开始部署 →</strong></a> ·
     <a href="https://github.com/zby909/stack-nest-server/releases">下载版本</a> ·
     <a href="docs/README.md">文档</a> ·
     <a href="https://github.com/zby909/stack-nest-web">Web 仓库</a>
@@ -16,7 +16,7 @@
 
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-2563eb?style=flat-square" alt="Apache-2.0 license"></a>
-    <a href="docs/INSTALL_RELEASE.md"><img src="https://img.shields.io/badge/deploy-Docker_Compose-2496ed?style=flat-square&amp;logo=docker&amp;logoColor=white" alt="Deploy with Docker Compose"></a>
+    <a href="docs/deployment/INSTALL_RELEASE.md"><img src="https://img.shields.io/badge/deploy-Docker_Compose-2496ed?style=flat-square&amp;logo=docker&amp;logoColor=white" alt="Deploy with Docker Compose"></a>
     <a href="go.mod"><img src="https://img.shields.io/badge/backend-Go-00add8?style=flat-square&amp;logo=go&amp;logoColor=white" alt="Built with Go"></a>
     <a href="https://github.com/zby909/stack-nest-server/actions/workflows/check.yml"><img src="https://github.com/zby909/stack-nest-server/actions/workflows/check.yml/badge.svg" alt="Server checks"></a>
   </p>
@@ -53,18 +53,18 @@
 
 ## 在自己的服务器上运行
 
-使用 [Docker 部署包](docs/INSTALL_RELEASE.md)在 **Linux amd64** 上配置并启动平台。安装后可以上传 [示例站点](examples/README.md)，体验预览与发布。
+使用 [Docker 部署包](docs/deployment/INSTALL_RELEASE.md)在 **Linux amd64** 上配置并启动平台。安装后可以上传 [示例站点](examples/README.md)，体验预览与发布。
 
-家用电脑或没有公网 IP 的服务器可以使用 [Cloudflare Tunnel](docs/HOME_SERVER_TUNNEL.md)。
+家用电脑或没有公网 IP 的服务器可以使用 [Cloudflare Tunnel](docs/deployment/HOME_SERVER_TUNNEL.md)。
 
-## 按需阅读
+## 文档
 
-| 想做什么 | 从这里开始 |
+| 目录 | 内容 |
 | --- | --- |
-| 使用平台、部署 Docker 应用 | [使用指南](docs/USAGE.md) · [Docker 应用](docs/DOCKER_APPS.md) |
-| 用 AI 或 GitHub Actions 更新项目 | [静态站点自动部署](docs/AUTOMATION.md) · [Docker 自动部署](docs/DOCKER_AUTOMATION.md) |
-| 备份、恢复或升级 | [日常运维](docs/OPERATIONS.md) · [恢复演练](docs/RESTORE.md) |
-| 开发与维护 | [开发与测试](docs/DEVELOPMENT.md) · [架构原理](docs/ARCHITECTURE.md) · [全部文档](docs/README.md) |
+| [项目介绍](docs/overview/README.md) | 功能与适用场景 |
+| [部署与运维](docs/deployment/README.md) | 安装、备份、升级、恢复与迁移 |
+| [使用指南](docs/usage/README.md) | 静态项目、Docker 应用与自动部署 |
+| [架构与开发](docs/architecture/README.md) | 工作原理、开发测试与版本发布 |
 
 后端使用 **Go · PostgreSQL · Ent · Atlas**；管理界面使用 **React · TypeScript · Vite · Tailwind CSS**。
 

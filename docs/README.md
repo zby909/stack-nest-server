@@ -1,36 +1,12 @@
-# 文档
+# StackNest 文档
 
-第一次使用，从 [Docker 部署](INSTALL_RELEASE.md) 开始。
+| 目录 | 可以找到什么 |
+| --- | --- |
+| [项目介绍](overview/README.md) | 功能、适用场景与产品边界 |
+| [部署与运维](deployment/README.md) | 安装平台、配置入口、备份恢复、升级与换机 |
+| [使用指南](usage/README.md) | 成员、静态站点、Docker 应用和 CLI 自动部署 |
+| [架构与开发](architecture/README.md) | 服务分工、设计原理、开发测试与版本发布 |
 
-仓库文档跟随 `main` 更新；安装已发布版本时，以部署包内的 README 和同名标签下的文档为准。
+第一次安装，从 [Docker 部署](deployment/INSTALL_RELEASE.md) 开始。没有公网 IP 时，走 [家用 Tunnel 指南](deployment/HOME_SERVER_TUNNEL.md)。
 
-## 使用与部署
-
-- [Docker 部署](INSTALL_RELEASE.md) — 下载版本、配置、启动。
-- [家用电脑部署](HOME_SERVER_TUNNEL.md) — 无公网 IP 时使用 Cloudflare Tunnel。
-- [静态站点与成员](USAGE.md) — 上传、预览、发布和权限。
-- [自动部署](AUTOMATION.md) — 项目 Token、命令行、AI 与 GitHub Actions。
-- [Docker 自动部署](DOCKER_AUTOMATION.md) — CI 推送镜像后更新应用。
-- [Docker 应用](DOCKER_APPS.md) — 镜像、数据目录和资源限制。
-
-## 运维与可选配置
-
-- [运维](OPERATIONS.md) — 备份、升级、日志与排障。
-- [恢复演练](RESTORE.md) — 在隔离实例确认日常备份可用。
-- [换服务器](MIGRATION.md) — 导出、恢复和切换入口。
-- [配置参考](DEPLOYMENT.md) — 环境变量、证书和入口。
-- [磁盘硬配额](STORAGE_QUOTAS.md) — XFS 与存储要求。
-- [应用联网](NETWORK_EGRESS.md) — 公网访问与局域网保护。
-- [Tunnel 参考](CLOUDFLARE_TUNNEL.md) — 路由、缓存和连接器维护。
-
-## 开发与原理
-
-- [开发入口与约定](../AGENTS.md)
-- [开发与测试](DEVELOPMENT.md)
-- [源码 Docker 部署](GETTING_STARTED.md)
-- [架构与工作原理](ARCHITECTURE.md)
-- [产品范围](REQUIREMENTS.md)
-- [版本发布](RELEASING.md)
-- [Web 开发](https://github.com/zby909/stack-nest-web)
-
-安装命令默认在 Linux Bash、`server/` 执行。服务器实际配置另记在本地 `docs/INSTANCE.md`，见 [私有部署记录模板](INSTANCE.example.md)。
+仓库文档跟随 `main` 更新。已发布版本使用部署包内的 README 与同名标签下的文档。
