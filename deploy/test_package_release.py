@@ -57,6 +57,8 @@ class PackageReleaseTests(unittest.TestCase):
         self.assertFalse(any(b"DO_NOT_SHIP_LOCAL_SECRET" in value for value in files.values()))
         self.assertIn("server/deploy/upgrade_release.py", files)
         self.assertIn("server/deploy/backup_schedule.py", files)
+        self.assertIn("server/deploy/stacknest-backup.timer", files)
+        self.assertNotIn("server/deploy/stacknest-backup.service", files)
         self.assertIn("server/deploy/release_manifest.py", files)
         self.assertEqual(json.loads(files["server/release.json"]), self.manifest)
         for line in files["server/SHA256SUMS"].decode().splitlines():

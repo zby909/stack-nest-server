@@ -20,7 +20,7 @@ FILES = (
     "deploy/backup.sh", "deploy/backup_status.py", "deploy/backup_schedule.py", "deploy/resolve_compose.py",
     "deploy/migrate_host.py", "deploy/restore_backup.py", "deploy/upgrade_release.py", "deploy/release_manifest.py",
     "deploy/generate_quota_seccomp.py",
-    "deploy/stacknest-backup.service", "deploy/stacknest-backup.timer",
+    "deploy/stacknest-backup.timer",
     "deploy/cloudflared.service", "deploy/check_nginx.py",
     "deploy/check_egress_network.py",
 )

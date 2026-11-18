@@ -55,9 +55,11 @@ sudo env STACKNEST_COMPOSE_PROJECT=stacknest bash deploy/backup.sh \
 sudo python3 deploy/backup_schedule.py install
 ```
 
-命令读取当前 `.env`，默认在部署目录的 `backups/` 保留最近 14 份。首次备份会短暂停止后台与运行中的应用，成功后启用每日定时任务。每天按服务器时区 03:15 起执行，带最多 5 分钟随机延迟。
+安装工具按实际部署路径生成 systemd 服务，每次备份都读取当前部署配置，默认使用 `.env`。备份保存在部署目录的 `backups/`，默认保留 14 份。首次备份会短暂停止后台与运行中的应用，成功后启用定时任务。每天按服务器时区 03:15 起执行，带最多 5 分钟随机延迟。
 
-迁移恢复的实例加 `--compose /实际目录/compose.json`，自定义项目名加 `--project`。可通过 `--backup-root` 和 `--keep` 指定备份目录与份数。定时任务会读取当前部署配置，手动配置的旧定时器可继续使用。保留定时任务所用的工具目录。
+迁移恢复的实例加 `--compose /实际目录/compose.json`，自定义项目名加 `--project`。用 `--backup-root` 和 `--keep` 可指定备份目录与份数。
+
+按旧教程复制到 `/etc/systemd/system/` 的任务可继续使用，请保留它调用的脚本目录。如果曾把服务文件手动软链接到旧模板，升级前请将该链接替换为模板的独立副本。
 
 ```bash
 systemctl list-timers stacknest-backup.timer

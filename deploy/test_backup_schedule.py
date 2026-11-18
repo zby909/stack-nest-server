@@ -10,6 +10,24 @@ import backup_schedule as schedule
 
 
 class BackupScheduleTests(unittest.TestCase):
+    # 按旧教程安装的自定义服务应原样保留，即使当前发布包已经不附带旧模板。
+    def test_existing_manual_service_is_preserved(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            unit = root / "stacknest-backup.service"
+            timer = root / "stacknest-backup.timer"
+            original = b"[Service]\nExecStart=/srv/old-install/backup.sh\n"
+            weekly = b"[Timer]\nOnCalendar=weekly\n"
+            unit.write_bytes(original)
+            timer.write_bytes(weekly)
+            with patch.object(schedule, "SYSTEMD", root), patch.object(schedule, "install_lock", return_value=nullcontext()), \
+                    patch.object(schedule, "run", return_value=b"") as systemctl:
+                with self.assertRaisesRegex(ValueError, "已有其他配置"):
+                    schedule.install_backup(root / ".env", True, "fixture", root / "backups", 7)
+            self.assertEqual(unit.read_bytes(), original)
+            self.assertEqual(timer.read_bytes(), weekly)
+            self.assertTrue(all(call.args[0][1] == "show" for call in systemctl.call_args_list))
+
     # test_retry_after_failed_first_backup 第一次失败后同样的命令可以重试，成功后幂等返回。
     def test_retry_after_failed_first_backup(self):
         with tempfile.TemporaryDirectory() as temporary:
