@@ -1,5 +1,5 @@
 """迁移包的离线校验与已有数据保护回归；不需要 Docker。"""
-from contextlib import redirect_stdout
+from contextlib import nullcontext, redirect_stdout
 import argparse
 import io
 import json
@@ -18,6 +18,9 @@ class MigrationTests(unittest.TestCase):
         self.work = tempfile.TemporaryDirectory()
         self.addCleanup(self.work.cleanup)
         self.root = Path(self.work.name)
+        lock = patch.object(migration, "backup_lock", return_value=nullcontext())
+        self.lock = lock.start()
+        self.addCleanup(lock.stop)
         self.bundle = self.root / "bundle"
         self.bundle.mkdir()
         for name in ("images.tar", "compose.json", "data/postgres.dump", "deploy/backup.sh", "deploy/backup_status.py", "deploy/migrate_host.py", "deploy/nginx/ssh.conf.template"):
@@ -65,7 +68,8 @@ class MigrationTests(unittest.TestCase):
 
     # test_integrity 不接受摘要不符、额外文件或缺少文件的迁移包。
     def test_integrity(self):
-        self.assertEqual(migration.verify_bundle(self.bundle)["platform"], "linux/amd64")
+        manifest, expanded = migration.verify_bundle(self.bundle)
+        self.assertEqual((manifest["platform"], expanded), ("linux/amd64", 5))
         (self.bundle / "images.tar").write_bytes(b"tampered")
         with self.assertRaises(ValueError): migration.verify_bundle(self.bundle)
         self.manifest()
@@ -87,7 +91,7 @@ class MigrationTests(unittest.TestCase):
     def test_draft_archive(self):
         self.archive("drafts/demo/dep-95d8840a-27a1-42c9-a3a2-7686e9770874/index.html")
         self.manifest()
-        self.assertEqual(migration.verify_bundle(self.bundle)["platform"], "linux/amd64")
+        self.assertEqual(migration.verify_bundle(self.bundle)[1], 5)
 
     # test_application_links 允许数据目录内相对链接，拒绝跨应用和链接祖先写入。
     def test_application_links(self):
@@ -159,13 +163,26 @@ class MigrationTests(unittest.TestCase):
 
     # test_existing_instance 不允许覆盖停止的容器、未挂载的数据卷或已有目录。
     def test_existing_instance(self):
-        for outputs in [("container-id",), ("", "demo_postgres-data"), ("", "", "orphan-volume")]:
+        config = {"volumes": {"postgres-data": {}, "runner-control": {}}}
+        for outputs in [("container-id",), ("", "demo_postgres-data"), ("", "demo_runner-control"),
+                        ("", "", "orphan-volume"), ("", "", "", "demo_default"),
+                        ("", "", "", "", "orphan-network")]:
             with patch.object(migration, "run", side_effect=outputs):
-                with self.assertRaises(ValueError): migration.ensure_empty("demo")
+                with self.assertRaises(ValueError): migration.ensure_empty("demo", config)
         with patch.object(migration, "run") as run:
             with self.assertRaises(ValueError):
                 migration.import_bundle(argparse.Namespace(bundle=str(self.bundle), destination=str(self.root), project="demo", preview_port=18080))
             run.assert_not_called()
+
+    # test_busy_import 同一实例已有维护任务时，导入不得执行 Docker 或创建目标。
+    def test_busy_import(self):
+        self.lock.side_effect = ValueError("instance is busy")
+        target = self.root / "new-instance"
+        with patch.object(migration, "run") as run:
+            with self.assertRaisesRegex(ValueError, "instance is busy"):
+                migration.import_bundle(argparse.Namespace(bundle=self.bundle, destination=target, project="demo"))
+            run.assert_not_called()
+        self.assertFalse(target.exists())
 
     # test_missing_host_policy 缺少目标机规则时不创建目录或装载镜像。
     def test_missing_host_policy(self):
@@ -187,6 +204,10 @@ class MigrationTests(unittest.TestCase):
 
     # test_different_image_stores 在创建目标目录或加载镜像前拒绝不兼容的存储后端。
     def test_different_image_stores(self):
+        config = {"volumes": {"postgres-data": {}, "stacknest-data": {}},
+                  "services": {name: {"image": "fixture"} for name in migration.SERVICES}}
+        migration.write_json(self.bundle / "compose.json", config)
+        self.manifest()
         manifest = json.loads((self.bundle / "manifest.json").read_text(encoding="utf-8"))
         manifest["imageStore"] = "classic"
         migration.write_json(self.bundle / "manifest.json", manifest)

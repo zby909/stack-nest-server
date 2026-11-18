@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"stacknest/server/internal/generated"
 )
 
 var ErrInvalidQuery = errors.New("invalid activity query")
@@ -31,12 +33,10 @@ func (q Query) Validate() error {
 	if q.Page < 1 || q.Page > 100000 || q.PageSize < 1 || q.PageSize > 100 || len([]rune(q.Slug)) > 52 || len(q.Actor) > 254 || len([]rune(q.Keyword)) > 256 {
 		return ErrInvalidQuery
 	}
-	switch q.Action {
-	case "", "upload", "update", "rollback", "delete", "edit", "export", "pause", "resume", "draft", "publish", "discard", "app-deploy", "app-start", "app-stop", "app-restart", "app-delete", "app-image-delete", "network", "app-limits", "user-add", "user-role", "token-create", "token-revoke":
-	default:
+	if q.Action != "" && !generated.ActivityEventAction(q.Action).Valid() {
 		return ErrInvalidQuery
 	}
-	if q.Status != "" && q.Status != "succeeded" && q.Status != "failed" {
+	if q.Status != "" && !generated.ActivityEventStatus(q.Status).Valid() {
 		return ErrInvalidQuery
 	}
 	if !q.From.IsZero() && !q.To.IsZero() && !q.From.Before(q.To) {

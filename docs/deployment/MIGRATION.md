@@ -6,7 +6,7 @@
 
 - 两端 Linux 与 CPU 架构一致，Docker 镜像存储类型一致。
 - 安装 Docker Compose 2.24.4+、Python 3.9+、Bash、tar 和 flock。
-- 目标有足够空间，目标目录与同名容器、数据卷尚不存在。
+- 目标磁盘有足够空间。选择尚不存在的目标目录和未使用的 Compose 项目名。导入前会检查已有项目资源以及重名的卷和网络，导入期间会锁定该项目。
 - 已启用的 [配额](STORAGE_QUOTAS.md)和 [联网保护](NETWORK_EGRESS.md)先在目标准备。
 
 磁盘挂载、Docker daemon 配置、宿主联网服务和备份定时器不随业务包自动安装。导入前核对目标局域网、VPN、Docker 地址池与包内平台网段不重叠。

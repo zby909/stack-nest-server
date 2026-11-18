@@ -11,6 +11,7 @@ import (
 
 // Defines values for ActivityEventAction.
 const (
+	ActivityEventActionAppCancel      ActivityEventAction = "app-cancel"
 	ActivityEventActionAppDelete      ActivityEventAction = "app-delete"
 	ActivityEventActionAppDeploy      ActivityEventAction = "app-deploy"
 	ActivityEventActionAppImageDelete ActivityEventAction = "app-image-delete"
@@ -33,12 +34,15 @@ const (
 	ActivityEventActionUpdate         ActivityEventAction = "update"
 	ActivityEventActionUpload         ActivityEventAction = "upload"
 	ActivityEventActionUserAdd        ActivityEventAction = "user-add"
+	ActivityEventActionUserDelete     ActivityEventAction = "user-delete"
 	ActivityEventActionUserRole       ActivityEventAction = "user-role"
 )
 
 // Valid indicates whether the value is a known member of the ActivityEventAction enum.
 func (e ActivityEventAction) Valid() bool {
 	switch e {
+	case ActivityEventActionAppCancel:
+		return true
 	case ActivityEventActionAppDelete:
 		return true
 	case ActivityEventActionAppDeploy:
@@ -82,6 +86,8 @@ func (e ActivityEventAction) Valid() bool {
 	case ActivityEventActionUpload:
 		return true
 	case ActivityEventActionUserAdd:
+		return true
+	case ActivityEventActionUserDelete:
 		return true
 	case ActivityEventActionUserRole:
 		return true

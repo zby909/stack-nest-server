@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -31,6 +32,52 @@ func TestRedirectAndURL(t *testing.T) {
 	c, _ := New(source.URL, "secret")
 	if _, err := c.Project(context.Background()); err == nil || hits != 0 {
 		t.Fatal("followed redirect", err, hits)
+	}
+}
+
+// TestNegotiatedChunkSizes 覆盖固定分片旧服务，以及声明较大最小分片的服务。
+func TestNegotiatedChunkSizes(t *testing.T) {
+	const size int64 = (1 << 20) + 1
+	for _, tc := range []struct {
+		name    string
+		minimum int64
+		chunks  []int64
+	}{
+		{"fixed", 0, []int64{size}},
+		{"minimum", 1 << 20, []int64{1 << 20, 1}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var chunks []int64
+			r := resumable.Request{ID: "upload-id", Size: size}
+			status := Status{ID: r.ID, Size: size, ChunkSize: resumable.ChunkSize, MinChunkSize: tc.minimum}
+			initial := status
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				n, err := io.Copy(io.Discard, req.Body)
+				if err != nil || req.Method != "PATCH" {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				chunks = append(chunks, n)
+				status.Offset += n
+				json.NewEncoder(w).Encode(status)
+			}))
+			defer server.Close()
+			c, err := New(server.URL, "fixture-token")
+			if err != nil {
+				t.Fatal(err)
+			}
+			f, err := os.CreateTemp(t.TempDir(), "input")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			if err := f.Truncate(size); err != nil {
+				t.Fatal(err)
+			}
+			if err := c.sendChunks(context.Background(), f, r, &initial, nil); err != nil || !slices.Equal(chunks, tc.chunks) {
+				t.Fatalf("chunk sizes: %v, %v", chunks, err)
+			}
+		})
 	}
 }
 

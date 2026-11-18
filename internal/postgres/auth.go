@@ -100,41 +100,44 @@ func (s *Store) AddUser(ctx context.Context, email, role string) (auth.User, err
 }
 
 // DeleteUser 原子地将普通用户项目转交管理员，再删除用户并撤销其会话。
-func (s *Store) DeleteUser(ctx context.Context, id string) error {
+func (s *Store) DeleteUser(ctx context.Context, id string) (string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin delete auth user: %w", err)
+		return "", fmt.Errorf("begin delete auth user: %w", err)
 	}
 	defer tx.Rollback()
-	var role string
-	err = tx.QueryRowContext(ctx, "SELECT role FROM auth_users WHERE id=$1 FOR UPDATE", id).Scan(&role)
+	var role, email string
+	err = tx.QueryRowContext(ctx, "SELECT role,email FROM auth_users WHERE id=$1 FOR UPDATE", id).Scan(&role, &email)
 	if errors.Is(err, sql.ErrNoRows) {
-		return auth.ErrNotFound
+		return "", auth.ErrNotFound
 	}
 	if err != nil {
-		return fmt.Errorf("find auth user before delete: %w", err)
+		return "", fmt.Errorf("find auth user before delete: %w", err)
 	}
 	if role != auth.RoleUser {
-		return auth.ErrCannotDelete
+		return "", auth.ErrCannotDelete
 	}
 	var adminID string
 	err = tx.QueryRowContext(ctx, "SELECT id FROM auth_users WHERE role=$1 ORDER BY created_at,id LIMIT 1 FOR UPDATE", auth.RoleAdmin).Scan(&adminID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return errors.New("cannot transfer projects: administrator is missing")
+		return "", errors.New("cannot transfer projects: administrator is missing")
 	}
 	if err != nil {
-		return fmt.Errorf("find administrator before transfer: %w", err)
+		return "", fmt.Errorf("find administrator before transfer: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, "UPDATE projects SET owner_user_id=$1 WHERE owner_user_id=$2", adminID, id); err != nil {
-		return fmt.Errorf("transfer user projects: %w", err)
+		return "", fmt.Errorf("transfer user projects: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, "UPDATE container_apps SET owner_user_id=$1 WHERE owner_user_id=$2", adminID, id); err != nil {
-		return fmt.Errorf("transfer user container apps: %w", err)
+		return "", fmt.Errorf("transfer user container apps: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, "DELETE FROM auth_users WHERE id=$1", id); err != nil {
-		return fmt.Errorf("delete auth user: %w", err)
+		return "", fmt.Errorf("delete auth user: %w", err)
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	return email, nil
 }
 
 // SaveChallenge 原子地应用每邮箱 60 秒发送冷却，并替换旧验证码。

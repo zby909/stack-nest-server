@@ -101,6 +101,14 @@ func (s *testStore) Apps(context.Context, Actor) ([]App, error) { return []App{s
 // App 提供测试应用记录。
 func (s *testStore) App(context.Context, string, Actor) (App, error) { return s.value, nil }
 
+// AppRoute 为测试返回指定应用的公开路由字段。
+func (s *testStore) AppRoute(_ context.Context, slug string) (Route, error) {
+	if slug != s.value.Slug {
+		return Route{}, ErrNotFound
+	}
+	return Route{ID: s.value.ID, ContainerID: s.value.ContainerID, Action: s.value.Action, Status: s.value.Status}, nil
+}
+
 // SaveApp 记录加密配置。
 func (s *testStore) SaveApp(_ context.Context, a App, _ Actor, _ bool) error { s.value = a; return nil }
 

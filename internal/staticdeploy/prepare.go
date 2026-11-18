@@ -44,7 +44,7 @@ func (d *Deployer) prepareSite(ctx context.Context, fileName string, source io.R
 	if err != nil {
 		return "", tempDir, stats, err
 	}
-	stats, err = measureSite(ctx, releaseDir)
+	stats, err = measureSite(ctx, root)
 	if err != nil {
 		return "", tempDir, stats, err
 	}

@@ -210,20 +210,11 @@ func (s *Service) Logs(ctx context.Context, a App) (string, error) {
 }
 
 // Resolve 为公开应用域名查询目标，结果不经过后台会话鉴权。
-func (s *Service) Resolve(ctx context.Context, slug string) (App, error) {
+func (s *Service) Resolve(ctx context.Context, slug string) (Route, error) {
 	if !ValidSlug(slug) {
-		return App{}, ErrNotFound
+		return Route{}, ErrNotFound
 	}
-	values, err := s.store.Apps(ctx, Actor{Admin: true})
-	if err != nil {
-		return App{}, err
-	}
-	for _, a := range values {
-		if a.Slug == slug {
-			return a, nil
-		}
-	}
-	return App{}, ErrNotFound
+	return s.store.AppRoute(ctx, slug)
 }
 
 // Run 启动时恢复任务；空闲时修复迁移后丢失的已运行容器。

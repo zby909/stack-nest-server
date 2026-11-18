@@ -120,10 +120,7 @@ def restore(args):
         raise ValueError("请选择与原实例不同的 Compose 项目名")
     config = rehearsal_config(config, args.preview_port)
     with backup_lock(args.project):
-        ensure_empty(args.project)
-        networks = run(["docker", "network", "ls", "--format", "{{.Name}}"], stage="核对演练网络")
-        if args.project + "_default" in networks.splitlines():
-            raise ValueError("演练项目的同名网络已存在")
+        ensure_empty(args.project, config)
         with socket.socket() as listener:
             listener.bind(("127.0.0.1", args.preview_port))
         docker_root = Path(run(["docker", "info", "--format", "{{.DockerRootDir}}"], stage="读取 Docker 存储目录").strip())

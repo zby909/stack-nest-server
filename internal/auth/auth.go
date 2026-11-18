@@ -48,7 +48,7 @@ type Store interface {
 	ListUsers(ctx context.Context) ([]User, error)
 	AddUser(ctx context.Context, email, role string) (User, error)
 	ChangeUserRole(ctx context.Context, id, expected, role, protectedEmail, bootstrapEmail string) (User, error)
-	DeleteUser(ctx context.Context, id string) error
+	DeleteUser(ctx context.Context, id string) (string, error)
 	SaveChallenge(ctx context.Context, userID, codeHash string, sentAt, expiresAt time.Time) error
 	DiscardChallenge(ctx context.Context, userID, codeHash string) error
 	ExchangeChallenge(ctx context.Context, userID, codeHash, tokenHash string, now, sessionExpiresAt time.Time) error
@@ -214,7 +214,7 @@ func (s *Service) AddUser(ctx context.Context, rawEmail string) (User, error) {
 }
 
 // DeleteUser 移除普通用户，并同时撤销该用户全部会话。
-func (s *Service) DeleteUser(ctx context.Context, id string) error {
+func (s *Service) DeleteUser(ctx context.Context, id string) (string, error) {
 	return s.store.DeleteUser(ctx, id)
 }
 

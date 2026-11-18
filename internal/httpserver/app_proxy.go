@@ -2,10 +2,13 @@ package httpserver
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
+	"log/slog"
 	"net/http"
-	"stacknest/server/internal/containerapp"
 	"strings"
+
+	"stacknest/server/internal/containerapp"
 )
 
 // readAppJSON 严格限制配置体积，拒绝未知字段和拼接 JSON。
@@ -47,8 +50,13 @@ func (s *Server) appBoundary(next http.Handler) http.Handler {
 		}
 		slug := strings.TrimSuffix(strings.TrimPrefix(host, containerapp.HostPrefix), suffix)
 		value, err := s.config.Apps.Resolve(r.Context(), slug)
-		if err != nil {
+		if errors.Is(err, containerapp.ErrNotFound) {
 			http.NotFound(w, r)
+			return
+		}
+		if err != nil {
+			slog.ErrorContext(r.Context(), "resolve app route", "request_id", requestID(r), "error", err)
+			http.Error(w, "应用路由暂时不可用", http.StatusServiceUnavailable)
 			return
 		}
 		if value.ContainerID == "" || value.Action == "delete" || value.Status == "stopped" {

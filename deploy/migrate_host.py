@@ -141,8 +141,7 @@ def verify_bundle(bundle):
         relative = PurePosixPath(name)
         if relative.is_absolute() or ".." in relative.parts or "\\" in name or digest(bundle / name) != checksum:
             raise ValueError("migration checksum or path validation failed")
-    files_size(bundle / "data/files.tar.gz")
-    return manifest
+    return manifest, files_size(bundle / "data/files.tar.gz")
 
 # portable_config 只迁移本项目的数据卷和明确的入口配置，不打包任意主机目录。
 def portable_config(config, destination):
@@ -295,16 +294,22 @@ def export_bundle(args):
                 finally:
                     if api_was_running: run(command + ["up", "-d", "--no-deps", "--no-recreate", "--wait", "--wait-timeout", "90", "stacknest"], stage="restart after export")
 
-# ensure_empty 拒绝任何同名容器或数据卷，失败也不会清空已有数据。
-def ensure_empty(project):
+# ensure_empty 拒绝已有项目资源，也拒绝未打 Compose 标签的同名卷和网络。
+def ensure_empty(project, config):
     checked_project(project)
-    if run(["docker", "ps", "-aq", "--filter", "label=com.docker.compose.project=" + project]).strip():
+    label = "label=com.docker.compose.project=" + project
+    if run(["docker", "ps", "-aq", "--filter", label]).strip():
         raise ValueError("target Compose project already has containers")
     volumes = set(run(["docker", "volume", "ls", "-q"]).split())
-    if {project + "_postgres-data", project + "_stacknest-data"} & volumes:
+    if any(project + "_" + name in volumes for name in config["volumes"]):
         raise ValueError("target data volumes already exist")
-    if run(["docker", "volume", "ls", "-q", "--filter", "label=com.docker.compose.project=" + project]).strip():
+    if run(["docker", "volume", "ls", "-q", "--filter", label]).strip():
         raise ValueError("target Compose project already has volumes")
+    networks = set(run(["docker", "network", "ls", "--format", "{{.Name}}"]).splitlines())
+    if any(project + "_" + name in networks for name in config.get("networks") or ["default"]):
+        raise ValueError("target network already exists")
+    if run(["docker", "network", "ls", "-q", "--filter", label]).strip():
+        raise ValueError("target Compose project already has networks")
 
 # preview_configs 保留公网候选配置，仅向恢复实例开放回环预览，兼容旧迁移包。
 def preview_configs(config, port):
@@ -342,22 +347,28 @@ def restore_files(command, archive):
 # import_bundle 在全新实例恢复，先仅开放本机预览，确认后再 activate。
 def import_bundle(args):
     bundle = Path(args.bundle).resolve(strict=True)
-    manifest = verify_bundle(bundle)
     target = Path(args.destination).absolute()
     if target.exists() or target.is_symlink():
         raise ValueError("target directory must not exist")
-    ensure_empty(args.project)
+    manifest, expanded = verify_bundle(bundle)
+    with backup_lock(args.project):
+        restore_bundle(args, bundle, target, manifest, expanded)
+
+
+# restore_bundle 持有实例锁直到恢复结束，避免并发导入同时接管同一组资源。
+def restore_bundle(args, bundle, target, manifest, expanded):
+    config = json.loads((bundle / "compose.json").read_text(encoding="utf-8"))
+    check_layout(config)
+    ensure_empty(args.project, config)
     platform = json.loads(run(["docker", "version", "--format", "{{json .Server}}"] ))
     if platform["Os"] + "/" + platform["Arch"] != manifest["platform"]:
         raise ValueError("source and destination Docker platforms differ")
-    needed = (bundle / "images.tar").stat().st_size * 3 + files_size(bundle / "data/files.tar.gz") * 2 + (bundle / "data/postgres.dump").stat().st_size * 4 + (512 << 20)
+    needed = (bundle / "images.tar").stat().st_size * 3 + expanded * 2 + (bundle / "data/postgres.dump").stat().st_size * 4 + (512 << 20)
     destination_info = json.loads(run(["docker", "info", "--format", "{{json .}}"]))
     check_image_store(manifest, destination_info)
     docker_root = Path(destination_info["DockerRootDir"])
     if shutil.disk_usage(target.parent).free < needed or shutil.disk_usage(docker_root).free < needed:
         raise ValueError("insufficient free space for migration")
-    config = json.loads((bundle / "compose.json").read_text(encoding="utf-8"))
-    check_layout(config)
     if "tunnel" not in config["services"] and not (bundle / "deploy/nginx/ssh.conf.template").is_file():
         raise ValueError("single-entry migration bundle lacks SSH preview template")
     policy = config["services"].get("runner", {}).get("environment", {}).get("STACKNEST_APP_EGRESS_POLICY")
@@ -371,8 +382,6 @@ def import_bundle(args):
             shutil.copytree(bundle / folder, target / folder)
     (target / "backup-status").mkdir(mode=0o755)
     (target / "backup-status").chmod(0o755)
-    config = json.loads((bundle / "compose.json").read_text(encoding="utf-8"))
-    check_layout(config)
     for mount in config["services"].get("runner", {}).get("volumes", []):
         if mount["type"] == "bind" and mount["target"] == "/docker-storage":
             mount["source"] = str(docker_root)

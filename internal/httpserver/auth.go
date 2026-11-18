@@ -346,7 +346,7 @@ func (s *Server) AddUser(w http.ResponseWriter, r *http.Request) {
 
 // DeleteUser 删除普通用户邮箱并撤销其会话。
 func (s *Server) DeleteUser(w http.ResponseWriter, r *http.Request, id string) {
-	err := s.auth.DeleteUser(r.Context(), id)
+	email, err := s.auth.DeleteUser(r.Context(), id)
 	switch {
 	case errors.Is(err, auth.ErrNotFound):
 		writeJSON(w, http.StatusNotFound, generated.ErrorResponse{Error: "用户不存在"})
@@ -356,6 +356,9 @@ func (s *Server) DeleteUser(w http.ResponseWriter, r *http.Request, id string) {
 		slog.ErrorContext(r.Context(), "delete user", "error", err)
 		writeJSON(w, http.StatusInternalServerError, generated.ErrorResponse{Error: "删除邮箱失败"})
 	default:
+		event := newActivity(r, "user-delete")
+		event.Status, event.Message = "succeeded", "已删除登录邮箱 "+email
+		s.finishActivity(r, event)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

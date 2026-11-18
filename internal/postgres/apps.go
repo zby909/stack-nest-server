@@ -44,6 +44,17 @@ func (s *Store) App(ctx context.Context, id string, actor containerapp.Actor) (c
 	return scanApp(s.db.QueryRowContext(ctx, "SELECT "+appColumns+" FROM container_apps a JOIN auth_users u ON u.id=a.owner_user_id WHERE a.id=$1 AND ($2 OR a.owner_user_id=$3)", id, actor.Admin, actor.ID))
 }
 
+// AppRoute 按唯一 slug 查询公开路由，无需读取用户信息或容器配置密文。
+func (s *Store) AppRoute(ctx context.Context, slug string) (containerapp.Route, error) {
+	var target containerapp.Route
+	err := s.db.QueryRowContext(ctx, "SELECT id,container_id,action,status FROM container_apps WHERE slug=$1", slug).
+		Scan(&target.ID, &target.ContainerID, &target.Action, &target.Status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return target, containerapp.ErrNotFound
+	}
+	return target, err
+}
+
 // SaveApp 在同一事务内验证用户、乐观版本和全局配额。
 func (s *Store) SaveApp(ctx context.Context, a containerapp.App, actor containerapp.Actor, create bool) error {
 	tx, err := s.db.BeginTx(ctx, nil)

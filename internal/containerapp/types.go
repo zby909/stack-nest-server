@@ -102,6 +102,11 @@ type App struct {
 	URL                   string    `json:"url"`
 }
 
+// Route 仅包含公开请求选择容器所需的状态。
+type Route struct {
+	ID, ContainerID, Action, Status string
+}
+
 // Actor 保留请求身份，后台工作完成时仍能记录操作人。
 type Actor struct {
 	ID, Email string
@@ -160,6 +165,7 @@ type Store interface {
 	AppDeployments(context.Context, string) ([]Deployment, error)
 	Apps(context.Context, Actor) ([]App, error)
 	App(context.Context, string, Actor) (App, error)
+	AppRoute(context.Context, string) (Route, error)
 	SaveApp(context.Context, App, Actor, bool) error
 	SaveAppImage(context.Context, App, deploytoken.Grant, ImageUpdate) (int64, error)
 	QueueApp(context.Context, string, Actor, string, int64) (App, error)

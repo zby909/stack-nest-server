@@ -8,6 +8,11 @@ data
 backup-status
 __pycache__
 .local-dev
+/backups
+**/*.token.local
+**/.stacknest-upload*.json
+/stacknest-deploy
+/stacknest-deploy.exe
 /cert
 pem.txt
 *.log

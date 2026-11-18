@@ -3,7 +3,10 @@ FROM golang:1.27.4-alpine AS builder
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
-COPY . ./
+COPY cmd/ ./cmd/
+COPY internal/ ./internal/
+COPY openapi/ ./openapi/
+COPY skills/ ./skills/
 ARG VERSION=dev
 ARG REVISION=unknown
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X stacknest/server/internal/buildinfo.Version=${VERSION} -X stacknest/server/internal/buildinfo.Revision=${REVISION}" -o /out/stacknest ./cmd/stacknest

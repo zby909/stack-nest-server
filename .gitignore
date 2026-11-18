@@ -4,6 +4,7 @@
 !.env.compose.example
 data/
 backup-status/
+/backups/
 __pycache__/
 .local-dev/
 /stacknest

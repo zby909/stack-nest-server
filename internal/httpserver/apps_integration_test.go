@@ -13,6 +13,7 @@ import (
 	"sync"
 	"testing"
 
+	"stacknest/server/internal/activity"
 	"stacknest/server/internal/auth"
 	"stacknest/server/internal/containerapp"
 	"stacknest/server/internal/postgres"
@@ -100,8 +101,12 @@ func TestContainerAppsIntegration(t *testing.T) {
 	owner, _ := store.FindUserByEmail(ctx, "owner@example.com")
 	admin, _ := store.FindUserByEmail(ctx, "admin@example.com")
 	root := t.TempDir()
-	apps := containerapp.New(store, appTestRuntime{}, secret, storage.New(root), nil)
-	server := New(Config{Apps: apps, Addr: ":0", SitesDir: root, WebDir: root}, nil, authentication)
+	events, err := activity.New(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	apps := containerapp.New(store, appTestRuntime{}, secret, storage.New(root), events)
+	server := New(Config{Apps: apps, Activity: events, Addr: ":0", SitesDir: root, WebDir: root}, nil, authentication)
 	// cookie 通过真实一次性验证码创建会话，不绕过认证。
 	cookie := func(email string) *http.Cookie {
 		if err := authentication.RequestCode(ctx, email); err != nil {
@@ -211,6 +216,10 @@ func TestContainerAppsIntegration(t *testing.T) {
 	if err != nil || !cancelled.Canceled || cancelled.Status != "error" || cancelled.Action != "" || cancelled.Generation != 1 {
 		t.Fatal("pending cancellation did not finish", cancelled, err)
 	}
+	cancelLog := call("GET", "/api/activity?action=app-cancel", "", ownerCookie, "")
+	if cancelLog.Code != 200 || !strings.Contains(cancelLog.Body.String(), `"slug":"cancel-test"`) {
+		t.Fatalf("missing cancellation in activity filter: %d %s", cancelLog.Code, cancelLog.Body.String())
+	}
 	if _, err = db.Exec("DELETE FROM container_apps WHERE id=$1", cancelled.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -242,6 +251,12 @@ func TestContainerAppsIntegration(t *testing.T) {
 	server.http.Handler.ServeHTTP(out, req)
 	if out.Body.String() != "application:/api/auth/session" {
 		t.Fatal("app route crossed admin boundary", out.Body.String())
+	}
+	missing := httptest.NewRequest("GET", "http://stack-nest--app-missing.localhost/", nil)
+	out = httptest.NewRecorder()
+	server.http.Handler.ServeHTTP(out, missing)
+	if out.Code != http.StatusNotFound {
+		t.Fatalf("missing app route: %d", out.Code)
 	}
 	codes := make(chan int, 2)
 	var wait sync.WaitGroup
@@ -302,8 +317,12 @@ func TestContainerAppsIntegration(t *testing.T) {
 	if success != 1 {
 		t.Fatalf("quota over-allocation: %d", success)
 	}
-	if err = authentication.DeleteUser(ctx, owner.ID); err != nil {
-		t.Fatal(err)
+	if out := call("DELETE", "/api/users/"+owner.ID, "", adminCookie, "http://localhost:8080"); out.Code != 204 {
+		t.Fatalf("delete member: %d %s", out.Code, out.Body.String())
+	}
+	deletedLog := call("GET", "/api/activity?action=user-delete", "", adminCookie, "")
+	if deletedLog.Code != 200 || !strings.Contains(deletedLog.Body.String(), owner.Email) || !strings.Contains(deletedLog.Body.String(), admin.Email) {
+		t.Fatalf("missing member deletion in activity filter: %d %s", deletedLog.Code, deletedLog.Body.String())
 	}
 	transferred, err := store.App(ctx, id, containerapp.Actor{ID: admin.ID, Admin: true})
 	if err != nil || transferred.OwnerID != admin.ID {
@@ -311,6 +330,12 @@ func TestContainerAppsIntegration(t *testing.T) {
 	}
 	if got := call("GET", "/api/apps", "", ownerCookie, "").Code; got != 401 {
 		t.Fatal("deleted user's session remained valid")
+	}
+	store.Close()
+	out = httptest.NewRecorder()
+	server.http.Handler.ServeHTTP(out, req)
+	if out.Code != http.StatusServiceUnavailable {
+		t.Fatalf("database unavailable: %d", out.Code)
 	}
 }
 

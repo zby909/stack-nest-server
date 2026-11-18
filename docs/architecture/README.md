@@ -47,7 +47,7 @@ Nginx 通过 Docker 内部 DNS 定期刷新 API 地址，后端容器重建换 I
 - 管理域名：前端页面和管理 API。
 - `stack-nest-{slug}`：Nginx 直接读取已发布静态文件。
 - `stack-nest--{版本UUID}`：Go 检查版本仍保留后提供预览。
-- `stack-nest--app-{slug}`：Nginx → Go → Runner → 应用私有端口。
+- `stack-nest--app-{slug}`：Go 按唯一的 slug 查到目标容器，再由 Runner 转发到应用私有端口。应用尚未运行或数据库暂时不可用时返回 503。
 - 未配置的域名或不存在的项目：404。
 
 后台和项目使用不同来源。上传站点自己的 `/api` 不会成为平台管理 API。

@@ -153,7 +153,7 @@ func (c *Client) UploadReplacing(ctx context.Context, file, statePath, notes, re
 
 // checkStatus 拒绝服务端异常偏移，客户端只认可已确认的有效字节范围。
 func checkStatus(s Status, r resumable.Request) error {
-	if s.ID != r.ID || s.Size != r.Size || s.Offset < 0 || s.Offset > s.Size || s.ChunkSize < resumable.MinChunkSize || s.MinChunkSize < 1 || s.MinChunkSize > s.ChunkSize || s.Completed && s.Offset != s.Size {
+	if s.ID != r.ID || s.Size != r.Size || s.Offset < 0 || s.Offset > s.Size || s.ChunkSize < resumable.MinChunkSize || s.ChunkSize > resumable.ChunkSize || s.MinChunkSize < 0 || s.MinChunkSize > s.ChunkSize || s.Completed && s.Offset != s.Size {
 		return errors.New("服务端上传进度异常，已停止发送")
 	}
 	return nil
@@ -161,7 +161,11 @@ func checkStatus(s Status, r resumable.Request) error {
 
 // sendChunks 从确认偏移逐片发送，网络失败缩小分片并有限重试，避免无休止自动重传。
 func (c *Client) sendChunks(ctx context.Context, f *os.File, r resumable.Request, status *Status, progress io.Writer) error {
-	chunkSize := min(int64(512<<10), status.ChunkSize)
+	minChunk := status.MinChunkSize
+	if minChunk == 0 {
+		minChunk = status.ChunkSize // 未声明最小值的旧服务只接受固定分片。
+	}
+	chunkSize := max(minChunk, min(int64(512<<10), status.ChunkSize))
 	failures := 0
 	for {
 		if err := checkStatus(*status, r); err != nil {
@@ -202,7 +206,7 @@ func (c *Client) sendChunks(ctx context.Context, f *os.File, r resumable.Request
 			return err
 		}
 		if api == nil || api.Status == 408 || api.Status >= 500 {
-			chunkSize = max(status.MinChunkSize, chunkSize/2)
+			chunkSize = max(minChunk, chunkSize/2)
 		}
 		if err = c.retry(ctx, func() error { return c.request(ctx, "GET", "uploads/"+r.ID, nil, nil, &next) }); err != nil {
 			return err
