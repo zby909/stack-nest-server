@@ -37,6 +37,10 @@ finish() {
     if (( result == 0 )); then
         stage=completed
         write_status succeeded || result=1
+        # 只在服务恢复后准备可下载的副本，导出失败不改变整机备份的结果。
+        if (( result == 0 )) && [[ "${STACKNEST_APPS_FROZEN:-}" != 1 ]]; then
+            python3 "$script_dir/app_exports.py" "$final" "$status_dir" || printf 'app_exports_failed\n' >&2
+        fi
     else
         write_status failed || true
         printf 'backup_failed_stage=%s\n' "$stage" >&2
@@ -85,7 +89,7 @@ stage=database
 "${compose[@]}" exec -T postgres pg_dump -U stacknest -d stacknest -Fc --no-owner --no-privileges > "$partial/postgres.dump"
 stage=files
 "${compose[@]}" run --rm --no-deps -T --user 0:0 --entrypoint sh stacknest -ec \
-    'for dir in sites trash pending logs previous changes paused drafts; do if [ ! -e /data/$dir ]; then mkdir /data/$dir; chown 10001:10001 /data/$dir; fi; done; mkdir -p /data/apps; tar -C /data -czf - sites trash pending logs previous changes paused drafts apps' > "$partial/files.tar.gz"
+    'for dir in sites trash pending logs previous changes paused drafts; do if [ ! -e /data/$dir ]; then mkdir /data/$dir; chown 10001:10001 /data/$dir; fi; done; mkdir -p /data/apps; if [ -f /data/traffic-counts.json ]; then cp /data/traffic-counts.json /data/logs/traffic-at-backup.json; fi; tar -C /data -czf - sites trash pending logs previous changes paused drafts apps' > "$partial/files.tar.gz"
 stage=verify
 "${compose[@]}" exec -T postgres pg_restore --list < "$partial/postgres.dump" >/dev/null
 tar -tzf "$partial/files.tar.gz" >/dev/null

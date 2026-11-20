@@ -209,6 +209,9 @@ func (s *Server) CompleteUpload(w http.ResponseWriter, r *http.Request, id strin
 			}
 			return "", err
 		}
+		if input.Kind != "update" {
+			s.refreshTraffic(ctx)
+		}
 		event.Status, event.Message = "succeeded", "续传文件发布成功"
 		if input.Preview {
 			event.Message = "待发布版本已创建，预览确认后可正式发布"

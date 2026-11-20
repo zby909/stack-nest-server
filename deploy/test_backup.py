@@ -27,6 +27,7 @@ def main(backup_script=None, status_script=None):
         binary.mkdir()
         (scripts / "backup.sh").write_bytes(backup_script.read_bytes().replace(b"\r\n", b"\n"))
         (scripts / "backup_status.py").write_bytes(status_script.read_bytes())
+        (scripts / "app_exports.py").write_bytes(backup_script.with_name("app_exports.py").read_bytes())
         compose = root / "compose.yaml"
         compose.write_text("services: {}\n")
         files = root / "files.tar.gz"

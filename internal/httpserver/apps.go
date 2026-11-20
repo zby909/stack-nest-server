@@ -114,6 +114,9 @@ func (s *Server) saveApp(w http.ResponseWriter, r *http.Request, id string) {
 		s.writeAppError(w, r, err)
 		return
 	}
+	if id == "" {
+		s.refreshTraffic(r.Context())
+	}
 	writeJSON(w, 202, s.appResponse(r, value))
 }
 

@@ -84,6 +84,7 @@ func (s *Server) CreateProject(w http.ResponseWriter, r *http.Request) {
 	event.FileCount = result.Files.Count
 	event.Status = "succeeded"
 	event.Message = "站点发布成功"
+	s.refreshTraffic(r.Context())
 	writeJSON(w, http.StatusCreated, s.toProjectResponse(r, result.Project))
 }
 

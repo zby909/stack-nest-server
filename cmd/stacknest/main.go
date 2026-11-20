@@ -24,6 +24,7 @@ import (
 	"stacknest/server/internal/project"
 	"stacknest/server/internal/staticdeploy"
 	"stacknest/server/internal/storage"
+	"stacknest/server/internal/traffic"
 )
 
 // main 配置结构化日志并启动服务。
@@ -56,6 +57,14 @@ func run() error {
 			if err != nil {
 				return err
 			}
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				if err := traffic.Collect(ctx, cfg.DataDir); err != nil {
+					slog.Error("访问统计采集停止", "error", err)
+				}
+			}()
+			defer func() { stop(); <-done }()
 			return runner.Serve(ctx, cfg.RunnerSocket)
 		}
 		if os.Args[1] == "runner-health" {
@@ -137,7 +146,9 @@ func run() error {
 	// inspect 复用 CLI 诊断，只向 HTTP 层传递安全摘要。
 	inspect := func(ctx context.Context) doctor.Report { return doctor.Inspect(ctx, cfg) }
 	apps := containerapp.New(store, containerapp.NewClient(cfg.RunnerSocket), cfg.AuthSecret, guard, activityLog)
+	registry := &traffic.Registry{Dir: cfg.DataDir, BaseDomain: cfg.BaseDomain, Load: store.TrafficTargets}
 	server := httpserver.New(httpserver.Config{
+		Traffic:            registry,
 		DeployTokens:       store,
 		AppDeployTokens:    store,
 		Apps:               apps,
@@ -158,6 +169,23 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	workerDone := make(chan struct{})
+	if err := registry.Refresh(ctx); err != nil {
+		slog.Warn("初始化访问统计域名失败", "error", err)
+	}
+	go func() {
+		t := time.NewTicker(time.Minute)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if err := registry.Refresh(ctx); err != nil && ctx.Err() == nil {
+					slog.Warn("同步访问统计域名失败", "error", err)
+				}
+			}
+		}
+	}()
 	if cfg.RunnerSocket != "" {
 		go func() { defer close(workerDone); apps.Run(ctx) }()
 	} else {

@@ -19,10 +19,12 @@ import (
 	"stacknest/server/internal/resumable"
 	"stacknest/server/internal/storage"
 	"stacknest/server/internal/systeminfo"
+	"stacknest/server/internal/traffic"
 )
 
 // Config 定义 HTTP Server 所需配置。
 type Config struct {
+	Traffic             *traffic.Registry
 	DeployTokens        deploytoken.Store
 	AppDeployTokens     deploytoken.AppStore
 	Apps                *containerapp.Service
@@ -104,6 +106,9 @@ func New(config Config, projects ProjectService, authService *auth.Service) *Ser
 	mux.HandleFunc("GET /api/apps/images", server.GetAppImages)
 	mux.HandleFunc("DELETE /api/apps/images/{imageId}", server.DeleteAppImage)
 	mux.HandleFunc("GET /api/apps/{id}/deployments", server.GetAppDeployments)
+	mux.HandleFunc("GET /api/apps/{id}/data-export", server.appExport)
+	mux.HandleFunc("GET /api/apps/{id}/traffic", server.appTraffic)
+	mux.HandleFunc("GET /api/projects/{slug}/traffic", server.projectTraffic)
 	mux.HandleFunc("GET /api/apps/limits", server.GetAppLimits)
 	mux.HandleFunc("PUT /api/apps/limits", server.UpdateAppLimits)
 	mux.HandleFunc("GET /api/network", server.GetNetwork)

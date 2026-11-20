@@ -45,6 +45,8 @@ sudo env STACKNEST_COMPOSE_PROJECT=stacknest bash deploy/backup.sh \
 
 配置快照含密码，私有保存。备份包括同一时点的数据库和业务文件，默认保留 14 份；备份期间 API 与运行应用短暂停止，然后恢复原状态。
 
+服务恢复后，备份工具在摘要目录中保留一套按应用拆分的最新压缩包，供所有者下载。准备新副本时需要额外磁盘空间。升级旧实例时，将新版 `backup.sh`、`backup_status.py` 和 `app_exports.py` 一起放到定时任务实际使用的脚本目录。已有成功备份可直接运行 `sudo python3 deploy/app_exports.py /最近完整备份目录 /实际摘要目录`，无需暂停服务。
+
 `.partial-` 是失败现场，不作为完整备份。日常备份不带镜像和运行配置；完整换机使用 [迁移包](MIGRATION.md)。恢复方法见 [恢复参考](RESTORE.md)。
 
 ### 每日备份

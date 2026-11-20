@@ -1,0 +1,67 @@
+openapi: 3.0.3
+info: {title: StackNest 项目访问与应用数据, version: 1.0.0}
+paths:
+  /api/projects/{slug}/traffic:
+    get:
+      summary: 静态项目最近七个 UTC 自然日的源站访问
+      parameters:
+        - {name: slug, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: 项目访问概况, content: {application/json: {schema: {$ref: '#/components/schemas/Traffic'}}}}
+        '401': {description: 未登录}
+        '404': {description: 项目不存在或无权访问}
+  /api/apps/{id}/traffic:
+    get:
+      summary: Docker 应用最近七个 UTC 自然日的源站访问
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: 应用访问概况, content: {application/json: {schema: {$ref: '#/components/schemas/Traffic'}}}}
+        '401': {description: 未登录}
+        '404': {description: 应用不存在或无权访问}
+  /api/apps/{id}/data-export:
+    get:
+      summary: 获取持久化数据导出状态，或下载指定备份时间的归档
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: download, in: query, description: 下载时传入摘要内的 snapshot, schema: {type: string}}
+      responses:
+        '200':
+          description: 摘要或 tar.gz 归档
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state]
+                properties:
+                  state: {type: string, enum: [not_configured, no_backup, preparing, no_data, unsupported, ready]}
+                  createdAt: {type: string, format: date-time}
+                  bytes: {type: integer, format: int64}
+                  snapshot: {type: string}
+            application/gzip: {schema: {type: string, format: binary}}
+        '206': {description: 部分文件内容}
+        '401': {description: 未登录}
+        '404': {description: 应用不存在或无权访问}
+        '409': {description: 备份已轮换或不可用}
+components:
+  schemas:
+    Traffic:
+      type: object
+      required: [available, days]
+      properties:
+        available: {type: boolean}
+        since: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        days:
+          type: array
+          minItems: 7
+          maxItems: 7
+          items:
+            type: object
+            required: [date, requests, pages, clientErrors, serverErrors]
+            properties:
+              date: {type: string, format: date}
+              requests: {type: integer, format: int64}
+              pages: {type: integer, format: int64}
+              clientErrors: {type: integer, format: int64}
+              serverErrors: {type: integer, format: int64}

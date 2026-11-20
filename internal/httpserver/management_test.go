@@ -19,6 +19,19 @@ import (
 	"stacknest/server/internal/project"
 )
 
+// TestTrafficOwnership 确保统计沿用项目授权，无法枚举其他成员的访问情况。
+func TestTrafficOwnership(t *testing.T) {
+	s := newTestServer(t)
+	p := managementProject(t, s)
+	req := httptest.NewRequest("GET", "/api/projects/"+p.Slug+"/traffic", nil)
+	req = req.WithContext(context.WithValue(req.Context(), authContextKey{}, auth.User{ID: "other", Role: auth.RoleUser}))
+	out := httptest.NewRecorder()
+	s.http.Handler.ServeHTTP(out, req)
+	if out.Code != 404 {
+		t.Fatalf("foreign traffic %d", out.Code)
+	}
+}
+
 // managementProject 创建真实文件和项目元数据用于编辑、导出验收。
 func managementProject(t *testing.T, s *Server) project.Project {
 	t.Helper()

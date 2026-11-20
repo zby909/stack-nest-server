@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -169,7 +170,7 @@ func TestContainerAppsIntegration(t *testing.T) {
 	if strings.Contains(sealed, "secret-app-value") || strings.Contains(created.Body.String(), "secret-app-value") {
 		t.Fatal("secret leaked")
 	}
-	for _, path := range []string{"/api/apps/" + id, "/api/apps/" + id + "/logs", "/api/apps/" + id + "/deployment-logs"} {
+	for _, path := range []string{"/api/apps/" + id, "/api/apps/" + id + "/logs", "/api/apps/" + id + "/deployment-logs", "/api/apps/" + id + "/traffic", "/api/apps/" + id + "/data-export"} {
 		if got := call("GET", path, "", foreignCookie, "").Code; got != 404 {
 			t.Fatalf("foreign access: %d", got)
 		}
@@ -177,6 +178,44 @@ func TestContainerAppsIntegration(t *testing.T) {
 			t.Fatalf("admin access: %d", got)
 		}
 	}
+	if got := call("GET", "/api/apps/"+id+"/data-export?download=old", "", foreignCookie, "").Code; got != 404 {
+		t.Fatalf("foreign download: %d", got)
+	}
+	if got := call("GET", "/api/apps/"+id+"/data-export?download=old", "", ownerCookie, "").Code; got != 409 {
+		t.Fatalf("unavailable download: %d", got)
+	}
+	t.Run("authorized snapshot download", func(t *testing.T) {
+		dir := t.TempDir()
+		server.config.BackupStatusFile = filepath.Join(dir, "status.json")
+		const stamp = "2026-11-20T03:00:00Z"
+		const snap = "app-export-download"
+		if err := os.Mkdir(filepath.Join(dir, snap), 0700); err != nil {
+			t.Fatal(err)
+		}
+		files := map[string]string{
+			"status.json":                     fmt.Sprintf(`{"version":1,"state":"succeeded","lastAttempt":{"stage":"completed","startedAt":%q,"finishedAt":%q},"lastSuccess":{"createdAt":%q,"databaseBytes":2,"filesBytes":4,"totalBytes":6},"retainedCount":1,"retainedBytes":6}`, stamp, stamp, stamp),
+			"app-exports.json":                fmt.Sprintf(`{"directory":%q,"createdAt":%q,"apps":{%q:{"state":"ready","bytes":4}}}`, snap, stamp, id),
+			filepath.Join(snap, id+".tar.gz"): "test",
+		}
+		for name, body := range files {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		path := "/api/apps/" + id + "/data-export?download=" + snap
+		for _, c := range []*http.Cookie{ownerCookie, adminCookie} {
+			resp := call("GET", path, "", c, "")
+			if resp.Code != 200 || resp.Body.String() != "test" || !strings.Contains(resp.Header().Get("Content-Disposition"), "first-data-") {
+				t.Fatalf("download: %d %v", resp.Code, resp.Header())
+			}
+		}
+		if resp := call("GET", path, "", foreignCookie, ""); resp.Code != 404 || resp.Body.String() == "test" {
+			t.Fatal("foreign download")
+		}
+		if resp := call("GET", path, "", nil, ""); resp.Code != 401 {
+			t.Fatal("anonymous download", resp.Code)
+		}
+	})
 	details := call("GET", "/api/apps/"+id+"/deployment-logs?generation=1", "", ownerCookie, "")
 	if details.Code != 200 || strings.Contains(details.Body.String(), "secret-app-value") || !strings.Contains(details.Body.String(), "[已隐藏]") {
 		t.Fatal("failure logs leaked", details.Body.String())
