@@ -73,6 +73,7 @@ type Deployment struct {
 
 // CreateInput 是创建静态项目所需的数据。
 type CreateInput struct {
+	Empty        bool // 仅登记项目，所有版本由后续上传创建。
 	Preview      bool
 	Notes        string
 	DeploymentID string // 仅由服务端续传会话生成，用于确认重复发布。

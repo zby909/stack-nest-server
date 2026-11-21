@@ -321,6 +321,7 @@ func TestEmailAuthIntegration(t *testing.T) {
 	}
 	exerciseAuthenticatedRevisions(t, server, userCookie, otherCookie, adminCookie)
 	exerciseAuthenticatedManagement(t, server, userCookie, otherCookie, adminCookie)
+	t.Run("空项目首次部署", func(t *testing.T) { checkEmptyProjectDeployment(t, server, call, userCookie, otherCookie) })
 	exerciseHTTPSCookies(t, server, service, mailer)
 	previewAPI := httptest.NewRequest(http.MethodPost, "http://stack-nest-ordinary-site.localhost:8080/api/users", bytes.NewBufferString(`{"email":"not-added@example.com"}`))
 	previewAPI.Header.Set("Origin", "http://stack-nest-ordinary-site.localhost:8080")

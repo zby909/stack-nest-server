@@ -301,7 +301,7 @@ components:
       properties:
         id: {type: string}
         createdAt: {type: string, format: date-time}
-        action: {type: string, enum: [upload, update, rollback, delete, edit, export, pause, resume, draft, publish, discard, app-deploy, app-cancel, app-start, app-stop, app-restart, app-delete, app-image-delete, network, app-limits, user-add, user-role, user-delete, token-create, token-revoke]}
+        action: {type: string, enum: [create, upload, update, rollback, delete, edit, export, pause, resume, draft, publish, discard, app-deploy, app-cancel, app-start, app-stop, app-restart, app-delete, app-image-delete, network, app-limits, user-add, user-role, user-delete, token-create, token-revoke]}
         actor: {type: string}
         tokenName: {type: string}
         tokenId: {type: string}
@@ -459,6 +459,7 @@ components:
         status:
           type: string
           enum: [online, paused, draft]
+          description: draft 表示尚无正式版本；无 draft 对象时仍待首次上传。
         siteUrl:
           type: string
           format: uri

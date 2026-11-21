@@ -68,6 +68,18 @@ type GetAppDeploymentLogsParams struct {
 	Generation *int64 `form:"generation,omitempty" json:"generation,omitempty"`
 }
 
+// CreateProjectJSONBody defines parameters for CreateProject.
+type CreateProjectJSONBody struct {
+	// Description UTF-8 编码最多 4096 字节
+	Description *string `json:"description,omitempty"`
+
+	// Name UTF-8 编码最多 256 字节
+	Name string `json:"name"`
+
+	// Slug 留空时自动生成，指定时使用小写字母、数字和连字符
+	Slug *string `json:"slug,omitempty"`
+}
+
 // CreateProjectMultipartBody defines parameters for CreateProject.
 type CreateProjectMultipartBody struct {
 	// Description UTF-8 编码最多 4096 字节
@@ -165,6 +177,9 @@ type RequestLoginCodeJSONRequestBody = EmailRequest
 
 // VerifyLoginCodeJSONRequestBody defines body for VerifyLoginCode for application/json ContentType.
 type VerifyLoginCodeJSONRequestBody = VerifyCodeRequest
+
+// CreateProjectJSONRequestBody defines body for CreateProject for application/json ContentType.
+type CreateProjectJSONRequestBody CreateProjectJSONBody
 
 // CreateProjectMultipartRequestBody defines body for CreateProject for multipart/form-data ContentType.
 type CreateProjectMultipartRequestBody CreateProjectMultipartBody

@@ -60,7 +60,7 @@ type ServerInterface interface {
 	// ListProjects 获取项目列表
 	// (GET /api/projects)
 	ListProjects(w http.ResponseWriter, r *http.Request)
-	// CreateProject 创建并部署静态项目
+	// CreateProject 创建空静态项目或上传文件部署
 	// (POST /api/projects)
 	CreateProject(w http.ResponseWriter, r *http.Request)
 	// DeleteProject 删除项目

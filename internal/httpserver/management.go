@@ -18,6 +18,44 @@ import (
 	"stacknest/server/internal/storage"
 )
 
+// createEmptyProject 使用当前会话登记项目，首次部署沿用普通草稿与发布流程。
+func (s *Server) createEmptyProject(w http.ResponseWriter, r *http.Request) {
+	event := newActivity(r, "create")
+	defer s.finishActivity(r, event)
+	var body struct {
+		Name        string `json:"name"`
+		Slug        string `json:"slug"`
+		Description string `json:"description"`
+	}
+	if !decodeProjectMetadata(w, r, &body) {
+		event.Message = "请求内容无效"
+		writeJSON(w, http.StatusBadRequest, generated.ErrorResponse{Error: event.Message})
+		return
+	}
+	user := s.requestUser(r)
+	result, err := s.projects.Create(r.Context(), project.CreateInput{
+		Empty: true, OwnerID: user.ID, OwnerEmail: user.Email,
+		Name: body.Name, Slug: body.Slug, Description: body.Description,
+	})
+	if err != nil {
+		event.Message = s.writeProjectError(w, r, err)
+		return
+	}
+	event.Slug, event.ProjectOwnerID = result.Project.Slug, user.ID
+	event.Status, event.Message = "succeeded", "已创建空静态项目"
+	s.refreshTraffic(r.Context())
+	writeJSON(w, http.StatusCreated, s.toProjectResponse(r, result.Project))
+}
+
+// decodeProjectMetadata 限制元数据体积并拒绝未知字段及尾随 JSON。
+func decodeProjectMetadata(w http.ResponseWriter, r *http.Request, target any) bool {
+	// 名称、标识与说明经 JSON 转义后仍在 32 KiB 以内。
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 32<<10))
+	decoder.DisallowUnknownFields()
+	var extra any
+	return decoder.Decode(target) == nil && decoder.Decode(&extra) == io.EOF
+}
+
 // EditProject 严格读取展示字段与页面版本，不接受 slug、归属或部署信息。
 func (s *Server) EditProject(w http.ResponseWriter, r *http.Request, slug generated.ProjectSlug, params generated.EditProjectParams) {
 	event := newActivity(r, "edit")
@@ -48,16 +86,7 @@ func (s *Server) EditProject(w http.ResponseWriter, r *http.Request, slug genera
 		Name        *string `json:"name"`
 		Description *string `json:"description"`
 	}
-	// 合法字段最多 4352 字节，JSON 转义最多扩展六倍；仍限制整个请求体。
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 32<<10))
-	decoder.DisallowUnknownFields()
-	var extra any
-	if err := decoder.Decode(&body); err != nil {
-		event.Message = "请求内容无效"
-		writeJSON(w, http.StatusBadRequest, generated.ErrorResponse{Error: event.Message})
-		return
-	}
-	if err := decoder.Decode(&extra); err != io.EOF || body.Name == nil || body.Description == nil {
+	if !decodeProjectMetadata(w, r, &body) || body.Name == nil || body.Description == nil {
 		event.Message = "请求内容无效"
 		writeJSON(w, http.StatusBadRequest, generated.ErrorResponse{Error: event.Message})
 		return

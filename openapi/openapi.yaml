@@ -535,9 +535,10 @@ paths:
                 $ref: './components.yaml#/components/schemas/ProjectListResponse'
     post:
       tags: [Projects]
-      summary: 创建并部署静态项目
+      summary: 创建空静态项目或上传文件部署
       operationId: createProject
       description: |
+        发送 JSON 可仅登记当前用户的项目，随后即可创建部署 Token。首次上传生成待发布版，确认发布后开放正式站点。
         上传 ZIP、RAR 或单个 HTML（.html / .htm）静态站点。单 HTML 原样保存为 index.html，原文件名保留在版本记录；压缩包根目录或唯一一级目录必须包含 index.html。
         当前限制：
         - 压缩包最大 90 MiB（94371840 字节）
@@ -550,6 +551,15 @@ paths:
       requestBody:
         required: true
         content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name: {type: string, minLength: 1, description: UTF-8 编码最多 256 字节}
+                slug: {type: string, maxLength: 52, description: 留空时自动生成，指定时使用小写字母、数字和连字符}
+                description: {type: string, description: UTF-8 编码最多 4096 字节}
           multipart/form-data:
             schema:
               type: object

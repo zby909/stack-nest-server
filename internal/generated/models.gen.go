@@ -19,6 +19,7 @@ const (
 	ActivityEventActionAppRestart     ActivityEventAction = "app-restart"
 	ActivityEventActionAppStart       ActivityEventAction = "app-start"
 	ActivityEventActionAppStop        ActivityEventAction = "app-stop"
+	ActivityEventActionCreate         ActivityEventAction = "create"
 	ActivityEventActionDelete         ActivityEventAction = "delete"
 	ActivityEventActionDiscard        ActivityEventAction = "discard"
 	ActivityEventActionDraft          ActivityEventAction = "draft"
@@ -56,6 +57,8 @@ func (e ActivityEventAction) Valid() bool {
 	case ActivityEventActionAppStart:
 		return true
 	case ActivityEventActionAppStop:
+		return true
+	case ActivityEventActionCreate:
 		return true
 	case ActivityEventActionDelete:
 		return true
@@ -540,11 +543,13 @@ type Project struct {
 	OwnerId     string        `json:"ownerId"`
 	SiteUrl     string        `json:"siteUrl"`
 	Slug        string        `json:"slug"`
-	Status      ProjectStatus `json:"status"`
-	UpdatedAt   time.Time     `json:"updatedAt"`
+
+	// Status draft 表示尚无正式版本；无 draft 对象时仍待首次上传。
+	Status    ProjectStatus `json:"status"`
+	UpdatedAt time.Time     `json:"updatedAt"`
 }
 
-// ProjectStatus defines model for Project.Status.
+// ProjectStatus draft 表示尚无正式版本；无 draft 对象时仍待首次上传。
 type ProjectStatus string
 
 // ProjectListResponse defines model for ProjectListResponse.

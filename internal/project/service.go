@@ -84,54 +84,41 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (CreatedProject
 	if len(input.Notes) > 4096 {
 		return CreatedProject{}, ErrInvalidNotes
 	}
-	id := input.DeploymentID
-	if id == "" {
-		id = newID("dep")
+	value := Project{
+		ID: newID("prj"), OwnerID: input.OwnerID, OwnerEmail: input.OwnerEmail,
+		Name: name, Slug: slug, Description: description, Status: "draft",
 	}
-	var files PublishedFiles
-	if input.Preview {
+	if input.Empty || input.Preview {
 		if err := s.publisher.SetPaused(slug, true); err != nil {
 			return CreatedProject{}, err
 		}
-		files, err = s.publisher.PrepareDraft(ctx, slug, id, input.FileName, input.Source)
-	} else {
-		files, err = s.publisher.Publish(ctx, slug, input.FileName, input.Source)
 	}
-	if err != nil {
-		if errors.Is(err, ErrAlreadyExists) {
-			return CreatedProject{}, ErrAlreadyExists
+	var files PublishedFiles
+	id := input.DeploymentID
+	if !input.Empty {
+		if id == "" {
+			id = newID("dep")
 		}
-		return CreatedProject{}, fmt.Errorf("publish static site: %w", err)
+		if input.Preview {
+			files, err = s.publisher.PrepareDraft(ctx, slug, id, input.FileName, input.Source)
+		} else {
+			files, err = s.publisher.Publish(ctx, slug, input.FileName, input.Source)
+		}
+		if err != nil {
+			return CreatedProject{}, fmt.Errorf("publish static site: %w", err)
+		}
 	}
-
 	now := s.now().UTC().Truncate(time.Microsecond)
-	deployment := Deployment{
-		ID:         id,
-		Notes:      strings.TrimSpace(input.Notes),
-		Status:     "succeeded",
-		FileName:   input.FileName,
-		CreatedAt:  now,
-		FinishedAt: now,
-	}
-	if input.DeploymentID != "" {
-		deployment.ID = input.DeploymentID
-	}
-	value := Project{
-		ID:          newID("prj"),
-		OwnerID:     input.OwnerID,
-		OwnerEmail:  input.OwnerEmail,
-		Name:        name,
-		Slug:        slug,
-		Description: description,
-		Status:      "online",
-		CreatedAt:   now,
-		UpdatedAt:   now,
-		Deployments: []Deployment{deployment},
-	}
-
-	if input.Preview {
-		deployment.Status = "draft"
-		value.Status, value.Draft, value.Deployments = "draft", &deployment, nil
+	value.CreatedAt, value.UpdatedAt = now, now
+	if !input.Empty {
+		deployment := Deployment{ID: id, Notes: strings.TrimSpace(input.Notes), Status: "succeeded",
+			FileName: input.FileName, CreatedAt: now, FinishedAt: now}
+		if input.Preview {
+			deployment.Status = "draft"
+			value.Draft = &deployment
+		} else {
+			value.Status, value.Deployments = "online", []Deployment{deployment}
+		}
 	}
 	if err := s.store.Create(ctx, value); err != nil {
 		// 提交报错可能发生在事务已经成功之后，先确认结果再决定是否清理。
@@ -141,6 +128,9 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (CreatedProject
 		if lookupErr == nil && stored.ID == value.ID {
 			slog.WarnContext(ctx, "project commit confirmed after error", "slug", slug, "error", err)
 		} else {
+			if input.Empty {
+				return CreatedProject{}, fmt.Errorf("persist empty project: %w", err)
+			}
 			if !errors.Is(lookupErr, ErrNotFound) {
 				return CreatedProject{}, fmt.Errorf("publication outcome unknown; restart recovery required: %w", err)
 			}
@@ -159,8 +149,10 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (CreatedProject
 			return CreatedProject{}, fmt.Errorf("persist project: %w", err)
 		}
 	}
-	if err := s.publisher.CompletePublication(slug); err != nil {
-		slog.WarnContext(ctx, "publication complete; journal cleanup deferred", "slug", slug, "error", err)
+	if !input.Empty {
+		if err := s.publisher.CompletePublication(slug); err != nil {
+			slog.WarnContext(ctx, "publication complete; journal cleanup deferred", "slug", slug, "error", err)
+		}
 	}
 	return CreatedProject{Project: value, Files: files}, nil
 }

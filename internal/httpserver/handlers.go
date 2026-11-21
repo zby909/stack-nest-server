@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"mime"
 	"net/http"
 	"strings"
 	"time"
@@ -45,8 +46,12 @@ func (s *Server) ListProjects(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
-// CreateProject 检查磁盘后接收 HTML 或压缩包，记录成功、失败及实际发布体积。
+// CreateProject 按请求格式分派空项目登记或文件部署。
 func (s *Server) CreateProject(w http.ResponseWriter, r *http.Request) {
+	if mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); mediaType == "application/json" {
+		s.createEmptyProject(w, r)
+		return
+	}
 	event := newActivity(r, "upload")
 	defer s.finishActivity(r, event)
 	if !s.uploadMu.TryLock() {
