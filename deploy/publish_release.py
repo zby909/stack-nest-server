@@ -56,35 +56,49 @@ class GitHub:
                     raise
                 self.sleep(2 ** (attempt + 1))
 
-    # find 同时查找已发布版本和当前账号可见的草稿，不将草稿的 404 当作创建失败。
+    # find 优先采用已公开版本；同标签存在多个草稿时稳定选择最早的 ID。
     def find(self, version):
         root = f"repos/{self.repository}/releases"
+        matches = []
         try:
-            return self.get(root + "/tags/" + version)
+            release = self.get(root + "/tags/" + version)
+            if not release["draft"]:
+                return release
+            matches.append(release)
         except APIError as failure:
             if failure.status != 404:
                 raise
         page = 1
         while True:
             entries = self.get(root + f"?per_page=100&page={page}")
-            match = next((entry for entry in entries if entry["tag_name"] == version), None)
-            if match or len(entries) < 100:
-                return match
+            matches.extend(entry for entry in entries if entry["tag_name"] == version)
+            if len(entries) < 100:
+                return min(matches, key=lambda entry: (entry["draft"], entry["id"]), default=None)
             page += 1
 
-    # ensure 在变更响应丢失时先核对远端结果，避免重复创建或覆盖附件。
+    # observe 给 GitHub 读接口时间反映刚完成的写入。
+    def observe(self, read):
+        for delay in (0, 1, 2, 4, 8):
+            if delay:
+                self.sleep(delay)
+            if value := read():
+                return value
+        return None
+
+    # ensure 直接使用经校验的写响应；响应不确定或同名冲突时先等待读取确认。
     def ensure(self, label, read, write):
         for attempt in range(4):
             if value := read():
                 return value
             try:
-                write()
+                if value := write():
+                    return value
                 failure = APIError(0)
             except APIError as error:
                 failure = error
                 if not failure.retryable and failure.status != 422:
                     raise
-            if value := read():
+            if value := self.observe(read):
                 return value
             if not failure.retryable or attempt == 3:
                 raise failure
@@ -117,6 +131,16 @@ def collect(directory, version, repository):
     return files, manifest, f"<!-- stacknest-release:{version}:{identity} -->"
 
 
+# checked_asset 同时校验上传响应及远端清单中的文件名、字节数和摘要。
+def checked_asset(asset, name, files):
+    expected = files.get(name)
+    if not expected or asset.get("name") != name or asset.get("state") != "uploaded" or any(
+        asset.get(key) != expected[key] for key in ("size", "digest")
+    ):
+        raise ValueError("remote asset differs or is incomplete: " + name)
+    return asset
+
+
 # matching 确认草稿属于本次完全相同的构建，附件一旦存在就必须匹配，绝不覆盖。
 def matching(release, version, marker, files):
     if not release:
@@ -127,9 +151,7 @@ def matching(release, version, marker, files):
     if len({asset["name"] for asset in assets}) != len(assets):
         raise ValueError("duplicate release assets")
     for asset in assets:
-        expected = files.get(asset["name"])
-        if not expected or asset.get("state") != "uploaded" or any(asset.get(key) != expected[key] for key in ("size", "digest")):
-            raise ValueError("remote asset differs or is incomplete: " + asset["name"])
+        checked_asset(asset, asset["name"], files)
     if not release["draft"] and len(assets) != len(files):
         raise ValueError("published release is incomplete; refusing to modify it")
     return release
@@ -145,9 +167,9 @@ def publish(repository, version, directory, client=None):
     api = client or GitHub(repository)
     root = f"repos/{repository}/releases"
 
-    # read 验证每次观察到的远端状态，包括响应丢失后重新找到的草稿。
-    def read():
-        return matching(api.find(version), version, marker, files)
+    # verify 只接受属于本次构建且已有附件完整的版本。
+    def verify(value):
+        return matching(value, version, marker, files)
 
     source = manifest["sources"]["server"]["commit"]
     reference = api.get(f"repos/{repository}/git/ref/tags/{version}")["object"]
@@ -160,32 +182,62 @@ def publish(repository, version, directory, client=None):
     body = (marker + f"\n\nStackNest {version}\n\n"
             f"[安装说明](https://github.com/{repository}/blob/{source}/docs/deployment/INSTALL_RELEASE.md)\n\n"
             "包含平台部署包与 Linux / Windows / macOS 部署 CLI；附件均提供 SHA-256 校验。\n")
-    release = api.ensure("Create release draft", read, lambda: api.raw("POST", root, {
-        "tag_name": version, "name": "StackNest " + version, "body": body,
-        "draft": True, "prerelease": "-" in version,
-    }))
+    # create 使用成功响应里的草稿 ID，避免列表尚未同步时重复创建。
+    def create():
+        return verify(api.raw("POST", root, {
+            "tag_name": version, "name": "StackNest " + version, "body": body,
+            "draft": True, "prerelease": "-" in version,
+        }))
+
+    release = api.ensure("Create release draft", lambda: verify(api.find(version)), create)
     if not release["draft"]:
         return release
-    for name in sorted(files):
-        # uploaded 只有远端附件与本地产物摘要一致时才确认上传成功。
-        def uploaded(name=name):
-            current = read()
-            return next((asset for asset in current["assets"] if asset["name"] == name), None)
+    path = root + f"/{release['id']}"
 
-        api.ensure("Upload " + name, uploaded, lambda name=name: api.raw(
-            "POST", f"https://uploads.github.com/repos/{repository}/releases/{release['id']}/assets?name={name}",
-            file=Path(directory) / name))
-    if len(read()["assets"]) != len(files):
+    # pinned 始终按创建时返回或恢复的 ID 核对，列表中的另一个草稿不能接管上传。
+    def pinned():
+        try:
+            return verify(api.get(path))
+        except APIError as failure:
+            if failure.status == 404:
+                return None
+            raise
+
+    # uploaded 只在这个版本已校验的附件清单中查找。
+    def uploaded(name):
+        current = pinned()
+        if current:
+            return next((asset for asset in current["assets"] if asset["name"] == name), None)
+        return None
+
+    # upload 核对 GitHub 的上传回执，最终发布前还会重新读取整份清单。
+    def upload(name):
+        asset = api.raw("POST", f"https://uploads.github.com/{path}/assets?name={name}",
+                        file=Path(directory) / name)
+        return checked_asset(asset, name, files)
+
+    for name in sorted(files):
+        api.ensure("Upload " + name, lambda: uploaded(name), lambda: upload(name))
+
+    # ready 从固定版本重新读取全部附件；验证完整后才可公开。
+    def ready():
+        current = pinned()
+        return current if current and len(current["assets"]) == len(files) else None
+
+    if not api.observe(ready):
         raise ValueError("release assets are incomplete")
 
     # complete 已公开且附件完整才返回成功，发布响应丢失不重复上传。
     def complete():
-        current = read()
+        current = pinned()
         return current if current and not current["draft"] else None
 
-    return api.ensure("Publish verified release", complete, lambda: api.raw("PATCH", root + f"/{release['id']}", {
-        "draft": False, "make_latest": "false" if "-" in version else "true",
-    }))
+    # make_public 校验发布响应，必要时等待同一版本可见。
+    def make_public():
+        current = verify(api.raw("PATCH", path, {"draft": False, "make_latest": "false" if "-" in version else "true"}))
+        return current if not current["draft"] else None
+
+    return api.ensure("Publish verified release", complete, make_public)
 
 
 # main 只打印最终公开地址，凭据留在 gh 使用的进程环境中。

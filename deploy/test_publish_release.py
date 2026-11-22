@@ -42,6 +42,10 @@ class FakeGitHub(release.GitHub):
                 if not self.release or self.release["draft"]:
                     raise release.APIError(404)
                 return copy.deepcopy(self.release)
+            if path.endswith("/releases/10"):
+                if not self.release:
+                    raise release.APIError(404)
+                return copy.deepcopy(self.release)
             self.draft_lookups += 1
             return [copy.deepcopy(self.release)] if self.release else []
         operation = "upload" if file else "publish" if method == "PATCH" else "create"
@@ -60,7 +64,7 @@ class FakeGitHub(release.GitHub):
         else:
             self.release.update(payload)
         self.fault(operation, "after")
-        return copy.deepcopy(self.release)
+        return copy.deepcopy(self.release["assets"][-1] if file else self.release)
 
 
 class PublishReleaseTests(unittest.TestCase):
@@ -90,6 +94,56 @@ class PublishReleaseTests(unittest.TestCase):
     # publish 使用生产入口，检查从本地产物到最终公开状态的完整流程。
     def publish(self, client):
         return release.publish(REPOSITORY, VERSION, self.directory, client)
+
+    # test_created_id_survives_stale_lists 成功创建后，即使列表仍看不见也不再创建草稿。
+    def test_created_id_survives_stale_lists(self):
+        client = FakeGitHub()
+        client.find = lambda version: None
+        self.assertFalse(self.publish(client)["draft"])
+        self.assertEqual(client.writes.count("create"), 1)
+        self.assertEqual(len(client.uploads), 14)
+
+    # test_resume_oldest_matching_draft 验证先读到同标签空草稿时，仍从原 ID 继续。
+    def test_resume_oldest_matching_draft(self):
+        client = FakeGitHub([("upload", "before", 403)])
+        with self.assertRaises(release.APIError):
+            self.publish(client)
+        other = dict(copy.deepcopy(client.release), id=11)
+        original = client.raw
+
+        # 返回交错的草稿列表，同时记录真正接收附件的 ID。
+        def reordered_list(method, path, *args, **kwargs):
+            if method == "GET" and "?per_page" in path:
+                return [copy.deepcopy(other), copy.deepcopy(client.release)]
+            if method == "POST" and kwargs.get("file"):
+                self.assertIn("/releases/10/assets?", path)
+            return original(method, path, *args, **kwargs)
+        client.raw = reordered_list
+        self.assertEqual(self.publish(client)["id"], 10)
+        self.assertEqual(client.writes.count("create"), 1)
+        self.assertEqual(other["assets"], [])
+
+    # test_conflict_before_read_visibility 模拟上传已写入但返回 422，几次读取后才见到附件。
+    def test_conflict_before_read_visibility(self):
+        client = FakeGitHub()
+        original = client.raw
+        hidden = 0
+        injected = False
+
+        # 已传成功的首个附件短暂缺席读取结果，后续操作恢复真实数据。
+        def delayed_asset(method, path, *args, **kwargs):
+            nonlocal hidden, injected
+            value = original(method, path, *args, **kwargs)
+            if not injected and method == "POST" and kwargs.get("file"):
+                hidden, injected = 3, True
+                raise release.APIError(422)
+            if hidden and method == "GET" and path.endswith("/releases/10"):
+                hidden -= 1
+                value["assets"] = []
+            return value
+        client.raw = delayed_asset
+        self.assertFalse(self.publish(client)["draft"])
+        self.assertEqual(client.writes.count("upload"), 14)
 
     # test_lost_responses 变更已成功但响应为 502 时，只确认原结果，不重复创建或上传。
     def test_lost_responses(self):
@@ -143,7 +197,7 @@ class PublishReleaseTests(unittest.TestCase):
         for draft in (True, False):
             with self.subTest(draft=draft):
                 client = FakeGitHub()
-                client.release = {"tag_name": VERSION, "body": "manual release", "draft": draft, "assets": []}
+                client.release = {"id": 25, "tag_name": VERSION, "body": "manual release", "draft": draft, "assets": []}
                 with self.assertRaises(ValueError):
                     self.publish(client)
                 self.assertEqual(client.writes, [])
