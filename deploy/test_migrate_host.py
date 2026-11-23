@@ -3,7 +3,9 @@ from contextlib import nullcontext, redirect_stdout
 import argparse
 import io
 import json
+import os
 from pathlib import Path
+import subprocess
 import tarfile
 import tempfile
 import unittest
@@ -46,6 +48,36 @@ class MigrationTests(unittest.TestCase):
             "files": {path.relative_to(self.bundle).as_posix(): migration.digest(path)
                       for path in self.bundle.rglob("*") if path.is_file() and path.name != "manifest.json"},
         })
+
+    @unittest.skipUnless(migration.sys.platform.startswith("linux"), "使用 PostgreSQL 容器的 POSIX shell")
+    def test_restore_waits_for_tcp_after_bootstrap_socket(self):
+        """旧探活已通过、正式端口稍后才启动时，等到 TCP 可用再检查目标库和导入。"""
+        probe = self.root / "pg_isready"
+        probe.write_text("#!/bin/sh\nprintf '%s\\n' \"$*\" >> probes\n"
+                         "case \" $* \" in *' -h 127.0.0.1 '*) test -f listening;; *) exit 0;; esac\n")
+        pause = self.root / "sleep"
+        pause.write_text("#!/bin/sh\ntouch listening\n")
+        for program in (probe, pause):
+            program.chmod(0o700)
+        env = {**os.environ, "PATH": str(self.root) + ":" + os.environ["PATH"]}
+        stages = []
+
+        # 模拟 Docker exec，但用真实 shell 执行就绪探针。单纯等待或查询本地 socket 均无法通过。
+        def docker(args, *, stage, stdin=None):
+            stages.append(stage)
+            if "sh" in args:
+                subprocess.run(["sh", "-ec", args[-1]], cwd=self.root, env=env, check=True, timeout=5)
+            if "psql" in args:
+                self.assertTrue((self.root / "listening").is_file())
+                return "0\n"
+            if "pg_restore" in args:
+                self.assertEqual(stdin.read(), b"fixture")
+            return ""
+
+        with patch.object(migration, "run", side_effect=docker):
+            migration.restore_database(["docker", "compose"], self.bundle / "data/postgres.dump")
+        self.assertEqual(len((self.root / "probes").read_text().splitlines()), 2)
+        self.assertEqual(stages[-2:], ["check empty target database", "restore database"])
 
     # test_bundle_permissions 网络服务须可直接执行，凭据和其他迁移文件保持私有。
     def test_bundle_permissions(self):

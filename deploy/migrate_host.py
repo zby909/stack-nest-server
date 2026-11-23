@@ -331,11 +331,17 @@ def preview_configs(config, port):
 # restore_database 只向空白目标数据库恢复，失败时回滚该批 SQL。
 def restore_database(command, dump):
     run(command + ["up", "-d", "--wait", "--wait-timeout", "120", "postgres"], stage="start fresh database")
-    tables = run(command + ["exec", "-T", "postgres", "psql", "-U", "stacknest", "-d", "stacknest", "-Atc", "SELECT count(*) FROM pg_tables WHERE schemaname='public'"])
+    # 旧 Compose 用 Unix socket 探活，初始化用的临时 PostgreSQL 也会响应。恢复前等正式服务开放 TCP。
+    postgres = command + ["exec", "-T", "postgres"]
+    wait_tcp = ('attempt=0; until pg_isready -q -h 127.0.0.1 -U stacknest -d stacknest; do '
+                'attempt=$((attempt+1)); [ "$attempt" -lt 60 ] || exit 1; sleep 1; done')
+    run(postgres + ["sh", "-ec", wait_tcp], stage="wait for restored PostgreSQL TCP listener")
+    tables = run(postgres + ["psql", "-U", "stacknest", "-d", "stacknest", "-Atc",
+                             "SELECT count(*) FROM pg_tables WHERE schemaname='public'"], stage="check empty target database")
     if tables.strip() != "0":
         raise ValueError("target database is not empty")
     with dump.open("rb") as source:
-        run(command + ["exec", "-T", "postgres", "pg_restore", "-U", "stacknest", "-d", "stacknest", "--exit-on-error", "--single-transaction", "--no-owner", "--no-privileges"], stdin=source, stage="restore database")
+        run(postgres + ["pg_restore", "-U", "stacknest", "-d", "stacknest", "--exit-on-error", "--single-transaction", "--no-owner", "--no-privileges"], stdin=source, stage="restore database")
 
 
 # restore_files 将已校验的归档解压到目标命名卷。

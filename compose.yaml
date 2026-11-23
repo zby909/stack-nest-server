@@ -15,7 +15,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U stacknest -d stacknest"]
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "stacknest", "-d", "stacknest"]
       interval: 5s
       timeout: 3s
       retries: 20

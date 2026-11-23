@@ -92,7 +92,7 @@ def rehearsal_config(source, port):
             "postgres": {
                 "environment": {"POSTGRES_USER": "stacknest", "POSTGRES_DB": "stacknest", "POSTGRES_PASSWORD": password},
                 "volumes": ["postgres-data:/var/lib/postgresql/data"],
-                "healthcheck": {"test": ["CMD", "pg_isready", "-U", "stacknest", "-d", "stacknest"],
+                "healthcheck": {"test": ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "stacknest", "-d", "stacknest"],
                                 "interval": "2s", "timeout": "3s", "retries": 30},
             },
             "migrate": {

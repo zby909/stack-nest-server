@@ -35,6 +35,8 @@ class RestoreBackupTests(unittest.TestCase):
         config = drill.rehearsal_config(source, 19081)
         self.assertEqual(config["volumes"], {"postgres-data": {}, "stacknest-data": {}})
         self.assertEqual(set(config["services"]), {"postgres", "migrate", "stacknest", "nginx"})
+        health = config["services"]["postgres"]["healthcheck"]["test"]
+        self.assertEqual(health[health.index("-h") + 1], "127.0.0.1")
         env = config["services"]["stacknest"]["environment"]
         self.assertEqual(env["STACKNEST_AUTH_SECRET"], "original-auth-key")
         self.assertEqual(env["STACKNEST_SMTP_HOST"], "127.0.0.1")
