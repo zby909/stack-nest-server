@@ -26,7 +26,7 @@ def inventory(root: Path):
         if required[0].stat().st_size > 128 or required[1].stat().st_size > 8192:
             continue
         try:
-            if required[0].read_text().strip() != "stacknest-backup-v1":
+            if required[0].read_text().strip() not in ("stacknest-backup-v1", "stacknest-backup-v2"):
                 continue
             metadata = dict(line.split("=", 1) for line in required[1].read_text().splitlines() if "=" in line)
             created = dt.datetime.fromisoformat(metadata["created_at"].replace("Z", "+00:00"))

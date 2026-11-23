@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """把一份日常备份恢复到新的回环演练实例，便于验证数据库与文件。"""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -12,6 +13,7 @@ import socket
 import sys
 import tarfile
 
+from backup_config import config_bytes, load_snapshot
 from migrate_host import (backup_lock, check_layout, checked_project, digest, ensure_empty,
                           files_size, restore_database, restore_files, run, write_json)
 from upgrade_release import check_entry
@@ -29,19 +31,48 @@ def verify_backup(backup):
         file = backup / name
         if file.is_symlink() or not file.is_file():
             raise ValueError("备份缺少普通文件 " + name)
-    if (backup / "format").read_text(encoding="utf-8").strip() != "stacknest-backup-v1":
+    marker = (backup / "format").read_text(encoding="utf-8").strip()
+    if marker not in ("stacknest-backup-v1", "stacknest-backup-v2"):
         raise ValueError("不是已完成的 StackNest 日常备份")
+    required = ARCHIVES
+    if marker == "stacknest-backup-v2":
+        metadata = backup / "metadata"
+        if metadata.is_symlink() or not metadata.is_file() or metadata.stat().st_size > 8192:
+            raise ValueError("备份配置记录缺失或无效")
+        required = ARCHIVES | {"metadata"}
     verified = set()
     for line in (backup / "SHA256SUMS").read_text(encoding="utf-8").splitlines():
         checksum, _, name = line.partition("  ")
-        if name not in ARCHIVES or name in verified or not re.fullmatch(r"[a-f0-9]{64}", checksum):
+        if name not in required or name in verified or not re.fullmatch(r"[a-f0-9]{64}", checksum):
             raise ValueError("备份校验清单无效")
         if digest(backup / name) != checksum:
             raise ValueError("备份校验失败 " + name)
         verified.add(name)
-    if verified != ARCHIVES:
+    if verified != required:
         raise ValueError("备份校验清单不完整")
     return files_size(backup / "files.tar.gz")
+
+
+# original_config 自动读取同批快照；显式提供配置时也校验编号，兼容旧备份的三参数用法。
+def original_config(backup, source):
+    identifier = None
+    if (backup / "format").read_text("utf-8").strip() == "stacknest-backup-v2":
+        fields = dict(line.split("=", 1) for line in (backup / "metadata").read_text("utf-8").splitlines())
+        identifier = fields.get("config_sha256", "")
+        if not re.fullmatch(r"[0-9a-f]{64}", identifier):
+            raise ValueError("备份的配置快照编号无效")
+        if source is None:
+            return load_snapshot(backup.parent, identifier)
+    if source is None:
+        raise ValueError("旧备份需要显式指定备份时的私有 Compose 配置：备份目录 配置文件 演练目录")
+    source = source.resolve(strict=True)
+    if identifier and digest(source) == identifier:
+        return json.loads(source.read_bytes())
+    config = json.loads(run(["docker", "compose", "--env-file", "/dev/null", "-f", source,
+                             "config", "--format", "json"], stage="读取原 Compose 配置"))
+    if identifier and hashlib.sha256(config_bytes(config)).hexdigest() != identifier:
+        raise ValueError("所选配置与这份备份的配置快照编号不一致")
+    return config
 
 
 # rehearsal_config 使用原平台镜像与认证密钥，其余连接、卷和端口重新建立。
@@ -109,13 +140,11 @@ def report_images(command):
 # restore 在全新项目恢复数据库和文件，启动回环入口做验收。
 def restore(args):
     backup = args.backup.resolve(strict=True)
-    source = args.compose.resolve(strict=True)
     target = args.destination.absolute()
     if target.exists() or target.is_symlink():
         raise ValueError("演练目录必须是尚不存在的路径")
     expanded = verify_backup(backup)
-    config = json.loads(run(["docker", "compose", "--env-file", "/dev/null", "-f", source,
-                             "config", "--format", "json"], stage="读取原 Compose 配置"))
+    config = original_config(backup, args.compose)
     if config.get("name") == args.project:
         raise ValueError("请选择与原实例不同的 Compose 项目名")
     config = rehearsal_config(config, args.preview_port)
@@ -165,7 +194,7 @@ def restore(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("backup", type=Path, help="已完成的日常备份目录")
-    parser.add_argument("compose", type=Path, help="备份时的私有 Compose JSON")
+    parser.add_argument("compose", nargs="?", type=Path, help="备份时的私有 Compose 配置，旧备份必填")
     parser.add_argument("destination", type=Path, help="新的演练目录")
     parser.add_argument("--project", type=checked_project, required=True, help="新的 Compose 项目名")
     parser.add_argument("--preview-port", type=int, default=19080, help="回环预览端口")

@@ -1,5 +1,6 @@
 """用假 Docker 验证备份控制流，绝不操作真实容器或数据库。"""
 import io
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -28,6 +29,8 @@ def main(backup_script=None, status_script=None):
         (scripts / "backup.sh").write_bytes(backup_script.read_bytes().replace(b"\r\n", b"\n"))
         (scripts / "backup_status.py").write_bytes(status_script.read_bytes())
         (scripts / "app_exports.py").write_bytes(backup_script.with_name("app_exports.py").read_bytes())
+        for helper in ("backup_config.py", "resolve_compose.py"):
+            (scripts / helper).write_bytes(backup_script.with_name(helper).read_bytes())
         compose = root / "compose.yaml"
         compose.write_text("services: {}\n")
         files = root / "files.tar.gz"
@@ -45,11 +48,13 @@ import sys
 args = sys.argv[1:]
 with open(os.environ['MOCK_LOG'], 'a') as log: log.write(' '.join(args) + '\\n')
 failure = os.environ.get('MOCK_FAIL')
-if args[0] == 'inspect': print('true')
+if args[0] == 'inspect': print('v1.2.3' if '--type' in args else 'true')
 elif 'config' in args and '--services' in args: print('postgres\\nstacknest\\nrunner')
 elif 'apps-freeze' in args and failure == 'freeze': sys.exit(44)
 elif 'apps-thaw' in args and failure == 'thaw': sys.exit(46)
-elif 'config' in args and 'json' in args: print(json.dumps({'name': os.environ['MOCK_PROJECT']}))
+elif 'config' in args and 'json' in args:
+    print(json.dumps({'name': os.environ['MOCK_PROJECT'], 'services': {'stacknest': {
+        'image': 'local/mock:v1.2.3', 'environment': {'PRIVATE_VALUE': 'mock-backup-secret'}}}}))
 elif 'ps' in args: print('mock-container')
 elif 'pg_dump' in args:
     if failure == 'database': sys.exit(42)
@@ -71,6 +76,16 @@ elif 'up' in args and failure == 'restart': sys.exit(43)
         assert success.returncode == 0, success.stderr
         record = json.loads((status / "status.json").read_text())
         assert record["state"] == "succeeded" and record["retainedCount"] == 1
+        completed, = backups.glob("stacknest-*")
+        assert (completed / "format").read_text().strip() == "stacknest-backup-v2"
+        metadata = dict(line.split("=", 1) for line in (completed / "metadata").read_text().splitlines())
+        assert set(metadata) == {"config_sha256", "platform_version", "created_at"} and metadata["platform_version"] == "v1.2.3"
+        snapshot, = (backups / ".configs").glob("*.json")
+        assert snapshot.stem == metadata["config_sha256"] == hashlib.sha256(snapshot.read_bytes()).hexdigest()
+        assert "mock-backup-secret" in snapshot.read_text() and "mock-backup-secret" not in (status / "status.json").read_text()
+        assert snapshot.stat().st_mode & 0o777 == 0o600 and snapshot.parent.stat().st_mode & 0o777 == 0o700
+        assert "  metadata\n" in (completed / "SHA256SUMS").read_text()
+        original_mtime = snapshot.stat().st_mtime_ns
         last = record["lastSuccess"]
         calls = log.read_text().splitlines()
         freeze = next(i for i, call in enumerate(calls) if "apps-freeze" in call)
@@ -121,6 +136,7 @@ elif 'up' in args and failure == 'restart': sys.exit(43)
                 assert "stop" not in log.read_text()[len(before):]
                 inherited = subprocess.run(command, env={**env, "STACKNEST_BACKUP_LOCK_FD": str(lock.fileno())}, pass_fds=(lock.fileno(),), capture_output=True, text=True)
                 assert inherited.returncode == 0, inherited.stderr
+                assert list(snapshot.parent.glob("*.json")) == [snapshot] and snapshot.stat().st_mtime_ns == original_mtime
             print("backup_cross_directory_mutex_and_inherited_lock_passed=true")
         finally:
             lock_path.unlink(missing_ok=True)

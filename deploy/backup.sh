@@ -9,6 +9,7 @@ script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 status_dir=$(realpath -m "${3:-${STACKNEST_BACKUP_STATUS_DIR:-$(dirname "$compose_file")/backup-status}}")
 keep_count=${STACKNEST_BACKUP_KEEP:-14}
 [[ "$keep_count" =~ ^[1-9][0-9]*$ ]] || { echo 'invalid retention count' >&2; exit 2; }
+[[ "$backup_root" != / && "$status_dir" != / && "$backup_root/" != "$status_dir/"* && "$status_dir/" != "$backup_root/"* ]] || { echo 'backup and status directories must be separate' >&2; exit 2; }
 test -f "$compose_file"
 install -d -m 700 "$backup_root"
 exec 9>"$backup_root/.backup.lock"
@@ -71,12 +72,15 @@ else
     flock -n 8 || { echo 'another backup or migration is running for this instance' >&2; exit 3; }
 fi
 container_id=$("${compose[@]}" ps -q stacknest)
-if [[ -n "$container_id" ]] && [[ $(docker inspect -f '{{.State.Running}}' "$container_id") == true ]]; then was_running=true; fi
 name="stacknest-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 partial="$backup_root/.partial-$name"
 final="$backup_root/$name"
 mkdir "$partial"
 
+# 停服前固定实际解析出的配置；元数据与私有快照配对，后续命令也使用同一份快照。
+config_id=$("${compose[@]}" config --format json | python3 "$script_dir/backup_config.py" "$backup_root" "$partial/metadata" "$instance_project" "$container_id")
+compose=(docker compose --env-file /dev/null -p "$instance_project" -f "$backup_root/.configs/$config_id.json")
+if [[ -n "$container_id" ]] && [[ $(docker inspect -f '{{.State.Running}}' "$container_id") == true ]]; then was_running=true; fi
 stage=stop
 if [[ "$was_running" == true ]]; then "${compose[@]}" stop -t 35 stacknest >/dev/null; fi
 # 外层迁移程序冻结后传入标记，避免嵌套备份提前恢复应用。
@@ -93,9 +97,9 @@ stage=files
 stage=verify
 "${compose[@]}" exec -T postgres pg_restore --list < "$partial/postgres.dump" >/dev/null
 tar -tzf "$partial/files.tar.gz" >/dev/null
-printf 'stacknest-backup-v1\n' > "$partial/format"
-printf 'compose=%s\ncreated_at=%s\n' "$compose_file" "$(date -u +%FT%TZ)" > "$partial/metadata"
-(cd "$partial" && sha256sum postgres.dump files.tar.gz > SHA256SUMS)
+printf 'stacknest-backup-v2\n' > "$partial/format"
+printf 'created_at=%s\n' "$(date -u +%FT%TZ)" >> "$partial/metadata"
+(cd "$partial" && sha256sum postgres.dump files.tar.gz metadata > SHA256SUMS)
 stage=publish
 mv "$partial" "$final"
 printf 'backup=%s\n' "$final"
@@ -107,7 +111,7 @@ kept=0
 for item in "${backups[@]}"; do
     [[ "$item" == "$backup_root/stacknest-"* ]] || continue
     [[ $(basename "$item") =~ ^stacknest-[0-9]{8}T[0-9]{6}Z-[0-9]+$ ]] || continue
-    [[ -f "$item/format" && $(cat "$item/format") == stacknest-backup-v1 ]] || continue
+    [[ -f "$item/format" && $(cat "$item/format") =~ ^stacknest-backup-v[12]$ ]] || continue
     kept=$((kept + 1))
     if (( kept > keep_count )); then rm -rf -- "$item"; fi
 done

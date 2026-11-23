@@ -2,11 +2,16 @@
 import io
 import json
 from pathlib import Path
+import shutil
+import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import restore_backup as drill
+from backup_config import save_snapshot
 
 
 class RestoreBackupTests(unittest.TestCase):
@@ -56,9 +61,71 @@ class RestoreBackupTests(unittest.TestCase):
                 ), encoding="utf-8")
                 if filename.startswith("sites/"):
                     self.assertEqual(drill.verify_backup(backup), 5)
+                    with self.assertRaisesRegex(ValueError, "旧备份"):
+                        drill.original_config(backup, None)
+                    with patch.object(drill, "run", return_value=b'{"name":"original"}'):
+                        self.assertEqual(drill.original_config(backup, backup / "format"), {"name": "original"})
                     (backup / "postgres.dump").write_bytes(b"incomplete")
                     with self.assertRaisesRegex(ValueError, "备份校验失败"):
                         drill.verify_backup(backup)
                 else:
                     with self.assertRaisesRegex(ValueError, "unsafe path"):
                         drill.verify_backup(backup)
+
+    # 新备份使用内容编号，换机后可以自动配对，也可校验带来的原配置副本。
+    def test_paired_backup(self):
+        with tempfile.TemporaryDirectory() as path:
+            root = Path(path)
+            folder = root / "backup"
+            folder.mkdir()
+            first = {"name": "original", "services": {"stacknest": {"environment": {"KEY": "a$$b"}}}}
+            other = {"name": "changed", "services": first["services"]}
+            identifier = save_snapshot(root, first)
+            self.assertNotEqual(save_snapshot(root, other), identifier)
+            self.assertEqual(save_snapshot(root, dict(reversed(list(first.items())))), identifier)
+            (folder / "format").write_text("stacknest-backup-v2\n")
+            (folder / "postgres.dump").write_bytes(b"database")
+            with tarfile.open(folder / "files.tar.gz", "w:gz"):
+                pass
+            metadata = folder / "metadata"
+            metadata.write_text(f"created_at=2026-11-23T00:00:00Z\nconfig_sha256={identifier}\nplatform_version=v1.2.3\n")
+            names = sorted(drill.ARCHIVES | {"metadata"})
+            (folder / "SHA256SUMS").write_text("".join(f"{drill.digest(folder / name)}  {name}\n" for name in names))
+            self.assertEqual(drill.verify_backup(folder), 0)
+            self.assertEqual(drill.original_config(folder, None), first)
+            snapshot = root / ".configs" / (identifier + ".json")
+            copy = root / "saved-privately.json"
+            snapshot.rename(copy)
+            with self.assertRaisesRegex(ValueError, "缺少私有配置"):
+                drill.original_config(folder, None)
+            self.assertEqual(drill.original_config(folder, copy), first)
+            with patch.object(drill, "run", return_value=json.dumps(other).encode()):
+                with self.assertRaisesRegex(ValueError, "不一致"):
+                    drill.original_config(folder, folder / "format")
+            copy.rename(snapshot)
+            snapshot.write_bytes(b"{}")
+            with self.assertRaisesRegex(ValueError, "校验失败"):
+                drill.original_config(folder, None)
+            with self.assertRaisesRegex(ValueError, "校验失败"):
+                save_snapshot(root, first)
+            metadata.write_text("config_sha256=../private\n")
+            with self.assertRaisesRegex(ValueError, "备份校验失败"):
+                drill.verify_backup(folder)
+            with self.assertRaisesRegex(ValueError, "编号无效"):
+                drill.original_config(folder, None)
+
+    @unittest.skipUnless(sys.platform.startswith("linux") and shutil.which("docker"), "需要 Linux Docker Compose CLI")
+    def test_compose_reads_same_settings_from_snapshot(self):
+        """在真实 Compose 中往返相对挂载和含美元符号的值，避免快照改变备份目标。"""
+        with tempfile.TemporaryDirectory() as path:
+            root = Path(path)
+            source = root / "compose.json"
+            source.write_text(json.dumps({"name": "snapshot-test", "services": {"stacknest": {
+                "image": "example.invalid/mock:v1", "environment": {"KEY": "cost$$5"},
+                "volumes": ["./content:/data"]}}}))
+            command = ["docker", "compose", "--env-file", "/dev/null", "-p", "snapshot-test", "-f"]
+            current = json.loads(subprocess.check_output(command + [source, "config", "--format", "json"]))
+            snapshot = root / ".configs" / (save_snapshot(root, current) + ".json")
+            actual = json.loads(subprocess.check_output(command + [snapshot, "config", "--format", "json"]))
+            self.assertEqual(current, actual)
+            self.assertEqual(actual["services"]["stacknest"]["volumes"][0]["source"], str(root / "content"))

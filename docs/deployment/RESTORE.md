@@ -2,19 +2,20 @@
 
 完整恢复优先将 [迁移包](MIGRATION.md)导入空白实例。迁移包包含镜像、配置、数据库及业务文件。
 
-日常备份只保存数据库和业务文件。另存备份时的运行配置及平台版本，恢复时沿用其中的原认证密钥。
+日常备份保存数据库和业务文件，配套的私有配置按编号保存在备份根目录的 `.configs/`。复制整个备份目录时请包含这个隐藏目录。
 
 ## 演练日常备份
 
-在 Linux 宿主准备备份时的 [私有 Compose JSON](OPERATIONS.md#备份)及对应的本地平台镜像。演练目录和 Compose 项目名须是新的。
+在 Linux 宿主准备对应版本的平台镜像。演练目录和 Compose 项目名须是新的。
 
 ```bash
 sudo python3 deploy/restore_backup.py \
-  /备份目录/stacknest-时间 /配置目录/compose.resolved.json \
-  /opt/stacknest-restore-test --project stacknest-restore-test
+  /备份目录/stacknest-时间 /opt/stacknest-restore-test --project stacknest-restore-test
 ```
 
-工具校验摘要、恢复数据库和文件，再检查迁移状态及本地镜像。演练仅开放回环入口，默认不发送验证码，Docker 应用保持停止。
+工具会先校验数据摘要和配套配置，再创建演练实例。旧备份（`stacknest-backup-v1`）需要在备份目录和演练目录之间加上当时的私有 Compose 文件路径。新备份也可这样指定另存的配置，编号必须匹配。平台版本记录在 `metadata` 的 `platform_version`，自建镜像没有版本标签时为 `unknown`。
+
+恢复后工具检查数据库迁移和本地镜像。演练仅开放回环入口，默认不发送验证码，Docker 应用保持停止。
 
 在自己的电脑运行 `ssh -N -L 19080:127.0.0.1:19080 用户@服务器`。打开 `http://localhost:19080/api/health` 核对健康状态，用 `http://stack-nest-项目标识.localhost:19080` 检查已发布站点。结束后按脚本提示清理演练容器和卷，再移除演练目录里的私有配置。
 

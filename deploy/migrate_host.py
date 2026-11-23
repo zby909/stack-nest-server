@@ -232,7 +232,7 @@ def export_bundle(args):
     if len(platforms) != 1:
         raise ValueError("service images use different platforms")
     scripts = Path(__file__).resolve().parent
-    filenames = ["backup.sh", "backup_status.py", "app_exports.py", "migrate_host.py"]
+    filenames = ["backup.sh", "backup_config.py", "resolve_compose.py", "backup_status.py", "app_exports.py", "migrate_host.py"]
     if "tunnel" not in config["services"]:
         filenames.append("nginx/ssh.conf.template")
     if config["services"].get("runner", {}).get("environment", {}).get("STACKNEST_APP_EGRESS_POLICY"):

@@ -43,11 +43,11 @@ sudo env STACKNEST_COMPOSE_PROJECT=stacknest bash deploy/backup.sh \
 
 项目名换为自己的名称；摘要目录对应 `.env` 的 `STACKNEST_BACKUP_STATUS_DIR`。自定义启动参数时，resolve_compose.py 使用相同的 `--file`、`--env-file` 和 `--project`。
 
-配置快照含密码，私有保存。备份包括同一时点的数据库和业务文件，默认保留 14 份；备份期间 API 与运行应用短暂停止，然后恢复原状态。
+日常备份包括同一时点的数据库和业务文件，默认保留 14 份。备份期间 API 与运行应用短暂停止，然后恢复原状态。每份备份的 `metadata` 记录平台版本和配置编号。含密钥的配置独立保留在备份根目录的 `.configs/<编号>.json`，相同配置只存一份。移动单份备份时一并保存对应快照，保持目录 0700、文件 0600。
 
-服务恢复后，备份工具在摘要目录中保留一套按应用拆分的最新压缩包，供所有者下载。准备新副本时需要额外磁盘空间。升级旧实例时，将新版 `backup.sh`、`backup_status.py` 和 `app_exports.py` 一起放到定时任务实际使用的脚本目录。已有成功备份可直接运行 `sudo python3 deploy/app_exports.py /最近完整备份目录 /实际摘要目录`，无需暂停服务。
+服务恢复后，备份工具在摘要目录中生成各应用所有者可下载的数据包。准备副本需要额外磁盘空间。旧定时任务单独存放脚本时，从同一发布包同步 `backup.sh`、`backup_config.py`、`resolve_compose.py`、`backup_status.py` 和 `app_exports.py`。已有成功备份可运行 `sudo python3 deploy/app_exports.py /最近完整备份目录 /实际摘要目录` 生成下载副本。
 
-`.partial-` 是失败现场，不作为完整备份。日常备份不带镜像和运行配置；完整换机使用 [迁移包](MIGRATION.md)。恢复方法见 [恢复参考](RESTORE.md)。
+`.partial-` 开头的目录保留失败现场。日常备份的演练步骤见[恢复参考](RESTORE.md)。完整换机使用包含镜像的[迁移包](MIGRATION.md)。
 
 ### 每日备份
 

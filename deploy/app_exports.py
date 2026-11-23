@@ -117,7 +117,7 @@ def publish(folder, status):
     for name in ("format", "metadata", "SHA256SUMS", "files.tar.gz"):
         if (folder / name).is_symlink() or not (folder / name).is_file():
             raise ValueError("备份不完整")
-    if (folder / "format").read_text().strip() != "stacknest-backup-v1":
+    if (folder / "format").read_text().strip() not in ("stacknest-backup-v1", "stacknest-backup-v2"):
         raise ValueError("不支持该备份格式")
     metadata = dict(line.split("=", 1) for line in (folder / "metadata").read_text().splitlines() if "=" in line)
     instant = dt.datetime.fromisoformat(metadata["created_at"].replace("Z", "+00:00"))
