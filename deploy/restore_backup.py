@@ -13,7 +13,7 @@ import socket
 import sys
 import tarfile
 
-from backup_config import config_bytes, load_snapshot
+from backup_config import config_bytes, load_snapshot, service_image
 from migrate_host import (backup_lock, check_layout, checked_project, digest, ensure_empty,
                           files_size, restore_database, restore_files, run, write_json)
 from upgrade_release import check_entry
@@ -122,7 +122,7 @@ def rehearsal_config(source, port):
         },
     }
     for name, service in config["services"].items():
-        service.update(image=services[name]["image"], pull_policy="never")
+        service.update(image=service_image(source, name), pull_policy="never")
     return config
 
 

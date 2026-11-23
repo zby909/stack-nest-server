@@ -62,10 +62,33 @@ def load_snapshot(root, identifier):
     return json.loads(data)
 
 
+# service_image 优先使用明确的镜像引用，源码构建交由 Compose 按原项目名解析。
+def service_image(config, name):
+    service = config["services"][name]
+    if service.get("image"):
+        return service["image"]
+    if "build" not in service:
+        raise ValueError(f"配置缺少 {name} 的镜像或构建定义")
+    # 默认镜像名只取决于项目名和服务名；单服务描述避免列出依赖或传入部署凭据。
+    model = {"services": {name: {"build": "."}}}
+    try:
+        result = subprocess.run(
+            ["docker", "compose", "--env-file", "/dev/null", "-p", config["name"], "-f", "-", "config", "--images"],
+            input=config_bytes(model), capture_output=True, timeout=30,
+        )
+        images = result.stdout.decode("utf-8").split()
+    except (OSError, subprocess.TimeoutExpired, UnicodeError):
+        raise ValueError(f"无法解析原项目的 {name} 镜像") from None
+    if result.returncode or len(images) != 1:
+        raise ValueError(f"无法解析原项目的 {name} 镜像")
+    return images[0]
+
+
 # platform_version 从实际容器或本地镜像读取发布标签；源码镜像可以没有版本标签。
-def platform_version(image, container):
+def platform_version(config, container):
     command = ["docker", "inspect", "--type", "container" if container else "image", "--format",
-               '{{with index .Config.Labels "org.opencontainers.image.version"}}{{.}}{{end}}', container or image]
+               '{{with index .Config.Labels "org.opencontainers.image.version"}}{{.}}{{end}}',
+               container or service_image(config, "stacknest")]
     result = subprocess.run(command, capture_output=True, timeout=15)
     label = result.stdout.decode("ascii", errors="replace").strip()
     if not result.returncode and re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z.+_-]{0,95}", label):
@@ -85,7 +108,7 @@ def main():
         config = json.load(sys.stdin.buffer)
         if config.get("name") != args.project:
             raise ValueError("实际 Compose 项目与备份目标不一致")
-        version = platform_version(config["services"]["stacknest"]["image"], args.container)
+        version = platform_version(config, args.container)
         identifier = save_snapshot(args.root, config)
         write_private(args.metadata, f"config_sha256={identifier}\nplatform_version={version}\n")
     except (ValueError, OSError, KeyError, TypeError, subprocess.TimeoutExpired):

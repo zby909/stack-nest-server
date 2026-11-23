@@ -48,14 +48,21 @@ import sys
 args = sys.argv[1:]
 with open(os.environ['MOCK_LOG'], 'a') as log: log.write(' '.join(args) + '\\n')
 failure = os.environ.get('MOCK_FAIL')
-if args[0] == 'inspect': print('v1.2.3' if '--type' in args else 'true')
+if args[0] == 'inspect':
+    if '--type' in args and os.environ.get('MOCK_BUILD_ONLY'):
+        assert args[-1] == os.environ['MOCK_PROJECT']+'-stacknest'
+    print('v1.2.3' if '--type' in args else 'true')
+elif 'config' in args and '--images' in args:
+    assert json.load(sys.stdin) == {'services': {'stacknest': {'build': '.'}}}
+    print(os.environ['MOCK_PROJECT']+'-stacknest')
 elif 'config' in args and '--services' in args: print('postgres\\nstacknest\\nrunner')
 elif 'apps-freeze' in args and failure == 'freeze': sys.exit(44)
 elif 'apps-thaw' in args and failure == 'thaw': sys.exit(46)
 elif 'config' in args and 'json' in args:
+    image = {'build': {'context': '.'}} if os.environ.get('MOCK_BUILD_ONLY') else {'image': 'local/mock:v1.2.3'}
     print(json.dumps({'name': os.environ['MOCK_PROJECT'], 'services': {'stacknest': {
-        'image': 'local/mock:v1.2.3', 'environment': {'PRIVATE_VALUE': 'mock-backup-secret'}}}}))
-elif 'ps' in args: print('mock-container')
+        **image, 'environment': {'PRIVATE_VALUE': 'mock-backup-secret'}}}}))
+elif 'ps' in args: print('' if os.environ.get('MOCK_BUILD_ONLY') else 'mock-container')
 elif 'pg_dump' in args:
     if failure == 'database': sys.exit(42)
     sys.stdout.buffer.write(b'fake-pg-dump')
@@ -137,6 +144,12 @@ elif 'up' in args and failure == 'restart': sys.exit(43)
                 inherited = subprocess.run(command, env={**env, "STACKNEST_BACKUP_LOCK_FD": str(lock.fileno())}, pass_fds=(lock.fileno(),), capture_output=True, text=True)
                 assert inherited.returncode == 0, inherited.stderr
                 assert list(snapshot.parent.glob("*.json")) == [snapshot] and snapshot.stat().st_mtime_ns == original_mtime
+            build_backups = root / "build-backups"
+            build_run = subprocess.run(command[:3] + [str(build_backups), str(root / "build-status")],
+                                       env={**env, "MOCK_BUILD_ONLY": "1"}, capture_output=True, text=True)
+            assert build_run.returncode == 0, build_run.stderr
+            build_folder, = build_backups.glob("stacknest-*")
+            assert "platform_version=v1.2.3" in (build_folder / "metadata").read_text()
             print("backup_cross_directory_mutex_and_inherited_lock_passed=true")
         finally:
             lock_path.unlink(missing_ok=True)

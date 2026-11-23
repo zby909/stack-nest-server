@@ -6,7 +6,7 @@
 
 ## 演练日常备份
 
-在 Linux 宿主准备对应版本的平台镜像。演练目录和 Compose 项目名须是新的。
+在 Linux 宿主准备备份时使用的平台镜像。用源码部署时，演练会查找原 Compose 项目构建的本地镜像；重新构建过同名镜像的实例，需另行准备对应版本。演练目录和 Compose 项目名须是新的。
 
 ```bash
 sudo python3 deploy/restore_backup.py \

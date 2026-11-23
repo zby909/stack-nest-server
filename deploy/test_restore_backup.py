@@ -129,3 +129,25 @@ class RestoreBackupTests(unittest.TestCase):
             actual = json.loads(subprocess.check_output(command + [snapshot, "config", "--format", "json"]))
             self.assertEqual(current, actual)
             self.assertEqual(actual["services"]["stacknest"]["volumes"][0]["source"], str(root / "content"))
+
+    @unittest.skipUnless(sys.platform.startswith("linux") and shutil.which("docker"), "需要 Linux Docker Compose CLI")
+    def test_source_build_rehearses_with_original_project_images(self):
+        """真实 Compose 解析仅含 build 的服务，演练使用原项目的镜像，即使服务之间有依赖。"""
+        with tempfile.TemporaryDirectory() as path:
+            source = Path(path) / "compose.json"
+            model = {
+                "name": "original-source", "volumes": {"stacknest-data": {}, "postgres-data": {}},
+                "services": {"postgres": {"image": "postgres:17-alpine", "volumes": ["postgres-data:/var/lib/postgresql/data"]},
+                             "migrate": {"build": "."},
+                             "nginx": {"build": "."}, "stacknest": {
+                                 "build": ".", "depends_on": ["postgres"], "volumes": ["stacknest-data:/data"],
+                                 "environment": {"STACKNEST_AUTH_SECRET": "example", "STACKNEST_AUTH_ADMIN_EMAIL": "a@example.invalid"},
+                             }},
+            }
+            source.write_text(json.dumps(model))
+            command = ["docker", "compose", "--env-file", "/dev/null", "-f", source, "config"]
+            resolved = json.loads(subprocess.check_output(command + ["--format", "json"]))
+            original_images = set(subprocess.check_output(command + ["--images"], text=True).split())
+            rehearsed = drill.rehearsal_config(resolved, 19082)["services"]
+            self.assertEqual({service["image"] for service in rehearsed.values()}, original_images)
+            self.assertTrue(all("build" not in service and service["pull_policy"] == "never" for service in rehearsed.values()))
