@@ -26,11 +26,12 @@ const Lifetime = 24 * time.Hour
 const MetadataJSONLimit int64 = 64 << 10
 
 var (
-	ErrNotFound = errors.New("upload not found or expired")
-	ErrConflict = errors.New("upload offset or parameters changed")
-	ErrLimit    = errors.New("too many unfinished uploads")
-	ErrInvalid  = errors.New("invalid upload parameters")
-	ErrChecksum = errors.New("upload checksum mismatch")
+	ErrNotFound   = errors.New("upload not found or expired")
+	ErrConflict   = errors.New("upload offset or parameters changed")
+	ErrLimit      = errors.New("too many unfinished uploads")
+	ErrPublishing = errors.New("upload publication in progress")
+	ErrInvalid    = errors.New("invalid upload parameters")
+	ErrChecksum   = errors.New("upload checksum mismatch")
 )
 
 // Request 固定一次续传的文件和目标，客户端编号仅作幂等键，不作为权限凭据。
@@ -59,13 +60,15 @@ type Ticket struct {
 	ResultID   string    `json:"resultId,omitempty"`
 }
 
-// Store 适用于单实例服务；短暂串行写入，文件只保存在静态目录之外。
+// Store 将临时文件保存在静态目录外，发布期间仍允许其他任务查询和续传。
 type Store struct {
-	dir     string
-	guard   *storage.Guard
-	maxSize int64
-	mu      sync.Mutex
-	now     func() time.Time
+	dir        string
+	guard      *storage.Guard
+	maxSize    int64
+	mu         sync.Mutex
+	publishing string // 受 mu 保护；单实例每次只校验并发布一个归档。
+	published  chan struct{}
+	now        func() time.Time
 }
 
 // New 使用应用数据卷，未完成文件不进入站点和数据库备份。
@@ -182,6 +185,24 @@ func (s *Store) Get(id, owner string) (Ticket, error) {
 	return s.read(id, owner)
 }
 
+// ForCompletion 重复确认时等待同一任务已开始的发布，其他任务始终可以查询进度。
+func (s *Store) ForCompletion(ctx context.Context, id, owner string) (Ticket, error) {
+	s.mu.Lock()
+	ticket, err := s.read(id, owner)
+	done := s.published
+	wait := err == nil && ticket.ResultID == "" && s.publishing == id
+	s.mu.Unlock()
+	if !wait {
+		return ticket, err
+	}
+	select {
+	case <-ctx.Done():
+		return Ticket{}, ctx.Err()
+	case <-done:
+		return s.Get(id, owner)
+	}
+}
+
 // Append 仅提交完整分片，偏移不符时不写入，断线残片允许重传。
 func (s *Store) Append(ctx context.Context, id, owner string, offset int64, data []byte) (Ticket, error) {
 	s.mu.Lock()
@@ -228,20 +249,38 @@ func (s *Store) Append(ctx context.Context, id, owner string, offset int64, data
 	return ticket, nil
 }
 
-// Publish 校验整个文件并持久化完成收据；回调须用上传编号保证发布幂等。
-func (s *Store) Publish(ctx context.Context, id, owner string, publish func(Ticket, io.Reader) (string, error)) (Ticket, error) {
+// beginPublish 固定完整归档；重复请求可直接取回原收据。
+func (s *Store) beginPublish(id, owner string) (Ticket, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ticket, err := s.read(id, owner)
-	if err != nil {
-		return Ticket{}, err
-	}
-	if ticket.ResultID != "" {
-		return ticket, nil
+	if err != nil || ticket.ResultID != "" {
+		return ticket, err
 	}
 	if ticket.Offset != ticket.Request.Size {
 		return ticket, ErrConflict
 	}
+	if s.publishing != "" {
+		return ticket, ErrPublishing
+	}
+	s.publishing = id
+	s.published = make(chan struct{})
+	return ticket, nil
+}
+
+// Publish 在元数据锁外校验和发布；回调须用上传编号保证发布幂等。
+func (s *Store) Publish(ctx context.Context, id, owner string, publish func(Ticket, io.Reader) (string, error)) (Ticket, error) {
+	ticket, err := s.beginPublish(id, owner)
+	if err != nil || ticket.ResultID != "" {
+		return ticket, err
+	}
+	defer func() {
+		s.mu.Lock()
+		s.publishing = ""
+		close(s.published)
+		s.published = nil
+		s.mu.Unlock()
+	}()
 	file, err := os.Open(filepath.Join(s.dir, id, "archive"))
 	if err != nil {
 		return ticket, err
@@ -261,7 +300,10 @@ func (s *Store) Publish(ctx context.Context, id, owner string, publish func(Tick
 	if err != nil {
 		return ticket, err
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	ticket.ResultID = resultID
+	ticket.ExpiresAt = s.now().UTC().Add(Lifetime)
 	if err := s.save(ticket); err != nil {
 		return Ticket{}, err
 	}
@@ -276,6 +318,9 @@ func (s *Store) Delete(id, owner string) error {
 	defer s.mu.Unlock()
 	if _, err := s.read(id, owner); err != nil {
 		return err
+	}
+	if s.publishing == id {
+		return ErrPublishing
 	}
 	return os.RemoveAll(filepath.Join(s.dir, id))
 }
@@ -315,7 +360,7 @@ func (s *Store) read(id, owner string) (Ticket, error) {
 	if ticket.Request.ID != id || s.Validate(ticket.Request) != nil || !project.ValidSlug(ticket.TargetSlug) || ticket.Offset < 0 || ticket.Offset > ticket.Request.Size {
 		return Ticket{}, ErrInvalid
 	}
-	if !s.now().Before(ticket.ExpiresAt) {
+	if s.publishing != id && !s.now().Before(ticket.ExpiresAt) {
 		if err := os.RemoveAll(dir); err != nil {
 			return Ticket{}, err
 		}

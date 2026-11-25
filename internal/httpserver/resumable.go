@@ -161,8 +161,13 @@ func (s *Server) DeleteUpload(w http.ResponseWriter, r *http.Request, id string)
 // CompleteUpload 使用固定部署编号确认发布结果，连接断开后仍完成已开始的事务。
 func (s *Server) CompleteUpload(w http.ResponseWriter, r *http.Request, id string) {
 	user := s.requestUser(r)
-	if _, err := s.uploads.Get(id, s.uploadOwner(r)); err != nil {
+	ticket, err := s.uploads.ForCompletion(r.Context(), id, s.uploadOwner(r))
+	if err != nil {
 		s.writeUploadError(w, r, err)
+		return
+	}
+	if ticket.ResultID != "" {
+		s.writeUploadResult(w, r, ticket)
 		return
 	}
 	if !s.uploadMu.TryLock() {
@@ -173,7 +178,7 @@ func (s *Server) CompleteUpload(w http.ResponseWriter, r *http.Request, id strin
 	defer s.uploadMu.Unlock()
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Minute)
 	defer cancel()
-	ticket, err := s.uploads.Publish(ctx, id, s.uploadOwner(r), func(ticket resumable.Ticket, source io.Reader) (string, error) {
+	ticket, err = s.uploads.Publish(ctx, id, s.uploadOwner(r), func(ticket resumable.Ticket, source io.Reader) (string, error) {
 		input := ticket.Request
 		action := "upload"
 		if input.Kind == "update" {
@@ -226,11 +231,16 @@ func (s *Server) CompleteUpload(w http.ResponseWriter, r *http.Request, id strin
 		s.writeUploadError(w, r, err)
 		return
 	}
-	value, err := s.projects.Get(ctx, ticket.TargetSlug)
+	s.writeUploadResult(w, r.WithContext(ctx), ticket)
+}
+
+// writeUploadResult 再次核对所有权和保留版本，安全地返回当前确认或重试的结果。
+func (s *Server) writeUploadResult(w http.ResponseWriter, r *http.Request, ticket resumable.Ticket) {
+	value, err := s.projects.Get(r.Context(), ticket.TargetSlug)
 	if grant, ok := deploymentGrant(r); ok && err == nil && (value.ID != grant.ProjectID || value.OwnerID != grant.OwnerID) {
 		err = project.ErrNotFound
 	}
-	if err == nil && (value.ID != ticket.ResultID || !canManageProject(user, value)) {
+	if err == nil && (value.ID != ticket.ResultID || !canManageProject(s.requestUser(r), value)) {
 		err = project.ErrNotFound
 	}
 	if err != nil {
@@ -238,11 +248,11 @@ func (s *Server) CompleteUpload(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 	// 完成收据可能比草稿保留更久，不能把后来上传的版本当作本次结果返回。
-	if _, retained := project.VersionSlot(value, "dep-"+id); !retained {
+	if _, retained := project.VersionSlot(value, "dep-"+ticket.Request.ID); !retained {
 		writeJSON(w, http.StatusConflict, generated.ErrorResponse{Error: "本次上传的版本已被替换、丢弃或清理，请查看项目版本记录"})
 		return
 	}
-	writeJSON(w, http.StatusOK, s.toProjectResponse(r.WithContext(ctx), value))
+	writeJSON(w, http.StatusOK, s.toProjectResponse(r, value))
 }
 
 // writeUploadError 将续传错误映射为可操作反馈，其他项目错误沿用统一处理。
@@ -253,6 +263,9 @@ func (s *Server) writeUploadError(w http.ResponseWriter, r *http.Request, err er
 		code, message = 404, "上传记录不存在或已过期，请重新选择文件上传"
 	case errors.Is(err, resumable.ErrConflict):
 		code, message = 409, "上传进度或参数已变化，请查询进度后继续"
+	case errors.Is(err, resumable.ErrPublishing):
+		w.Header().Set("Retry-After", "5")
+		code, message = 429, "发布正在处理中，请稍后重试"
 	case errors.Is(err, resumable.ErrLimit):
 		code, message = 429, "未完成上传数量已达上限，请先放弃其他上传或等待过期清理"
 	case errors.Is(err, resumable.ErrInvalid):

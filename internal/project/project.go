@@ -100,8 +100,9 @@ type CreatedProject struct {
 
 // Store 定义 Project 业务真正需要的持久化能力。
 type Store interface {
-	List(ctx context.Context) ([]Project, error)
+	List(ctx context.Context, actor Actor) ([]Project, error)
 	Get(ctx context.Context, slug string) (Project, error)
+	GetByDeployment(ctx context.Context, id string) (Project, error)
 	Create(ctx context.Context, project Project) error
 	ReplaceDeployment(ctx context.Context, slug, ownerID, expectedID string, deployment Deployment) error
 	SaveDraft(ctx context.Context, slug, ownerID, expectedID, replaceDraftID string, deployment Deployment) error
@@ -115,6 +116,12 @@ type Actor struct {
 	ID        string
 	IsAdmin   bool
 	ProjectID string // 部署凭据绑定不可变项目 ID，阻止同名项目删除重建后复用。
+}
+
+// SiteAccess 是启动时恢复站点访问标记所需的最小记录。
+type SiteAccess struct {
+	Slug   string
+	Status string
 }
 
 // Publisher 定义静态项目文件的发布能力。

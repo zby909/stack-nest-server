@@ -78,12 +78,33 @@ func (s *testStore) ReplaceDeployment(ctx context.Context, slug, ownerID, expect
 }
 
 // List 返回测试中已持久化的项目。
-func (s *testStore) List(context.Context) ([]project.Project, error) {
+func (s *testStore) List(_ context.Context, actor project.Actor) ([]project.Project, error) {
 	values := make([]project.Project, 0, len(s.values))
 	for _, value := range s.values {
-		values = append(values, value)
+		if (actor.IsAdmin || actor.ID == value.OwnerID) && (actor.ProjectID == "" || actor.ProjectID == value.ID) {
+			values = append(values, value)
+		}
 	}
 	return values, nil
+}
+
+// ListSiteAccess 读取所有测试项目的访问状态供启动恢复。
+func (s *testStore) ListSiteAccess(context.Context) ([]project.SiteAccess, error) {
+	var sites []project.SiteAccess
+	for _, v := range s.values {
+		sites = append(sites, project.SiteAccess{Slug: v.Slug, Status: v.Status})
+	}
+	return sites, nil
+}
+
+// GetByDeployment 返回持有该版本的测试项目。
+func (s *testStore) GetByDeployment(_ context.Context, id string) (project.Project, error) {
+	for _, value := range s.values {
+		if _, found := project.VersionSlot(value, id); found {
+			return value, nil
+		}
+	}
+	return project.Project{}, project.ErrNotFound
 }
 
 // Get 模拟按 slug 查询项目。

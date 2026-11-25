@@ -26,8 +26,7 @@ func (s *Server) GetOpenAPISpec(w http.ResponseWriter, r *http.Request) {
 
 // ListProjects 返回当前用户可管理的项目；管理员可查看全部。
 func (s *Server) ListProjects(w http.ResponseWriter, r *http.Request) {
-	user := s.requestUser(r)
-	values, err := s.projects.List(r.Context())
+	values, err := s.projects.List(r.Context(), s.deploymentActor(r))
 	if err != nil {
 		slog.ErrorContext(r.Context(), "list projects", "error", err)
 		writeJSON(w, http.StatusInternalServerError, generated.ErrorResponse{Error: "项目列表加载失败"})
@@ -38,9 +37,6 @@ func (s *Server) ListProjects(w http.ResponseWriter, r *http.Request) {
 		Projects: make([]generated.Project, 0, len(values)),
 	}
 	for _, value := range values {
-		if !auth.IsAdmin(user.Role) && value.OwnerID != user.ID {
-			continue
-		}
 		response.Projects = append(response.Projects, s.toProjectResponse(r, value))
 	}
 	writeJSON(w, http.StatusOK, response)

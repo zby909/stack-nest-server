@@ -158,16 +158,15 @@ func VersionSlot(value Project, id string) (string, bool) {
 
 // OpenPreview 在版本锁内打开目录句柄，后续发布切换也不会让同一请求读到另一版。
 func (s *Service) OpenPreview(ctx context.Context, id string) (*os.Root, error) {
-	s.writeMu.Lock()
-	defer s.writeMu.Unlock()
-	values, err := s.store.List(ctx)
+	s.writeMu.RLock()
+	defer s.writeMu.RUnlock()
+	value, err := s.store.GetByDeployment(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	for _, value := range values {
-		if slot, ok := VersionSlot(value, id); ok && value.Status != "paused" {
-			return s.publisher.OpenVersion(value.Slug, slot)
-		}
+	slot, ok := VersionSlot(value, id)
+	if !ok || value.Status == "paused" {
+		return nil, ErrNotFound
 	}
-	return nil, ErrNotFound
+	return s.publisher.OpenVersion(value.Slug, slot)
 }

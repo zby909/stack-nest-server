@@ -62,12 +62,24 @@ func newMemoryStore() *memoryStore {
 	return &memoryStore{projects: make(map[string]project.Project)}
 }
 
-func (s *memoryStore) List(context.Context) ([]project.Project, error) {
+func (s *memoryStore) List(_ context.Context, actor project.Actor) ([]project.Project, error) {
 	values := make([]project.Project, 0, len(s.projects))
 	for _, value := range s.projects {
-		values = append(values, value)
+		if (actor.IsAdmin || actor.ID == value.OwnerID) && (actor.ProjectID == "" || actor.ProjectID == value.ID) {
+			values = append(values, value)
+		}
 	}
 	return values, nil
+}
+
+// GetByDeployment 返回持有该版本的测试项目。
+func (s *memoryStore) GetByDeployment(_ context.Context, id string) (project.Project, error) {
+	for _, value := range s.projects {
+		if _, found := project.VersionSlot(value, id); found {
+			return value, nil
+		}
+	}
+	return project.Project{}, project.ErrNotFound
 }
 
 func (s *memoryStore) Get(_ context.Context, slug string) (project.Project, error) {

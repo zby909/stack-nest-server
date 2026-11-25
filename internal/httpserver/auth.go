@@ -37,29 +37,43 @@ type loginCounter struct {
 	count int
 	reset time.Time
 }
+
+const maxLoginCounters = 2048
+
 type loginLimiter struct {
 	mu       sync.Mutex
 	counters map[string]loginCounter
+	order    []string
+	now      func() time.Time
 }
 
 // newLoginLimiter 创建按客户端 IP 计数的短时登录限流器。
-func newLoginLimiter() *loginLimiter { return &loginLimiter{counters: make(map[string]loginCounter)} }
+func newLoginLimiter() *loginLimiter {
+	return &loginLimiter{counters: make(map[string]loginCounter), now: time.Now}
+}
 
 // allow 在一分钟内限制同一客户端对登录端点的请求数量。
 func (l *loginLimiter) allow(key string, max int) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	now := time.Now()
-	if len(l.counters) > 2048 {
-		for key, counter := range l.counters {
-			if now.After(counter.reset) {
-				delete(l.counters, key)
-			}
+	now := l.now()
+	// 窗口从首次请求开始固定一分钟，按创建顺序移除已到期的记录。
+	for len(l.order) > 0 {
+		oldest := l.order[0]
+		if now.Before(l.counters[oldest].reset) {
+			break
 		}
+		delete(l.counters, oldest)
+		l.order[0] = ""
+		l.order = l.order[1:]
 	}
-	counter := l.counters[key]
-	if now.After(counter.reset) {
+	counter, exists := l.counters[key]
+	if !exists {
+		if len(l.counters) >= maxLoginCounters {
+			return false
+		}
 		counter = loginCounter{reset: now.Add(time.Minute)}
+		l.order = append(l.order, key)
 	}
 	if counter.count >= max {
 		return false
@@ -188,6 +202,7 @@ func requestIP(r *http.Request) string {
 // RequestLoginCode 请求邮件验证码，不暴露邮箱是否在白名单中。
 func (s *Server) RequestLoginCode(w http.ResponseWriter, r *http.Request) {
 	if !s.limiter.allow("request:"+requestIP(r), 10) {
+		w.Header().Set("Retry-After", "60")
 		writeJSON(w, http.StatusTooManyRequests, generated.ErrorResponse{Error: "请求过于频繁，请稍后重试"})
 		return
 	}
@@ -210,6 +225,7 @@ func (s *Server) RequestLoginCode(w http.ResponseWriter, r *http.Request) {
 // VerifyLoginCode 校验一次性验证码并建立会话。
 func (s *Server) VerifyLoginCode(w http.ResponseWriter, r *http.Request) {
 	if !s.limiter.allow("verify:"+requestIP(r), 15) {
+		w.Header().Set("Retry-After", "60")
 		writeJSON(w, http.StatusTooManyRequests, generated.ErrorResponse{Error: "请求过于频繁，请稍后重试"})
 		return
 	}

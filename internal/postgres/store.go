@@ -13,6 +13,7 @@ import (
 
 	entdb "stacknest/server/internal/ent"
 	entdeployment "stacknest/server/internal/ent/deployment"
+	"stacknest/server/internal/ent/predicate"
 	entproject "stacknest/server/internal/ent/project"
 	"stacknest/server/internal/project"
 )
@@ -57,21 +58,32 @@ func (s *Store) Ping(ctx context.Context) error {
 	return s.db.PingContext(ctx)
 }
 
-// List 返回全部项目，按更新时间倒序，并加载部署记录。
-func (s *Store) List(ctx context.Context) ([]project.Project, error) {
-	rows, err := s.client.Project.
-		Query().
-		Order(entdb.Desc(entproject.FieldUpdatedAt)).
-		WithDeployments(func(query *entdb.DeploymentQuery) {
-			query.Order(entdb.Desc(entdeployment.FieldCreatedAt))
-		}).
-		All(ctx)
+// projectsWithVersions 按同一顺序加载版本，供列表、详情和预览判断当前版与上一版。
+func (s *Store) projectsWithVersions() *entdb.ProjectQuery {
+	return s.client.Project.Query().WithDeployments(func(query *entdb.DeploymentQuery) {
+		query.Order(entdb.Desc(entdeployment.FieldCreatedAt))
+	})
+}
+
+// List 在加载版本和邮箱前按所有者限制项目范围。
+func (s *Store) List(ctx context.Context, actor project.Actor) ([]project.Project, error) {
+	query := s.projectsWithVersions()
+	if !actor.IsAdmin {
+		query.Where(entproject.OwnerUserIDEQ(actor.ID))
+	}
+	if actor.ProjectID != "" {
+		query.Where(entproject.IDEQ(actor.ProjectID))
+	}
+	rows, err := query.Order(entdb.Desc(entproject.FieldUpdatedAt), entdb.Asc(entproject.FieldID)).All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("query projects: %w", err)
 	}
 
 	values := make([]project.Project, 0, len(rows))
-	emails, err := s.ownerEmails(ctx)
+	if len(rows) == 0 {
+		return values, nil
+	}
+	emails, err := s.ownerEmails(ctx, rows)
 	if err != nil {
 		return nil, err
 	}
@@ -83,26 +95,40 @@ func (s *Store) List(ctx context.Context) ([]project.Project, error) {
 	return values, nil
 }
 
+// ListSiteAccess 只读取重建访问标记所需的列。
+func (s *Store) ListSiteAccess(ctx context.Context) ([]project.SiteAccess, error) {
+	var sites []project.SiteAccess
+	err := s.client.Project.Query().Select(entproject.FieldSlug, entproject.FieldStatus).Scan(ctx, &sites)
+	return sites, err
+}
+
 // Get 按 slug 查询项目并加载部署记录。
 func (s *Store) Get(ctx context.Context, slug string) (project.Project, error) {
-	row, err := s.client.Project.
-		Query().
-		Where(entproject.SlugEQ(slug)).
-		WithDeployments(func(query *entdb.DeploymentQuery) {
-			query.Order(entdb.Desc(entdeployment.FieldCreatedAt))
-		}).
-		Only(ctx)
+	value, err := s.findProject(ctx, entproject.SlugEQ(slug))
+	if err != nil {
+		return project.Project{}, err
+	}
+	if err := s.db.QueryRowContext(ctx, "SELECT email FROM auth_users WHERE id=$1", value.OwnerID).Scan(&value.OwnerEmail); err != nil {
+		return project.Project{}, fmt.Errorf("query project owner: %w", err)
+	}
+	return value, nil
+}
+
+// GetByDeployment 按部署主键定位预览所在项目，无需读取其他项目和所有者邮箱。
+func (s *Store) GetByDeployment(ctx context.Context, id string) (project.Project, error) {
+	return s.findProject(ctx, entproject.HasDeploymentsWith(entdeployment.IDEQ(id)))
+}
+
+// findProject 统一单项目的版本加载和未找到结果。
+func (s *Store) findProject(ctx context.Context, match predicate.Project) (project.Project, error) {
+	row, err := s.projectsWithVersions().Where(match).Only(ctx)
 	if entdb.IsNotFound(err) {
 		return project.Project{}, project.ErrNotFound
 	}
 	if err != nil {
 		return project.Project{}, fmt.Errorf("query project: %w", err)
 	}
-	value := toProject(row)
-	if err := s.db.QueryRowContext(ctx, "SELECT email FROM auth_users WHERE id=$1", value.OwnerID).Scan(&value.OwnerEmail); err != nil {
-		return project.Project{}, fmt.Errorf("query project owner: %w", err)
-	}
-	return value, nil
+	return toProject(row), nil
 }
 
 // Create 使用事务同时写入项目和部署记录。
@@ -215,14 +241,21 @@ func toProject(row *entdb.Project) project.Project {
 	}
 }
 
-// ownerEmails 批量读取项目所有者邮箱，避免项目列表产生逐项查询。
-func (s *Store) ownerEmails(ctx context.Context) (map[string]string, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT id,email FROM auth_users")
+// ownerEmails 只查询本次列表涉及的所有者，一次取回邮箱。
+func (s *Store) ownerEmails(ctx context.Context, projects []*entdb.Project) (map[string]string, error) {
+	ids := make([]string, 0, len(projects))
+	emails := make(map[string]string)
+	for _, p := range projects {
+		if _, seen := emails[p.OwnerUserID]; !seen {
+			ids = append(ids, p.OwnerUserID)
+			emails[p.OwnerUserID] = ""
+		}
+	}
+	rows, err := s.db.QueryContext(ctx, "SELECT id,email FROM auth_users WHERE id = ANY($1::varchar[])", ids)
 	if err != nil {
 		return nil, fmt.Errorf("query project owner emails: %w", err)
 	}
 	defer rows.Close()
-	emails := make(map[string]string)
 	for rows.Next() {
 		var id, email string
 		if err := rows.Scan(&id, &email); err != nil {

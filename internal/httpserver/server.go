@@ -53,7 +53,7 @@ type ProjectService interface {
 	FilesAs(ctx context.Context, slug string, actor project.Actor, deploymentID string) ([]project.PublishedFile, error)
 	FileUsageAs(ctx context.Context, expected project.Project, actor project.Actor) (map[string]project.PublishedFiles, error)
 	SetAccessAs(ctx context.Context, slug string, actor project.Actor, paused bool, expectedAt time.Time) (project.Project, error)
-	List(ctx context.Context) ([]project.Project, error)
+	List(ctx context.Context, actor project.Actor) ([]project.Project, error)
 	Get(ctx context.Context, slug string) (project.Project, error)
 	Create(ctx context.Context, input project.CreateInput) (project.CreatedProject, error)
 	DeleteAs(ctx context.Context, slug string, actor project.Actor) error

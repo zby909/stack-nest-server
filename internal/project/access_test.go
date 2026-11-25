@@ -46,7 +46,7 @@ func TestPausedProjectKeepsVersions(t *testing.T) {
 	if err := os.Remove(marker); err != nil {
 		t.Fatal(err)
 	}
-	if err := deployer.RecoverAccess(context.Background(), store.List); err != nil {
+	if err := deployer.RecoverAccess(context.Background(), store.ListSiteAccess); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(marker); err != nil {
@@ -112,7 +112,7 @@ func TestAccessCommitRecovery(t *testing.T) {
 					}
 				}
 				fault.uncertain = false
-				if err := deployer.RecoverAccess(context.Background(), store.List); err != nil {
+				if err := deployer.RecoverAccess(context.Background(), store.ListSiteAccess); err != nil {
 					t.Fatal(err)
 				}
 				_, statErr := os.Stat(marker)

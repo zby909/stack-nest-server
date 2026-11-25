@@ -68,6 +68,10 @@ func TestStoreIntegration(t *testing.T) {
 	if got.ID != value.ID || got.OwnerID != owner.ID || got.OwnerEmail != owner.Email || len(got.Deployments) != 1 {
 		t.Fatalf("unexpected project: %+v", got)
 	}
+	preview, err := store.GetByDeployment(ctx, value.Deployments[0].ID)
+	if err != nil || preview.ID != value.ID || project.CurrentID(preview) != value.Deployments[0].ID {
+		t.Fatalf("preview project lookup: %+v %v", preview, err)
+	}
 	for i := 1; i <= 3; i++ {
 		next := project.Deployment{ID: fmt.Sprintf("%s-revision-%d", value.ID, i), Status: "succeeded", FileName: "updated.zip", CreatedAt: now.Add(time.Duration(i) * time.Second), FinishedAt: now.Add(time.Duration(i) * time.Second)}
 		currentID := got.Deployments[0].ID
@@ -86,6 +90,9 @@ func TestStoreIntegration(t *testing.T) {
 		}
 	}
 
+	if _, err := store.GetByDeployment(ctx, value.Deployments[0].ID); err != project.ErrNotFound {
+		t.Fatalf("removed deployment still resolves: %v", err)
+	}
 	// 数据库中的编辑使用实际微秒时间，并原子阻止过期版本和归属变化。
 	metadata := got
 	metadata.Name, metadata.Description = "Edited", "Metadata only"

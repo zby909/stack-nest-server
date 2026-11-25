@@ -28,6 +28,80 @@ func uploadFixture(t *testing.T, content []byte) (*Store, Request) {
 	return New(guard, storage.MaxArchiveBytes), Request{ID: uuid.NewString(), Kind: "create", Name: "Demo", Slug: "demo", FileName: "site.zip", Size: int64(len(content)), SHA256: hex.EncodeToString(sum[:])}
 }
 
+// TestPublishAllowsOtherUploads 验证慢发布不阻塞其他任务，处理中跨越过期时间也能取回收据。
+func TestPublishAllowsOtherUploads(t *testing.T) {
+	content := []byte("archive")
+	store, first := uploadFixture(t, content)
+	now := time.Now().UTC()
+	store.now = func() time.Time { return now }
+	if _, err := store.Create("alice", first); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Append(t.Context(), first.ID, "alice", 0, content); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	started, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var publishErr error
+	go func() {
+		defer close(done)
+		_, publishErr = store.Publish(ctx, first.ID, "alice", func(Ticket, io.Reader) (string, error) {
+			close(started)
+			select {
+			case <-release:
+				return "project-one", nil
+			case <-ctx.Done():
+				return "", ctx.Err()
+			}
+		})
+	}()
+	defer func() { cancel(); <-done }()
+	select {
+	case <-started:
+	case <-done:
+		t.Fatalf("publish failed to start: %v", publishErr)
+	}
+
+	now = now.Add(Lifetime)
+	second := first
+	second.ID = uuid.NewString()
+	if _, err := store.Create("bob", second); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Append(ctx, second.ID, "bob", 0, content); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Cleanup(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Get(first.ID, "alice"); err != nil {
+		t.Fatalf("lost active upload: %v", err)
+	}
+	if err := store.Delete(first.ID, "bob"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("foreign upload: %v", err)
+	}
+	if err := store.Delete(first.ID, "alice"); !errors.Is(err, ErrPublishing) {
+		t.Fatalf("active archive must be retained: %v", err)
+	}
+	stopped, stop := context.WithCancel(ctx)
+	stop()
+	if _, err := store.ForCompletion(stopped, first.ID, "alice"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("interrupted duplicate confirmation: %v", err)
+	}
+	confirmed := make(chan Ticket, 1)
+	go func() {
+		receipt, _ := store.ForCompletion(ctx, first.ID, "alice")
+		confirmed <- receipt
+	}()
+	close(release)
+	<-done
+	ticket, err := store.Get(first.ID, "alice")
+	if publishErr != nil || err != nil || ticket.ResultID != "project-one" || !ticket.ExpiresAt.Equal(now.Add(Lifetime)) || <-confirmed != ticket {
+		t.Fatalf("completion receipt: %+v, get=%v publish=%v", ticket, err, publishErr)
+	}
+}
+
 // TestResumeWithEscapedMetadata 验证合法长说明经 JSON 转义后仍可恢复、续传和发布。
 func TestResumeWithEscapedMetadata(t *testing.T) {
 	content := []byte("site archive")

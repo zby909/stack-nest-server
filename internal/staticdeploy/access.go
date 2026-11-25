@@ -38,7 +38,7 @@ func (d *Deployer) SetPaused(slug string, paused bool) error {
 }
 
 // RecoverAccess 按持久化状态重建访问标记，保留未知项目的关闭标记直到重新发布。
-func (d *Deployer) RecoverAccess(ctx context.Context, list func(context.Context) ([]project.Project, error)) error {
+func (d *Deployer) RecoverAccess(ctx context.Context, list func(context.Context) ([]project.SiteAccess, error)) error {
 	values, err := list(ctx)
 	if err != nil {
 		return err

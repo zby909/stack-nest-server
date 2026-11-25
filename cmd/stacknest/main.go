@@ -112,7 +112,7 @@ func run() error {
 		err = deployer.RecoverDrafts(recoverCtx, store.Get)
 	}
 	if err == nil {
-		err = deployer.RecoverAccess(recoverCtx, store.List)
+		err = deployer.RecoverAccess(recoverCtx, store.ListSiteAccess)
 	}
 	cancelRecover()
 	if err != nil {

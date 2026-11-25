@@ -26,7 +26,7 @@ type Service struct {
 	store     Store
 	publisher Publisher
 	now       func() time.Time
-	writeMu   sync.Mutex // 单实例串行执行写操作，避免同一 slug 的创建与删除交错。
+	writeMu   sync.RWMutex // 发布与目录切换互斥，多个预览资源可同时打开。
 }
 
 // NewService 创建 Project 业务服务。
@@ -38,9 +38,9 @@ func NewService(store Store, publisher Publisher) *Service {
 	}
 }
 
-// List 返回所有项目。
-func (s *Service) List(ctx context.Context) ([]Project, error) {
-	return s.store.List(ctx)
+// List 只加载当前用户有权管理的项目及版本。
+func (s *Service) List(ctx context.Context, actor Actor) ([]Project, error) {
+	return s.store.List(ctx, actor)
 }
 
 // Get 按 slug 查询项目。

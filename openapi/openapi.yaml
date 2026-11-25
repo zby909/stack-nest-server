@@ -254,6 +254,7 @@ paths:
       operationId: deleteUpload
       responses:
         '204': {description: 已删除或原记录不存在}
+        '429': {description: 本次上传正在发布，请稍后再试}
   /api/uploads/{id}/complete:
     post:
       tags: [Projects]

@@ -43,11 +43,14 @@ sudo python3 deploy/restore_backup.py \
     < "$stacknest_backup_dir/postgres.dump"
   test "$(docker compose exec -T postgres psql -U stacknest -d stacknest -Atc 'SELECT count(*) FROM container_apps;')" = 0
   docker compose run --rm --no-deps -T --user 0:0 --entrypoint sh stacknest \
-    -ec 'rm -rf /data/sites /data/trash /data/pending /data/logs /data/previous /data/changes /data/paused /data/drafts; tar -C /data -xzf -' \
+    -ec 'cd /data
+         rm -rf sites trash pending logs previous changes paused drafts uploads
+         rm -f traffic-counts.json traffic-routes.json
+         tar -xzf -' \
     < "$stacknest_backup_dir/files.tar.gz"
   docker compose rm -f migrate
   docker compose up -d --wait --wait-timeout 120
 )
 ```
 
-数据库与文件不是共同事务。失败保留备份和现场，从同批备份重做；启动后检查用户、版本、站点和暂停状态。
+恢复会清除未完成的上传，用户需要重新选择文件。备份含访问统计快照时，计数从该快照续算。路由按恢复后的项目重建。启动后核对用户、版本、站点和暂停状态。若中途失败，保留现场，从同批备份重做。
