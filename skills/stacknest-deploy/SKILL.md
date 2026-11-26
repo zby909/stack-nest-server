@@ -12,6 +12,7 @@ description: "使用 StackNest 部署静态网站或更新已有 Docker 应用�
 - HTML / HTM / ZIP / RAR、静态构建产物：读 [静态站点](references/static.md)。默认生成预览；用户明确要求上线时发布该次确切版本，不重复确认。
 - 已有 Docker 应用的镜像更新或部署状态：读 [Docker 应用](references/docker.md)。`app deploy` 更新正式应用，没有静态站点式预览；查询或配置请求不授权部署。
 - 仅配置客户端：验证连接和绑定目标后结束，不上传或部署。类型未知且已有 Token 时，可用只读 `status`、`app status` 识别；两个都拒绝认证时修复凭据，不猜目标。
+- 用户要求更新本 Skill 时，将官方仓库的 `skills/stacknest-deploy/` 同步到当前安装目录，保留本机已有的 `references/local-config.md`。[官方 Skill 目录](https://github.com/zby909/stack-nest-server/tree/main/skills/stacknest-deploy)
 
 ## 连接与本机配置
 
